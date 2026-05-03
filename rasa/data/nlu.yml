@@ -1,0 +1,226 @@
+version: "3.1"
+
+nlu:
+  - intent: greet
+    examples: |
+      - halo
+      - hai
+      - hi
+      - hello
+      - helo
+      - hy
+      - halo kak
+      - selamat pagi
+      - selamat siang
+      - selamat sore
+      - selamat malam
+      - assalamualaikum
+      - permisi
+      - hei
+      - hey
+      - p
+      - pagi
+      - siang
+      - sore
+      - halo selamat pagi ada yang bisa bantu
+      - hi saya mau tanya-tanya dulu
+      - halo ini dengan klinik ya
+      - halo bisa dibantu
+      - hai bot
+
+  - intent: goodbye
+    examples: |
+      - bye
+      - dadah
+      - sampai jumpa
+      - terima kasih
+      - makasih
+      - makasih ya
+      - makasih banyak ya kak
+      - ok terima kasih
+      - oke makasih
+      - cukup
+      - sudah cukup
+      - bye bye
+      - selamat tinggal
+      - thanks
+      - oke terima kasih sudah cukup
+      - sudah terima kasih banyak
+      - ok bye
+      - dah
+      - oke deh makasih
+      - udah cukup terima kasih
+      - baik sekian dulu
+      - sudah terimakasih
+      - oke selesai deh
+
+  - intent: ask_schedule
+    examples: |
+      - jadwal dokter hari ini apa
+      - dokter umum praktek jam berapa
+      - besok ada dokter gigi tidak
+      - dokter anak praktek hari apa saja
+      - jam berapa klinik buka
+      - klinik tutup jam berapa
+      - apakah hari sabtu ada dokter
+      - minggu buka tidak
+      - jumat sore masih ada dokter
+      - poli gigi buka hari apa
+      - jam operasional klinik gimana
+      - ada dokter malam ini tidak
+      - jadwal dokter
+      - kapan dokter praktek
+      - dokter praktek hari apa
+      - mau lihat jadwal dokter
+      - cek jadwal dokter
+      - lihat jadwal
+      - jadwal praktek dokter
+      - ada jadwal dokter besok
+      - dokter siapa yang praktek hari ini
+      - mau tau jadwal dokter
+      - jadwal dokter minggu ini
+      - dokter apa saja yang tersedia
+      - lihat daftar jadwal dokter
+      - tampilkan jadwal dokter
+
+  - intent: ask_queue
+    examples: |
+      - nomor antrian saya berapa
+      - sekarang antrian sudah sampai nomor berapa
+      - masih lama tidak ya antriannya
+      - kira-kira berapa lama lagi giliran saya
+      - antrian dokter umum sekarang nomornya berapa
+      - saya nomor antrian 15 sudah sampai mana
+      - bisa cek nomor antrian saya
+      - kapan kira-kira saya dipanggil
+      - status antrian saya bagaimana
+      - cek antrian
+      - lihat antrian
+      - antrian sekarang berapa
+      - mau cek status antrian
+      - antrian hari ini
+      - berapa orang yang mengantri
+      - antrian dokter berapa sekarang
+      - cek antrian hari ini
+      - lihat daftar antrian
+
+  - intent: ask_services
+    examples: |
+      - klinik ini ada layanan apa saja
+      - ada poli apa saja di sini
+      - apakah ada dokter spesialis
+      - klinik ini bisa periksa gigi tidak
+      - ada layanan laboratorium
+      - apakah ada poli kulit
+      - tersedia vaksinasi tidak
+      - klinik ini melayani anak-anak
+      - ada dokter kandungan
+      - apakah ada fasilitas USG
+      - tersedia tes darah di sini
+      - klinik ini bisa urus BPJS
+      - layanan apa saja
+      - ada layanan apa
+      - poli apa yang tersedia
+
+  - intent: ask_location
+    examples: |
+      - di mana lokasi kliniknya
+      - alamat klinik ini di mana
+      - kliniknya ada di daerah mana
+      - bisa kasih alamat lengkapnya
+      - gimana cara ke klinik dari stasiun
+      - ada parkir tidak di kliniknya
+      - bisa kirim lokasi google maps nya
+      - alamat
+      - lokasi klinik
+      - dimana kliniknya
+      - alamat lengkap klinik
+
+  - intent: ask_cost
+    examples: |
+      - biaya konsultasi berapa
+      - tarif dokter umum berapa ya
+      - harga periksa gigi berapa
+      - biaya tes darah di sini berapa
+      - ada biaya pendaftaran tidak
+      - konsultasi dokter spesialis berapa
+      - apakah bisa pakai BPJS di sini
+      - biaya vaksinasi berapa
+      - harga suntik vitamin berapa
+      - bayarnya bisa pakai QRIS atau transfer
+      - berapa biaya periksa
+
+  - intent: request_human_agent
+    examples: |
+      - minta tolong hubungkan ke admin
+      - saya mau bicara dengan resepsionis
+      - bisa diteruskan ke staf ya
+      - tolong hubungkan ke manusia
+      - saya butuh bicara langsung dengan petugas
+      - minta operator dong
+      - ini perlu penanganan khusus tolong teruskan
+      - tolong eskalasi ke manusia
+      - saya tidak mau ngobrol sama bot
+      - mau bicara dengan orang
+
+  - intent: emergency
+    examples: |
+      - tolong ada yang pingsan di sini
+      - darurat pasien tidak sadarkan diri
+      - ada kecelakaan butuh bantuan segera
+      - napasnya sesak sekali tidak bisa bernapas
+      - nyeri dada sangat parah
+      - ada yang keracunan cepat tolong
+      - anak saya kejang-kejang
+      - perdarahan tidak berhenti
+      - saya butuh ambulans sekarang
+      - kondisi darurat tolong segera
+      - ini keadaan darurat tolong hubungi IGD
+
+  - intent: affirm
+    examples: |
+      - ya
+      - y
+      - oke
+      - baik
+      - sip
+      - mengerti
+      - siap
+      - ok
+      - yups
+      - iya
+      - betul
+      - benar
+
+  - intent: deny
+    examples: |
+      - tidak
+      - gajadi
+      - yasudah
+      - batal
+      - skip
+      - ga usah
+      - engga
+      - gak
+      - ngak usah
+      - jangan
+      - tidak jadi
+
+  - intent: out_of_scope
+    examples: |
+      - apa itu black hole
+      - perbedaan java dan python
+      - siapa presiden indonesia
+      - buatkan saya lagu
+      - ceritakan tentang dinosaurus
+      - apa itu machine learning
+      - bagaimana cara memasak nasi goreng
+      - siapa penemu listrik
+      - tolong buatkan puisi
+      - berapa jarak bumi ke matahari
+      - apa itu blockchain
+      - cara belajar programming
+      - rekomendasikan film bagus
+      - bagaimana cara diet sehat
+      - apa itu quantum computing
+      - tolong bantu kerjakan PR saya
