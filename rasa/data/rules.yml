@@ -1,0 +1,62 @@
+version: "3.1"
+
+rules:
+  - rule: Say greeting
+    steps:
+      - intent: greet
+      - action: utter_greet
+
+  - rule: Say goodbye
+    steps:
+      - intent: goodbye
+      - action: utter_goodbye
+
+  - rule: Fetch doctor schedule from API
+    steps:
+      - intent: ask_schedule
+      - action: action_fetch_schedule
+
+  - rule: Fetch queue status from API
+    steps:
+      - intent: ask_queue
+      - action: action_fetch_queue
+
+  - rule: Answer services
+    steps:
+      - intent: ask_services
+      - action: utter_services
+
+  - rule: Answer location
+    steps:
+      - intent: ask_location
+      - action: utter_location
+
+  - rule: Answer cost
+    steps:
+      - intent: ask_cost
+      - action: utter_cost
+
+  - rule: Request human agent
+    steps:
+      - intent: request_human_agent
+      - action: utter_request_human_agent
+
+  - rule: Emergency response
+    steps:
+      - intent: emergency
+      - action: utter_emergency
+
+  - rule: Answer affirm
+    steps:
+      - intent: affirm
+      - action: utter_affirm
+
+  - rule: Answer deny
+    steps:
+      - intent: deny
+      - action: utter_deny
+
+  - rule: Fallback
+    steps:
+      - intent: nlu_fallback
+      - action: utter_default
