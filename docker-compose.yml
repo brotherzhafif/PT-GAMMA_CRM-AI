@@ -1,15 +1,53 @@
-#-  ./LLM/chat_history:/app/chat_history (buat simpan history chat per nomor HP Masih belum stabil)
 services:
   app:
-    build: ./LLM
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: flask_chatbot
+    environment:
+      - PYTHONPATH=/app
     ports:
       - "5000:5000"
     volumes:
-      - ./LLM:/app
-
+      - .:/app
     env_file:
+<<<<<<< Updated upstream
       - ./LLM/.env
+=======
+      - ./.env
+    networks:
+      - hana-network
+    depends_on:
+      - rasa
+
+  rasa:
+    image: rasa/rasa:3.6.15-full
+    container_name: rasa_server
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./rasa:/app
+    command: >
+      run --enable-api --cors "*" --model models
+    networks:
+      - hana-network
+    depends_on:
+      - action_server
+
+  action_server:
+    image: rasa/rasa-sdk:3.6.2
+    container_name: rasa_action_server
+    ports:
+      - "5055:5055"
+    user: root
+    volumes:
+      - ./rasa/actions:/app/actions
+    entrypoint: []
+    command: >
+      sh -c "pip install requests && python -m rasa_sdk --actions actions"
+    networks:
+      - hana-network
+>>>>>>> Stashed changes
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -19,7 +57,12 @@ services:
     command:
       - "http"
       - "app:5000"
-    ports:
-      - "4040:4040"
+    networks:
+      - hana-network
     depends_on:
       - app
+
+# Networks
+networks:
+  hana-network:
+    driver: bridge
