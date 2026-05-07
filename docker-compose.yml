@@ -11,9 +11,6 @@ services:
     volumes:
       - .:/app
     env_file:
-<<<<<<< Updated upstream
-      - ./LLM/.env
-=======
       - ./.env
     networks:
       - hana-network
@@ -27,8 +24,7 @@ services:
       - "5005:5005"
     volumes:
       - ./rasa:/app
-    command: >
-      run --enable-api --cors "*" --model models
+    command: run --enable-api --cors "*" --model models
     networks:
       - hana-network
     depends_on:
@@ -43,17 +39,15 @@ services:
     volumes:
       - ./rasa/actions:/app/actions
     entrypoint: []
-    command: >
-      sh -c "pip install requests && python -m rasa_sdk --actions actions"
+    command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
     networks:
       - hana-network
->>>>>>> Stashed changes
 
   ngrok:
     image: ngrok/ngrok:latest
     container_name: ngrok_tunnel
     env_file:
-      - ./LLM/.env
+      - ./.env
     command:
       - "http"
       - "app:5000"
@@ -62,7 +56,6 @@ services:
     depends_on:
       - app
 
-# Networks
 networks:
   hana-network:
     driver: bridge
