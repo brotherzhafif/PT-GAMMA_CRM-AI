@@ -1,0 +1,25 @@
+#-  ./LLM/chat_history:/app/chat_history (buat simpan history chat per nomor HP Masih belum stabil)
+services:
+  app:
+    build: ./LLM
+    container_name: flask_chatbot
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./LLM:/app
+
+    env_file:
+      - ./LLM/.env
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok_tunnel
+    env_file:
+      - ./LLM/.env
+    command:
+      - "http"
+      - "app:5000"
+    ports:
+      - "4040:4040"
+    depends_on:
+      - app
