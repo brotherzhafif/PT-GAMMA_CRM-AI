@@ -9,13 +9,13 @@ services:
       - ./LLM:/app
 
     env_file:
-      - ./LLM/.env
+      - ./.env
 
   ngrok:
     image: ngrok/ngrok:latest
     container_name: ngrok_tunnel
     env_file:
-      - ./LLM/.env
+      - ./.env
     command:
       - "http"
       - "app:5000"

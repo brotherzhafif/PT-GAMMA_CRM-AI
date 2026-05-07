@@ -13,7 +13,6 @@ intents:
   - affirm
   - deny
   - nlu_fallback
-  - out_of_scope
 
 actions:
   - action_fetch_schedule
