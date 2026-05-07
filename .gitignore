@@ -2,3 +2,7 @@
 chat_history/
 __pycache__/
 *.pyc
+.rasa/
+models/
+.keras/
+.config/

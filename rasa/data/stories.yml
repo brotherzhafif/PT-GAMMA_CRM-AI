@@ -1,0 +1,34 @@
+version: "3.1"
+
+stories:
+  - story: greet and ask schedule
+    steps:
+      - intent: greet
+      - action: utter_greet
+      - intent: ask_schedule
+      - action: action_fetch_schedule
+      - intent: goodbye
+      - action: utter_goodbye
+
+  - story: greet and check queue
+    steps:
+      - intent: greet
+      - action: utter_greet
+      - intent: ask_queue
+      - action: action_fetch_queue
+      - intent: goodbye
+      - action: utter_goodbye
+
+  - story: ask services then location
+    steps:
+      - intent: greet
+      - action: utter_greet
+      - intent: ask_services
+      - action: utter_services
+      - intent: ask_location
+      - action: utter_location
+
+  - story: emergency flow
+    steps:
+      - intent: emergency
+      - action: utter_emergency

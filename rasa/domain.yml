@@ -1,0 +1,56 @@
+version: "3.1"
+
+intents:
+  - greet
+  - goodbye
+  - ask_schedule
+  - ask_queue
+  - ask_services
+  - ask_location
+  - ask_cost
+  - request_human_agent
+  - emergency
+  - affirm
+  - deny
+  - nlu_fallback
+
+actions:
+  - action_fetch_schedule
+  - action_fetch_queue
+
+responses:
+  utter_greet:
+    - text: "Halo! 👋 Saya Hana, asisten virtual Klinik SmartClinic. Ada yang bisa saya bantu hari ini? Anda bisa tanya jadwal dokter, cek antrian, atau informasi layanan klinik."
+    - text: "Selamat datang di Klinik SmartClinic! Saya Hana, asisten virtual yang siap membantu Anda 24/7. Silakan tanyakan apa saja seputar layanan klinik kami. 😊"
+
+  utter_goodbye:
+    - text: "Terima kasih telah menghubungi Klinik SmartClinic. Semoga sehat selalu! 🙏 Jangan ragu untuk menghubungi kami lagi jika ada pertanyaan."
+    - text: "Sampai jumpa! Semoga hari Anda menyenangkan. Jika butuh bantuan lagi, Hana selalu siap membantu. 😊"
+
+  utter_services:
+    - text: "Klinik SmartClinic menyediakan beberapa layanan utama:\n\n1. 🩺 Dokter Umum\n2. 🦷 Poli Gigi\n3. 👶 Poli Anak\n4. 🧪 Laboratorium\n5. 💉 Vaksinasi\n\nUntuk informasi lebih detail tentang jadwal dan ketersediaan, silakan tanyakan kepada saya!"
+
+  utter_location:
+    - text: "📍 Klinik SmartClinic berlokasi di:\n[Alamat akan dikonfigurasi oleh admin klinik]\n\nAnda bisa mengunjungi kami di jam operasional. Apakah ada hal lain yang bisa saya bantu?"
+
+  utter_cost:
+    - text: "Untuk informasi biaya layanan, berikut gambaran umum:\n\n💰 Konsultasi Umum: Mulai dari Rp 50.000\n💰 Pendaftaran: Rp 25.000\n\nKlinik menerima pembayaran tunai, QRIS, dan BPJS.\n\nUntuk detail biaya spesifik, silakan hubungi admin klinik kami."
+
+  utter_request_human_agent:
+    - text: "Baik, Bapak/Ibu. Saya akan menghubungkan Anda dengan staf klinik kami yang akan segera membantu. Mohon tunggu sebentar. 🙏"
+
+  utter_emergency:
+    - text: "🚨 *KONDISI DARURAT*\n\nUntuk kondisi darurat, segera hubungi:\n- IGD Rumah Sakit terdekat\n- Ambulans: *118* atau *119*\n- Atau minta seseorang mengantar ke fasilitas darurat terdekat.\n\n⚠️ Saya tidak dapat menangani kondisi darurat melalui chat ini. Mohon segera cari pertolongan medis langsung!"
+
+  utter_affirm:
+    - text: "Baik, apakah ada hal lain yang bisa saya bantu? 😊"
+
+  utter_deny:
+    - text: "Baik, tidak masalah. Silakan hubungi saya lagi jika butuh bantuan. 🙏"
+
+  utter_default:
+    - text: "Mohon maaf, saya kurang memahami pertanyaan Anda. Saya bisa membantu untuk:\n\n1. 📅 Cek jadwal dokter\n2. 🔢 Cek antrian\n3. 🏥 Info layanan klinik\n\nSilakan coba tanyakan kembali."
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true
