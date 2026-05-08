@@ -24,7 +24,7 @@ _token_cache = {
 
 def get_access_token() -> str | None:
     """Return hardcoded token for testing."""
-    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MDAyOGEyMS1mOGNhLTRjZWYtOGY0OS0wOTIzNDJmMGFjZmUiLCJlbWFpbCI6ImFkbWluQHNtYXJ0Y2xpbmljLmlkIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3Nzk4MzA2LCJleHAiOjE3Nzc3OTkyMDZ9.kHiTC0V36lp-x4yM3SgCMNgQNpKInyD0uvYcHjUVQPc"
+    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MDAyOGEyMS1mOGNhLTRjZWYtOGY0OS0wOTIzNDJmMGFjZmUiLCJlbWFpbCI6ImFkbWluQHNtYXJ0Y2xpbmljLmlkIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc4MTQ2MTQ1LCJleHAiOjE3NzgxNDcwNDV9.1-KvNS0l1f5Oba9HJmINuZE8omkNmFs0B-cnFTHfgmk"
 
 
 def api_get(endpoint: str, params: dict = None) -> dict | None:

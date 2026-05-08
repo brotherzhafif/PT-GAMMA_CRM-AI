@@ -1,0 +1,63 @@
+.env
+chat_history/
+__pycache__/
+*.pyc
+.venv/
+
+
+# -------------------------
+# 📁IGNORE DIRECTORIES
+# -------------------------
+
+# Ngrok
+ngrok/
+
+# Rasa
+.rasa/
+models/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+env39/
+env310/
+env311/
+env312/
+env313/
+env314/
+
+# Chat history (Opsional - uncomment jika tidak mau disimpan)
+# chat_history/
+
+
+# -------------------------
+# 🐍IGNORE FILES
+# -------------------------
+
+# Environment variables
+.env
+.env.production
+.env.development
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment activation scripts
+.venv/Scripts/*.bat
+.venv/Scripts/*.ps1
+.venv/bin/activate
+
+# Rasa configuration cache
+.rasa/cache/
+
+# Ngrok config
+.ngrok*
+
+# Docker compose
+docker-compose.yml.old
+
+step_by_step_run_guide.md.resolved
