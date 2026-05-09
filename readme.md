@@ -46,32 +46,56 @@ Handles structured conversational flows, API integrations, and predefined intent
 
 
 🚀 Setup & Installation (LLM Branch)
-1. Prerequisites
-Ensure you have an API Key from Groq Cloud and a token from Fonnte.
 
-2. Environment Variables
-Create a .env file in the root folder and fill it as follows:
+1. Prerequisites:
+
+   Ensure you have an API Key from Groq Cloud and a token from Fonnte.
+
+   <br>
+
+3. Environment Variables:
+
+   Create a `.env` file in the root folder and fill it as follows:
+
 ```env
-GROQ_API_KEY=_xxxx_your_key_here
-FONNTE_TOKEN=your_fonnte_token_here
-APP_SECRET_KEY=your_secret_key
-NGROK_AUTHTOKEN:your_ngrok_token
+   GROQ_API_KEY=_xxxx_your_key_here
+   FONNTE_TOKEN=your_fonnte_token_here
+   APP_SECRET_KEY=your_secret_key
+   NGROK_AUTHTOKEN=your_ngrok_token
+   RASA_URL=http://rasa:5005
 ```
-3. Running the Module (Local)
-```bash
-# Install dependencies
-pip install -r requirements.txt
 
-# Jalankan server Flask
-python app.py
-```  
-4. Running the Module via Docker
-Please make sure you have a docker-compose.yml file:
-```bash
-docker-compose up --build
-```  
 <br>
 
+3. Running the Module (Local):
+
+```bash
+   # Install dependencies
+   pip install -r requirements.txt
+
+   # Jalankan server Flask
+   python app.py
+```
+
+<br>
+
+4. Train Rasa via Docker:
+
+```bash
+   docker run --rm -v  rasa/rasa:3.6.15-full train
+```
+
+<br>
+
+5. Running the Module via Docker:
+
+   Please make sure you have a `docker-compose.yml` file:
+
+```bash
+   docker-compose up --build
+```
+
+<br>
 
 ### 3. Webhook & API Gateway (WIP)
 Webhook & API Routing
