@@ -224,3 +224,16 @@ nlu:
       - bagaimana cara diet sehat
       - apa itu quantum computing
       - tolong bantu kerjakan PR saya
+
+  - intent: intent_ingin_booking
+    examples: |
+      - saya mau booking
+      - daftar dokter
+      - mau reservasi
+      - ingin buat janji
+      - cara booking jadwal
+      - daftar antrian
+      - mau daftar periksa
+      - saya ingin reservasi jadwal
+      - buat janji dengan dokter
+      - booking online

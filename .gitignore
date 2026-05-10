@@ -2,7 +2,6 @@
 chat_history/
 __pycache__/
 *.pyc
-<<<<<<< HEAD
 .venv/
 
 
@@ -62,9 +61,7 @@ __pycache__/
 docker-compose.yml.old
 
 step_by_step_run_guide.md.resolved
-=======
 .rasa/
 models/
 .keras/
 .config/
->>>>>>> LLM
