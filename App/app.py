@@ -18,6 +18,10 @@ app = Flask(__name__)
 # Import API Groq LLM
 groq = GroqService()
 
+@app.route('/')
+def home():
+    return "Chatbot Server is Running! 🚀 (Use /webhook for API calls)"
+
 # ── Konfigurasi Rasa ─────────────────────────────────────────────────────────
 RASA_URL = os.getenv("RASA_URL", "http://rasa:5005")
 RASA_CONFIDENCE_THRESHOLD = 0.75
@@ -29,7 +33,8 @@ RASA_TRUSTED_INTENTS = {
     "ask_schedule", "ask_queue",
     "ask_services", "ask_location", "ask_cost",
     "request_human_agent", "emergency",
-    "affirm", "deny",
+    "affirm", "deny", "intent_ingin_booking",
+    "intent_berikan_rating",
 }
 
 # ── Konfigurasi Folder Penyimpanan JSON ──────────────────────────────────────

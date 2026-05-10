@@ -12,8 +12,6 @@ services:
       - .:/app
     env_file:
       - ./.env
-<<<<<<< HEAD
-=======
     networks:
       - hana-network
     depends_on:
@@ -44,11 +42,11 @@ services:
     command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
     networks:
       - hana-network
->>>>>>> LLM
-
   ngrok:
     image: ngrok/ngrok:latest
     container_name: ngrok_tunnel
+    ports:
+      - "4040:4040"
     env_file:
       - ./.env
     command:

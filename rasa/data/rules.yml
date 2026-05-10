@@ -10,6 +10,7 @@ rules:
     steps:
       - intent: goodbye
       - action: utter_goodbye
+      - action: utter_minta_rating
 
   - rule: Fetch doctor schedule from API
     steps:
@@ -60,3 +61,13 @@ rules:
     steps:
       - intent: nlu_fallback
       - action: utter_default
+
+  - rule: Provide booking link
+    steps:
+      - intent: intent_ingin_booking
+      - action: utter_berikan_link_booking
+
+  - rule: Handle rating survey
+    steps:
+      - intent: intent_berikan_rating
+      - action: utter_terima_kasih_rating
