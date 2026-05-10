@@ -34,6 +34,7 @@ RASA_TRUSTED_INTENTS = {
     "ask_services", "ask_location", "ask_cost",
     "request_human_agent", "emergency",
     "affirm", "deny", "intent_ingin_booking",
+    "intent_berikan_rating",
 }
 
 # ── Konfigurasi Folder Penyimpanan JSON ──────────────────────────────────────

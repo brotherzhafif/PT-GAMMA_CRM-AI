@@ -3,7 +3,7 @@ chat_history/
 __pycache__/
 *.pyc
 .venv/
-
+.agents/
 
 # -------------------------
 # 📁IGNORE DIRECTORIES

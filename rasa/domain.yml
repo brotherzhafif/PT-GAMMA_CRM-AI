@@ -14,6 +14,7 @@ intents:
   - deny
   - nlu_fallback
   - intent_ingin_booking
+  - intent_berikan_rating
 
 actions:
   - action_fetch_schedule
@@ -54,6 +55,12 @@ responses:
 
   utter_berikan_link_booking:
     - text: "Silakan lengkapi data diri dan pilih jadwal Anda melalui tautan berikut ya: [Form Booking Klinik](https://dummy-booking.com) "
+
+  utter_minta_rating:
+    - text: "Seberapa puas Anda dengan pelayanan saya hari ini? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas)."
+
+  utter_terima_kasih_rating:
+    - text: "Terima kasih atas penilaian Anda."
 
 session_config:
   session_expiration_time: 60
