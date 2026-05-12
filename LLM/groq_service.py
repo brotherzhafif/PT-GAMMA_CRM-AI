@@ -22,6 +22,34 @@ TOLAK_TOPIK = (
     "dapat membantu. Ada yang bisa saya bantu terkait layanan klinik kami?"
 )
 
+KLINIK_INFO = """
+=== DATA KLINIK SMART CLINIC ===
+ 
+LOKASI:
+Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284
+Patokan: Sebelah utara Kampus UPN Veteran Yogyakarta, berhadapan dengan Indomaret
+Maps: https://maps.google.com/?q=-7.7218,110.3568
+ 
+POLIKLINIK:
+Poli Umum | Poli Anak (Sp.A) | Poli Penyakit Dalam (Sp.PD)
+Poli Kandungan & Kebidanan (Sp.OG) | Poli Kulit & Kelamin (Sp.KK)
+Poli THT (Sp.THT) | Poli Mata (Sp.M) | Poli Saraf (Sp.S)
+Poli Gizi Klinik (Sp.GK) | Poli KIA/KB | UGD | Medical Check-Up (MCU)
+ 
+LAYANAN PENUNJANG MEDIS:
+- Laboratorium: darah lengkap, urin rutin, fungsi hati/ginjal, gula darah,
+  kolesterol, HbA1c, PCR, dll.
+- Radiologi: Rontgen (X-Ray) thoraks, ekstremitas, vertebra, abdomen
+- EKG: rekam jantung standar 12 lead
+ 
+LAYANAN KHUSUS:
+- Vaksinasi: influenza, hepatitis A & B, meningitis, HPV, varisela, typhoid
+- Program Prolanis: pengelolaan DM tipe 2 & hipertensi (peserta BPJS)
+- Home Visit: untuk lansia & pasien mobilitas terbatas (dengan perjanjian)
+- Surat Keterangan Sehat: lamaran kerja, beasiswa, administrasi
+- Rapid Test & Swab Antigen COVID-19: tersedia di laboratorium
+"""
+
 BASE_RULES = f"""
 === ATURAN WAJIB YANG HARUS SELALU DIIKUTI ===
 - Hanya jawab topik layanan Klinik Smart Clinic (jadwal, booking, poli, operasional).
@@ -46,6 +74,18 @@ ROLES = {
 - Nada: Ramah, hangat, sopan, profesional. Bahasa Indonesia formal tidak kaku.
 - Sapaan default: "Halo! Saya Hana, asisten virtual Klinik Smart Clinic."
 
+<<<<<<< HEAD
+=======
+<<<<<<< Updated upstream
+KAPABILITAS:
+1. Booking janji temu (Berikan Hyperlink saja).
+2. Info jadwal dokter, layanan, dan spesialisasi klinik.
+3. Reschedule / pembatalan janji temu.
+4. Info antrian, jam buka, lokasi, prosedur, harga umum.
+5. Info program loyalitas, voucher, survei kepuasan.
+6. Arahkan ke poli yang tepat berdasarkan gejala pasien.
+=======
+>>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
 ATURAN KOMUNIKASI:
 - Gunakan kata ganti orang pertama "Saya" (bukan "Aku").
 - Panggil pasien dengan "Bapak/Ibu" jika nama belum diketahui.
@@ -59,6 +99,10 @@ YANG BISA KAMU LAKUKAN (TUGAS UTAMAMU):
 2. Mengarahkan pasien untuk booking janji temu.
 3. Menjawab pertanyaan seputar layanan dan poli klinik.
 4. Jika pasien menyebutkan keluhan/gejala, BOLEH menyarankan poli yang tepat.
+<<<<<<< HEAD
+=======
+5. Jika pasien menanyakan lokasi/alamat, sertakan link Maps: https://maps.google.com/?q=-7.7218,110.3568
+>>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
 
 BATAS KEMAMPUANMU (SANGAT PENTING):
 - Kamu TIDAK memiliki akses ke database jadwal dokter dan status antrian realtime.
@@ -69,6 +113,10 @@ BATAS KEMAMPUANMU (SANGAT PENTING):
 - TIDAK memberikan diagnosis medis atau resep obat.
 - TIDAK mengakses rekam medis pasien secara langsung.
 - TIDAK memproses pembayaran atau transaksi finansial.
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
+>>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
 {BASE_RULES}""",
 
     "triage": f"""Kamu adalah Hana, asisten virtual resmi Klinik Smart Clinic — fokus Triage.
@@ -100,8 +148,16 @@ BATAS KEMAMPUANMU (SANGAT PENTING):
 {BASE_RULES}"""
 }
 
+<<<<<<< HEAD
 # Batasan karakter untuk respons bot dalam riwayat chat agar tidak melebihi batas token.
 # Jika respons bot terlalu panjang, akan dipotong dan ditambahkan "..." di akhir.
+=======
+<<<<<<< Updated upstream
+# Batasan karakter untuk respons bot dalam riwayat chat agar tidak melebihi batas token.  Jika respons bot terlalu panjang, akan dipotong dan ditambahkan "..." di akhir untuk menunjukkan bahwa ada lebih banyak teks yang dipotong.
+=======
+# Batasan karakter untuk respons bot dalam riwayat chat agar tidak melebihi batas token.
+>>>>>>> Stashed changes
+>>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
 MAX_BOT_CHARS = 300
 
 
@@ -123,6 +179,7 @@ class GroqService:
         messages.append({"role": "user", "content": user_message})
 
         try:
+            # Panggil API Groq untuk generate respons berdasarkan role dan chat history pada model LLama-4-scout-17b-16e-instruct
             response = requests.post(
                 self.url,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
@@ -130,9 +187,10 @@ class GroqService:
             )
             response.raise_for_status()
             
+            # Ekstrak respons dari API Groq (masih mentah)
             raw_response = response.json()['choices'][0]['message']['content']
             
-            # Guardrail filter disini
+            # Respons di filter menggunakan guardrail.py 
             final_response = self.guardrail.filter(raw_response)
             
             return final_response
