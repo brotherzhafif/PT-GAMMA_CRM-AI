@@ -3,6 +3,7 @@ language: id
 pipeline:
 - name: WhitespaceTokenizer
 - name: RegexFeaturizer
+- name: EntitySynonymMapper
 - name: LexicalSyntacticFeaturizer
 - name: CountVectorsFeaturizer
 - name: CountVectorsFeaturizer

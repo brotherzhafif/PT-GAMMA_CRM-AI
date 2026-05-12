@@ -27,6 +27,33 @@ nlu:
       - halo ini dengan klinik ya
       - halo bisa dibantu
       - hai bot
+      - halo min
+      - halo kak min
+      - p kak
+      - p min
+      - permisi kak
+      - prmisi
+      - woi
+      - wei
+      - weh
+      - ass
+      - assalamualaikum wr wb
+      - asskum
+      - wslm
+      - selamat pg
+      - slmt pg
+      - met pagi
+      - met siang
+      - met sore
+      - pagiii
+      - pagieee
+      - haloo
+      - halooo
+      - haiii
+      - numpang tanya kak
+      - mau nanya dong
+      - nunut nanya kak
+      - permisi mau tanya sebentar
 
   - intent: goodbye
     examples: |
@@ -53,6 +80,34 @@ nlu:
       - baik sekian dulu
       - sudah terimakasih
       - oke selesai deh
+      - mks
+      - mksh
+      - makasi
+      - tq
+      - tks
+      - thx
+      - ty
+      - ok deh
+      - oke deh
+      - oke sip
+      - udh cukup
+      - udah
+      - udh
+      - deh
+      - da
+      - ciao
+      - byee
+      - byebye
+      - sip dah
+      - siap dah
+      - ga usah lagi
+      - gausah lagi
+      - yaudah
+      - yowes
+      - yowis
+      - sekian trims
+      - sekian thx
+      - oke udah cukup makasih ya kak
 
   - intent: ask_schedule
     examples: |
@@ -82,6 +137,27 @@ nlu:
       - dokter apa saja yang tersedia
       - lihat daftar jadwal dokter
       - tampilkan jadwal dokter
+      - jadwal dr berapa
+      - dok umum buka ga
+      - dr gigi ada ga
+      - bsk ada dokter gak
+      - klnik buka jam brp
+      - msh ada dr ga sore ini
+      - praktek gak hari ini
+      - sabtu buka gak
+      - minggu ada yg praktek
+      - jam brp tutup
+      - cek jadwal dr dong
+      - liat jadwal dulu
+      - ada dr apa aja
+      - dr anak ada gak
+      - poli gigi buka gak
+      - klinik operasional jam brp
+      - skrg ada dr ga
+      - jadwal dokter hari ini dong
+      - besok dokternya ada ga kak
+      - kapan ya dokternya ada
+      - gmn jadwal dokternya
 
   - intent: ask_queue
     examples: |
@@ -103,6 +179,19 @@ nlu:
       - antrian dokter berapa sekarang
       - cek antrian hari ini
       - lihat daftar antrian
+      - antrian skrg no brp
+      - giliran saya udh dkt blm
+      - msh lama gak ya
+      - antri brp org lagi
+      - no antrian sy brp
+      - masih panjang ga antriannya
+      - cek antri dong
+      - antrian udh sampe mana
+      - kira2 brp mnt lagi
+      - posisi antrian sy
+      - antrian saya nomor brp ya
+      - udah deket belum giliran saya
+      - masih banyak yang ngantri ga
 
   - intent: ask_services
     examples: |
@@ -121,6 +210,21 @@ nlu:
       - layanan apa saja
       - ada layanan apa
       - poli apa yang tersedia
+      - ada layanan apa aja
+      - poli apa aja yg ada
+      - bisa periksa gigi gak
+      - lab ada ga
+      - bisa pake bpjs
+      - ada vaksin ga
+      - bs urus bpjs disini
+      - ada dr spesialis gak
+      - klinik ini ada apa aja
+      - ada usg ga
+      - bisa cek darah ga
+      - melayani anak ga
+      - ada tes lab ga
+      - ada poli apa aja kak
+      - ini klinik ada layanan apa aja
 
   - intent: ask_location
     examples: |
@@ -135,6 +239,18 @@ nlu:
       - lokasi klinik
       - dimana kliniknya
       - alamat lengkap klinik
+      - share lokasi dong
+      - alamatnya mana
+      - kirim maps nya dong
+      - ada di daerah mana
+      - lokasinya dong
+      - gmaps nya dong
+      - deket stasiun mana
+      - ada parkiran gak
+      - bs naik ojol kesana
+      - share pin lokasi dong
+      - kliniknya dimana ya kak
+      - bisa share google maps ga
 
   - intent: ask_cost
     examples: |
@@ -149,6 +265,20 @@ nlu:
       - harga suntik vitamin berapa
       - bayarnya bisa pakai QRIS atau transfer
       - berapa biaya periksa
+      - biaya periksa brp
+      - harganya brp
+      - tarif konsultasi brp
+      - bs pake bpjs ga
+      - ada biaya daftar ga
+      - bayarnya bisa qris ga
+      - bs transfer ga
+      - biaya gigi brp
+      - mahal ga periksa disini
+      - harga cek darah brp
+      - gratis ga pake bpjs
+      - biaya periksa umum brp ya
+      - kalo pake bpjs gratis ga
+      - bayarnya gimana bisa transfer ga
 
   - intent: request_human_agent
     examples: |
@@ -162,6 +292,19 @@ nlu:
       - tolong eskalasi ke manusia
       - saya tidak mau ngobrol sama bot
       - mau bicara dengan orang
+      - minta admin dong
+      - hubungin admin kak
+      - mau ngmg sama manusia
+      - ga mau sama bot
+      - tolong terusin ke petugas
+      - pindahin ke cs dong
+      - bisa minta orang beneran ga
+      - sambungin ke admin ya
+      - minta operatornya
+      - cs nya dong
+      - mau ngobrol sama manusia beneran
+      - tolong sambungkan ke resepsionis dong
+      - ga mau ngobrol sama robot
 
   - intent: emergency
     examples: |
@@ -176,6 +319,18 @@ nlu:
       - saya butuh ambulans sekarang
       - kondisi darurat tolong segera
       - ini keadaan darurat tolong hubungi IGD
+      - tolong ada yg pingsan
+      - darurat bgt
+      - cepet tolong
+      - emergency
+      - urgent banget
+      - napas sesak bgt
+      - sakit bgt ga bisa napas
+      - butuh ambulan skrg
+      - tolong cepet
+      - ini darurat tolong bantuu
+      - sesak napas parah banget
+      - ada yg keracunan tolong
 
   - intent: affirm
     examples: |
@@ -191,6 +346,28 @@ nlu:
       - iya
       - betul
       - benar
+      - yep
+      - yap
+      - iyaa
+      - iyaaa
+      - bener
+      - bner
+      - setuju
+      - stuju
+      - lanjut
+      - lanjutin
+      - gitu deh
+      - gtu deh
+      - okedeh
+      - okesip
+      - yoii
+      - yoi
+      - nah iya
+      - nah bener
+      - oke lanjut
+      - iya betul kak
+      - udah bener
+      - bener banget
 
   - intent: deny
     examples: |
@@ -205,6 +382,25 @@ nlu:
       - ngak usah
       - jangan
       - tidak jadi
+      - gapapa
+      - ga papa
+      - gausah
+      - gabisa
+      - ga bisa
+      - gakk
+      - kagak
+      - enggak
+      - engga
+      - ntar deh
+      - nanti aja
+      - skip aja
+      - gakjadi
+      - batal deh
+      - gakusah
+      - tak usah
+      - ga mau
+      - gak mau ah
+      - tidak perlu
 
   - intent: out_of_scope
     examples: |
@@ -224,6 +420,11 @@ nlu:
       - bagaimana cara diet sehat
       - apa itu quantum computing
       - tolong bantu kerjakan PR saya
+      - siapa yang menang piala dunia
+      - cara masak rendang
+      - rekomendasi laptop gaming
+      - cerita dong tentang sejarah indonesia
+      - buatin cerpen dong
 
   - intent: intent_ingin_booking
     examples: |
@@ -237,6 +438,20 @@ nlu:
       - saya ingin reservasi jadwal
       - buat janji dengan dokter
       - booking online
+      - mau bking
+      - booking dong
+      - mau daftar dong
+      - gimana cara buat janji
+      - bisa book online ga
+      - daftar ke dr dong
+      - gimana daftar online
+      - bisa boking gak
+      - mau bikin janji
+      - pendaftaran online bisa ga
+      - mau antri online
+      - cara daftar online gimana
+      - bisa booking lewat wa ga
+      - mau pesan nomor antrian
 
   - intent: intent_berikan_rating
     examples: |
@@ -258,3 +473,232 @@ nlu:
       - tidak puas
       - cukup puas
       - lumayan
+      - puas banget
+      - kurang puas
+      - biasa aja
+      - oke sih
+      - bagus
+      - mantap
+      - jelek
+
+# =============================================================
+# SYNONYM — Memetakan variasi kata informal ke kata standar
+# sehingga NLU bisa mengenali lebih banyak ekspresi tanpa
+# perlu menambahkan contoh satu per satu di setiap intent.
+# =============================================================
+
+  - synonym: tidak
+    examples: |
+      - ga
+      - gak
+      - gakk
+      - kagak
+      - enggak
+      - engga
+      - ngga
+      - nggak
+      - tak
+      - ndak
+      - ora
+
+  - synonym: sudah
+    examples: |
+      - udah
+      - udh
+      - dah
+      - udahan
+      - sdh
+
+  - synonym: bagaimana
+    examples: |
+      - gimana
+      - gmn
+      - bgmn
+      - kayak gimana
+      - caranya gimana
+
+  - synonym: berapa
+    examples: |
+      - brp
+      - berapaan
+      - berapa ya
+      - brpaan
+
+  - synonym: sekarang
+    examples: |
+      - skrg
+      - skrang
+      - sekarang ini
+      - saat ini
+      - skarang
+
+  - synonym: besok
+    examples: |
+      - bsk
+      - bsok
+      - esok
+      - besoknya
+
+  - synonym: dokter
+    examples: |
+      - dr
+      - dok
+      - dokter nya
+      - doknya
+      - drnya
+
+  - synonym: jadwal
+    examples: |
+      - schedule
+      - schedul
+      - skedul
+      - agenda
+      - jam praktek
+      - waktu praktek
+
+  - synonym: antrian
+    examples: |
+      - antri
+      - queue
+      - nomor urut
+      - giliran
+      - no antrian
+      - nomer antrian
+
+  - synonym: booking
+    examples: |
+      - bking
+      - boking
+      - book
+      - reservasi
+      - daftar
+      - janji
+      - pendaftaran
+
+  - synonym: bisa
+    examples: |
+      - bs
+      - bsa
+      - boleh
+      - dapat
+      - sanggup
+
+  - synonym: mau
+    examples: |
+      - mo
+      - pengen
+      - ingin
+      - pgn
+      - niat
+      - hendak
+
+  - synonym: tolong
+    examples: |
+      - tlng
+      - tlong
+      - minta tolong
+      - mohon
+      - bantuin
+      - bantu
+
+  - synonym: informasi
+    examples: |
+      - info
+      - tanya
+      - nanya
+      - tau
+      - tau ga
+      - infonya
+
+  - synonym: terima kasih
+    examples: |
+      - makasih
+      - makasi
+      - tq
+      - ty
+      - thx
+      - tks
+      - mks
+      - mksh
+      - thanks
+      - thank you
+
+  - synonym: iya
+    examples: |
+      - yep
+      - yap
+      - yups
+      - yoi
+      - yoii
+      - iyaa
+      - iyaaa
+      - yowes
+      - yowis
+      - nah iya
+
+  - synonym: darurat
+    examples: |
+      - emergency
+      - gawat
+      - urgent
+      - mendesak
+      - kritis
+      - parah banget
+
+# =============================================================
+# REGEX — Pola ekspresi reguler untuk menangkap variasi
+# format angka, singkatan, dan pola teks yang berulang.
+# =============================================================
+
+  - regex: nomor_antrian
+    examples: |
+      - \b(nomor|no\.?|nomer|no)\s*(antrian|antri|urut)\b
+      - antrian\s*(ke|no\.?|nomor)?\s*\d{1,3}
+      - \bno\.?\s*\d{1,3}\b
+
+  - regex: jam_operasional
+    examples: |
+      - \bjam\s*\d{1,2}([:\.]\d{2})?\s*(pagi|siang|sore|malam|wib|wita|wit)?\b
+      - \b\d{1,2}[:\.]\d{2}\s*(pagi|siang|sore|malam|wib|wita|wit)?\b
+      - buka\s*(jam|pukul)\s*\d{1,2}
+      - tutup\s*(jam|pukul)\s*\d{1,2}
+
+  - regex: hari_dalam_seminggu
+    examples: |
+      - \b(senin|selasa|rabu|kamis|jumat|sabtu|minggu)\b
+      - \b(hari\s+)?(ini|besok|lusa|kemarin)\b
+      - \b(minggu|pekan)\s+(ini|depan|kemarin)\b
+
+  - regex: sapaan_informal
+    examples: |
+      - \b(halo+|hai+|hi+|hey+|hei+|p+)\s*(kak|min|min|sis|bro|bang|mas|mbak|bu|pak)?\b
+      - \b(permisi|prmisi|p)\s*(kak|min)?\b
+      - \b(assalamualaikum|ass|asskum)\b
+
+  - regex: negasi_informal
+    examples: |
+      - \b(ga|gak|gakk|ngga|nggak|kagak|engga|enggak)\s*(usah|mau|bisa|perlu|jadi|ada)\b
+      - \b(gausah|gajadi|gabisa|gamau|gaperlu|gatau)\b
+
+  - regex: singkatan_umum
+    examples: |
+      - \b(brp|skrg|bsk|udh|udah|blm|sdh|yg|dg|dgn|utk|krn|jd|spt|hrs)\b
+      - \b(dr|dok|kl|kalo|gk|ga|sy|sya|mrk|kt|ky)\b
+
+  - regex: penekanan_emosi
+    examples: |
+      - \b\w+(nya|deh|dong|nih|sih|loh|kok|kan|ya)\b
+      - \b(banget|bgt|bgt|parah|abis|poll|pol)\b
+      - ([a-z])\1{2,}
+
+  - regex: biaya_harga
+    examples: |
+      - \b(rp\.?\s*\d+[\.,]?\d*)\b
+      - \b\d+\s*(ribu|ratus|juta|rb|jt)\b
+      - (harga|biaya|tarif|bayar|bayaran|ongkos)\s*(nya)?\s*(brp|berapa)
+
+  - regex: pertanyaan_ketersediaan
+    examples: |
+      - (ada|tersedia|available)\s*\w+\s*(ga|gak|tidak|engga|enggak)\??
+      - \w+\s*(ada|tersedia)\s*(ga|gak|tidak|kah|ngga)\??
+      - (bisa|bs)\s*(pake|pakai|gunain|menggunakan)\s*\w+\s*(ga|gak|tidak)\??
