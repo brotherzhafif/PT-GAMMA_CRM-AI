@@ -33,7 +33,7 @@ responses:
     - text: "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n*Poliklinik:*\n🩺 Poli Umum\n👶 Poli Anak (Sp.A)\n🫀 Poli Penyakit Dalam (Sp.PD)\n🤰 Poli Kandungan & Kebidanan (Sp.OG)\n✨ Poli Kulit & Kelamin (Sp.KK)\n👂 Poli THT (Sp.THT)\n👁️ Poli Mata (Sp.M)\n🧠 Poli Saraf (Sp.S)\n🥗 Poli Gizi Klinik (Sp.GK)\n👩 Poli KIA/KB\n🚨 UGD\n📋 Medical Check-Up (MCU)\n\n*Layanan Penunjang:*\n🔬 Laboratorium Klinik\n🩻 Radiologi (Rontgen/X-Ray)\n❤️ EKG (Rekam Jantung)\n\n*Layanan Khusus:*\n💉 Vaksinasi\n📊 Program Prolanis (BPJS)\n🏠 Home Visit\n📄 Surat Keterangan Sehat\n🧪 Rapid Test & Swab Antigen\n\nAda layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
 
   utter_location:
-      - text: "📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284\n🏪 *Patokan:* Sebelah utara UPN Veteran Yogyakarta, berhadapan dengan Indomaret\n🗺️ *Google Maps:* https://maps.google.com/?q=-7.7218,110.3568\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏
+    - text: "📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284\n🏪 *Patokan:* Sebelah utara UPN Veteran Yogyakarta, berhadapan dengan Indomaret\n🗺️ *Google Maps:* https://maps.google.com/?q=-7.7218,110.3568\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
 
   utter_cost:
     - text: "Untuk informasi biaya layanan, berikut gambaran umum:\n\n💰 Konsultasi Umum: Mulai dari Rp 50.000\n💰 Pendaftaran: Rp 25.000\n\nKlinik menerima pembayaran tunai, QRIS, dan BPJS.\n\nUntuk detail biaya spesifik, silakan hubungi admin klinik kami."
@@ -53,26 +53,15 @@ responses:
   utter_default:
     - text: "Mohon maaf, saya kurang memahami pertanyaan Anda. Saya bisa membantu untuk:\n\n1. 📅 Cek jadwal dokter\n2. 🔢 Cek antrian\n3. 🏥 Info layanan klinik\n\nSilakan coba tanyakan kembali."
 
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
   utter_berikan_link_booking:
-    - text: "Silakan lengkapi data diri dan pilih jadwal Anda melalui tautan berikut ya: [Form Booking Klinik](https://dummy-booking.com) "
+    - text: "Silakan lengkapi data diri dan pilih jadwal Anda melalui tautan berikut ya: [Form Booking Klinik](https://dummy-booking.com)"
 
   utter_minta_rating:
     - text: "Seberapa puas Anda dengan pelayanan saya hari ini? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas)."
 
   utter_terima_kasih_rating:
-<<<<<<< HEAD
-    - text: "Terima kasih atas penilaian Anda."
-
-=======
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
 
->>>>>>> Stashed changes
->>>>>>> aee68c5 ( FEAT: Adding Clinic Knowledge Base and updating Rasa respons)
 session_config:
   session_expiration_time: 60
   carry_over_slots_to_new_session: true
