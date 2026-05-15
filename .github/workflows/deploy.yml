@@ -1,0 +1,67 @@
+# .github/workflows/deploy.yml
+#
+# CI/CD: otomatis deploy ke VPS setiap push ke branch main.
+#
+# Secrets yang wajib ditambahkan di GitHub:
+#   Settings → Secrets and variables → Actions → New repository secret
+#
+#   VPS_HOST     → IP atau hostname VPS kamu
+#   VPS_USER     → user SSH di VPS (misal: ubuntu, root)
+#   VPS_SSH_KEY  → isi private key SSH (cat ~/.ssh/id_rsa)
+#   VPS_APP_DIR  → path folder project di VPS (misal: /home/ubuntu/smartclinic)
+
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main   # ganti ke branch lain jika perlu
+
+jobs:
+  deploy:
+    name: SSH & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout kode (opsional, untuk future steps seperti test) ──────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. SSH ke VPS dan jalankan deploy script ──────────────────────────
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:        ${{ secrets.VPS_HOST }}
+          username:    ${{ secrets.VPS_USER }}
+          key:         ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e  # stop jika ada command yang gagal
+
+            echo "📦 Masuk ke folder project..."
+            cd ${{ secrets.VPS_APP_DIR }}
+
+            echo "⬇️  Pull kode terbaru dari GitHub..."
+            git pull origin main
+
+            echo "📝 Update .env dari GitHub Secret..."
+            cat > .env << 'EOF'
+            ${{ secrets.ENV_FILE }}
+            EOF
+
+            echo "🐳 Build ulang image dan restart container..."
+            docker compose down
+            docker compose up -d --build
+
+            echo "🧹 Hapus image lama yang tidak terpakai..."
+            docker image prune -f
+
+            echo "✅ Deploy selesai!"
+
+      # ── 3. Notifikasi status deploy (opsional) ────────────────────────────
+      - name: Notify success
+        if: success()
+        run: echo "Deploy berhasil ke VPS!"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "Deploy GAGAL! Cek log di atas."
