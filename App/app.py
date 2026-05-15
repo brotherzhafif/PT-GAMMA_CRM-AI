@@ -43,8 +43,10 @@ RASA_URL = os.getenv("RASA_URL", "http://rasa:5005")
 RASA_CONFIDENCE_THRESHOLD = 0.75
 
 HISTORY_DIR = "chat_history"
-if not os.path.exists(HISTORY_DIR):
-    os.makedirs(HISTORY_DIR)
+STATE_DIR = "chat_state"
+for _dir in (HISTORY_DIR, STATE_DIR):
+    if not os.path.exists(_dir):
+        os.makedirs(_dir)
 
 RASA_TRUSTED_INTENTS = {
     "greet", "goodbye",
@@ -177,6 +179,50 @@ def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "sy
     }).execute()
 
 
+def upsert_patient(no_hp: str, name: Optional[str] = None):
+    """Simpan atau update pasien di Supabase. Jika Supabase tidak ada, skip."""
+    if supabase is None:
+        print(f"[Patient] Skip upsert {no_hp} — Supabase belum dikonfigurasi.")
+        return
+    supabase.table("patients").upsert(
+        {"phone_number": no_hp, "name": name},
+        on_conflict="phone_number",
+    ).execute()
+    label = f"nama: {name}" if name else "tanpa nama"
+    print(f"[Patient] Upsert {no_hp} ({label})")
+
+
+def is_patient_registered(no_hp: str) -> bool:
+    """Cek apakah nomor sudah ada di tabel patients."""
+    if supabase is None:
+        return False
+    result = supabase.table("patients").select("id").eq("phone_number", no_hp).execute()
+    return len(result.data) > 0
+
+
+def get_session_state(no_hp: str) -> Optional[str]:
+    """Ambil state sesi saat ini untuk nomor tertentu. Return None jika tidak ada."""
+    file_path = os.path.join(STATE_DIR, f"{no_hp}.json")
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f).get("state")
+    except Exception:
+        return None
+
+
+def set_session_state(no_hp: str, state: Optional[str]):
+    """Set atau hapus state sesi. Kirim state=None untuk clear."""
+    file_path = os.path.join(STATE_DIR, f"{no_hp}.json")
+    if state is None:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return
+    with open(file_path, "w") as f:
+        json.dump({"state": state}, f)
+
+
 def query_rasa(message: str, sender: str) -> Optional[dict]:
     """
     Kirim pesan ke Rasa dan parse hasilnya.
@@ -246,15 +292,60 @@ def home():
 def webhook(payload: WebhookPayload):
     try:
         no_hp = payload.sender
-        input_pesan = payload.message
+        input_pesan = payload.message.strip()
         waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         print(f"\n[{waktu}] [INCOMING] Dari: {no_hp} | Pesan: {input_pesan}")
         save_to_supabase(no_hp, input_pesan, direction="inbound", source="fonnte")
 
-        chat_history = get_chat_history_json(no_hp, limit=5)
+        session_state = get_session_state(no_hp)
         reply = ""
-        source = ""
+        source = "system"
+
+        if session_state == "waiting_name":
+            nama = input_pesan.strip()
+
+            # Tolak jawaban yang terlalu pendek atau seperti bukan nama
+            SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
+            if len(nama) < 2 or nama.lower() in SKIP_KEYWORDS:
+                # Simpan tanpa nama
+                upsert_patient(no_hp, name=None)
+                set_session_state(no_hp, None)
+                reply = (
+                    "Oke, tidak apa-apa! Nomor kamu sudah kami simpan. "
+                    "Ada yang bisa kami bantu? 😊"
+                )
+                print(f"[Onboarding] {no_hp} skip nama → disimpan tanpa nama")
+            else:
+                # Simpan dengan nama
+                upsert_patient(no_hp, name=nama)
+                set_session_state(no_hp, None)
+                reply = (
+                    f"Terima kasih, *{nama}*! Data kamu sudah kami simpan. "
+                    f"Ada yang bisa kami bantu hari ini? 😊"
+                )
+                print(f"[Onboarding] {no_hp} → nama '{nama}' disimpan")
+
+            fonnte_queue.add_to_queue(no_hp, reply)
+            save_chat_to_json(no_hp, input_pesan, reply, source=source)
+            save_to_supabase(no_hp, reply, direction="outbound", source=source)
+            return ChatResponse(status="ok", source=source, reply=reply)
+
+        if not is_patient_registered(no_hp):
+            set_session_state(no_hp, "waiting_name")
+            reply = (
+                "Halo! Selamat datang di SmartClinic 👋\n\n"
+                "Sebelum mulai, boleh kami tahu nama kamu? "
+                "Ketik nama kamu, atau ketik *skip* jika tidak ingin memberikan nama."
+            )
+            print(f"[Onboarding] Nomor baru {no_hp} → tanya nama")
+
+            fonnte_queue.add_to_queue(no_hp, reply)
+            save_chat_to_json(no_hp, input_pesan, reply, source=source)
+            save_to_supabase(no_hp, reply, direction="outbound", source=source)
+            return ChatResponse(status="ok", source=source, reply=reply)
+
+        chat_history = get_chat_history_json(no_hp, limit=5)
 
         # ── Step 1: Coba Rasa ─────────────────────────────────────────────
         rasa_result = query_rasa(input_pesan, no_hp)
