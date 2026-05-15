@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: flask_chatbot
+    container_name: fastapi_chatbot
     environment:
       - PYTHONPATH=/app
     ports:
@@ -42,6 +42,7 @@ services:
     command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
     networks:
       - hana-network
+
   ngrok:
     image: ngrok/ngrok:latest
     container_name: ngrok_tunnel
@@ -51,7 +52,10 @@ services:
       - ./.env
     command:
       - "http"
-      - "app:5000"
+      # FIX: Pakai http://app:5000 — di dalam Docker network, service dirujuk
+      # pakai nama service-nya ("app"), bukan hostname bare.
+      # Tanpa "http://" ngrok bisa gagal resolve atau salah protokol.
+      - "http://app:5000"
     networks:
       - hana-network
     depends_on:

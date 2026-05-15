@@ -1,5 +1,0 @@
-flask
-flask-session
-requests
-python-dotenv
-groq
