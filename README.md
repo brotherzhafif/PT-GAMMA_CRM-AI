@@ -1,123 +1,221 @@
 # SmartClinic CRM AI (Hana)
 
-AI Chatbot backend for SmartClinic, combining Rasa (NLP) for structured intents and an LLM for unstructured queries.
+AI Chatbot backend for SmartClinic — hybrid routing between Rasa NLP (structured intents) and Groq LLM (contextual/complaint handling), delivered via WhatsApp through Fonnte.
 
-## 🏗 Architecture & Modules
+---
 
-### 1. Rasa NLP Module
-Handles structured conversational flows, API integrations, and predefined intents.
+## 🏗 Architecture
 
-- **Core Intents**: `greet`, `ask_schedule`, `ask_queue`, `ask_services`, `emergency`, `nlu_fallback`.
-- **Custom Actions (`rasa/actions.py`)**:
-  - `action_fetch_schedule`: Retrieves real-time doctor availability via `/schedules` API.
-  - `action_fetch_queue`: Retrieves current patient queue status via `/queues` API.
-- **Dialog Management**: Handled via Rules (single-turn/strict) and Stories (multi-turn).
-<br>
+```
+WhatsApp (Patient)
+       │
+       ▼
+  Fonnte Gateway
+       │  POST /webhook
+       ▼
+  FastAPI (Hybrid Router)
+       │
+       ├──► Rasa NLP ──► High confidence + trusted intent? ──► Reply directly
+       │
+       └──► Groq LLM ──► Low confidence / complaint / contextual ──► Reply with context
+       │
+       ▼
+  Fonnte Queue (anti-spam delay)
+       │
+       ▼
+WhatsApp (Patient)
+```
 
+---
 
-### 2. LLM Module (WIP)
-> This module utilizes the Groq Cloud API with the Llama-3 model for fast and efficient natural language processing.
+## 📦 Modules
 
-- Dynamic Role Playing:
+### 1. FastAPI Router (`App/app.py`)
+Main entry point. Receives webhook from Fonnte, routes to Rasa or Groq, saves messages to Supabase, and queues replies via Fonnte.
 
-  - default: Handles general clinic information (schedules, location, services).
-  - triage: Handles health complaints and early symptom identification.
+**Endpoints:**
 
-- Memory Management (Context Awareness) (Local):
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Health check |
+| `POST` | `/webhook` | Receive incoming WhatsApp message from Fonnte |
+| `GET` | `/api/patients` | Get all registered patients |
+| `POST` | `/api/patients` | Register new patient (upsert by phone number) |
+| `DELETE` | `/api/patients/{phone_number}` | Delete a patient |
+| `GET` | `/api/messages` | Get all messages (supports `?limit=N`) |
+| `GET` | `/api/messages/{phone_number}` | Get message history by phone number |
+| `POST` | `/api/send` | Send a message to one number |
+| `POST` | `/api/send/broadcast` | Broadcast message to all registered patients |
 
-  - Uses a local JSON-based storage system (chat_history/) (This Feature can change depending on the requirement).
-  - Capable of remembering up to the last 5 conversations for each WhatsApp number.
+**Onboarding flow:** First-time senders are greeted and asked for their name before being registered as patients. If skipped, the number is saved without a name.
 
-- Privacy-First Prompting: The AI is configured to greet users professionally without asking for or forcing personal data (name) unless it is already available in the conversation histor
-<br>
+---
 
-- 🛠 Tech Stack
-  - Python 3.10+
+### 2. Rasa NLP Module (`rasa/`)
+Handles structured, predefined conversational flows.
 
-  - Flask: Webhook gateway for third-party integration
+**Trusted intents** (answered directly without LLM):
+`greet`, `goodbye`, `ask_schedule`, `ask_queue`, `ask_services`, `ask_location`, `ask_cost`, `request_human_agent`, `emergency`, `affirm`, `deny`, `intent_ingin_booking`, `intent_berikan_rating`
 
-  - Groq SDK: Primary interface to the LLM model (Llama 3).
+**Custom Actions:**
+- `action_fetch_schedule` — retrieves real-time doctor availability
+- `action_fetch_queue` — retrieves current patient queue status
 
-  - Docker: Containerization for ease of deployment.
+Confidence threshold: **0.75** — below this, Groq LLM takes over.
 
-  - Fonnte API: WhatsApp Gateway for patient communication.
-    
-<br>
+---
 
+### 3. Groq LLM Module (`LLM/groq_service.py`)
+Handles contextual, complaint-based, or unrecognized queries using the Groq Cloud API (Llama 3).
 
-🚀 Setup & Installation (LLM Branch)
+**Roles:**
+- `default` — general clinic info (schedule, location, services)
+- `triage` — health complaints and early symptom identification (triggered by keywords like `sakit`, `demam`, `nyeri`, etc.)
 
-1. Prerequisites:
+**Memory:** Last 5 conversations per WhatsApp number, stored locally in `chat_history/` as JSON files.
 
-   Ensure you have an API Key from Groq Cloud and a token from Fonnte.
+---
 
-   <br>
+### 4. Queue Manager (`App/queue_manager.py`)
+Prevents WhatsApp number from being blocked due to rapid message sending. Adds a randomized 3–7 second human-like delay before each outbound message.
 
-3. Environment Variables:
+---
 
-   Create a `.env` file in the root folder and fill it as follows:
+## 🛠 Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Language | Python 3.9+ |
+| API Framework | FastAPI + Uvicorn |
+| NLP | Rasa 3.6.15 |
+| LLM | Groq Cloud API (Llama 3) |
+| Database | Supabase (PostgreSQL) |
+| WhatsApp Gateway | Fonnte API |
+| Containerization | Docker + Docker Compose |
+| Tunnel / Reverse Proxy | Cloudflare Tunnel |
+| CI/CD | GitHub Actions |
+| Hosting | Oracle VPS (Ubuntu 20.04, ARM64) |
+
+---
+
+## ⚙️ Environment Variables
+
+Create a `.env` file in the root folder:
 
 ```env
-   GROQ_API_KEY=_xxxx_your_key_here
-   FONNTE_TOKEN=your_fonnte_token_here
-   APP_SECRET_KEY=your_secret_key
-   NGROK_AUTHTOKEN=your_ngrok_token
-   RASA_URL=http://rasa:5005
+# Groq LLM
+GROQ_API_KEY=your_groq_api_key
+
+# Fonnte WhatsApp Gateway
+FONNTE_TOKEN=your_fonnte_token
+
+# Supabase
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Rasa (leave default if using Docker)
+RASA_URL=http://rasa:5005
 ```
 
-<br>
+---
 
-3. Running the Module (Local):
+## 🚀 Setup & Running
+
+### Via Docker (recommended)
 
 ```bash
-   # Install dependencies
-   pip install -r requirements.txt
+# 1. Clone repo
+git clone https://github.com/USERNAME/REPO.git
+cd REPO
 
-   # Jalankan server Flask
-   python app.py
+# 2. Setup environment
+cp .env.example .env
+nano .env  # fill in your keys
+
+# 3. Build and run all services
+docker compose up -d --build
+
+# 4. Check status
+docker compose ps
+docker compose logs -f app
 ```
 
-<br>
+Services started:
+- `fastapi_chatbot` — FastAPI app on port 5000
+- `rasa_server` — Rasa on port 5005
+- `rasa_action_server` — Rasa action server on port 5055
 
-4. Train Rasa via Docker:
+---
 
-```bash
-   docker run --rm -v  rasa/rasa:3.6.15-full train
-```
-
-<br>
-
-5. Running the Module via Docker:
-
-   Please make sure you have a `docker-compose.yml` file:
+### Rasa — Local Development
 
 ```bash
-   docker-compose up --build
-```
+# Install Rasa
+pip install rasa==3.6.15
 
-<br>
-
-### 3. Webhook & API Gateway (WIP)
-Webhook & API Routing
-- Endpoint: ***/webhook*** (POST)
-  - Fungsi: Receives JSON from Fonnte, checks history in chat_history/, requests a response from Groq, sends the reply to WhatsApp, and updates the chat history.
-<br>
-
-
-## 🚀 Local Setup (Rasa)
-
-Ensure Python 3.x is installed.
-
-```bash
-# 1. Install Dependencies
-pip install rasa
-
-# 2. Train Model
+# Train model
 cd rasa && rasa train
 
-# 3. Run Action Server (Backend API Bridge)
+# Run action server
 rasa run actions
 
-# 4. Run CLI Interface
+# Test via CLI
 rasa shell
+```
+
+---
+
+### Train Rasa via Docker
+
+```bash
+docker run --rm \
+  -v $(pwd)/rasa:/app \
+  rasa/rasa:3.6.15-full train
+```
+
+---
+
+## 🔄 CI/CD
+
+Every push to `main` automatically deploys to VPS via GitHub Actions.
+
+**Required GitHub Secrets:**
+
+| Secret | Value |
+|--------|-------|
+| `VPS_HOST` | VPS IP address |
+| `VPS_USER` | SSH username (e.g. `ubuntu`) |
+| `VPS_SSH_KEY` | Private SSH key |
+| `VPS_APP_DIR` | Project path on VPS (e.g. `/home/ubuntu/smartclinic`) |
+| `ENV_FILE` | Full contents of `.env` file |
+
+To update environment variables (e.g. rotate Fonnte token): update `ENV_FILE` secret in GitHub → manually trigger workflow from **Actions → Deploy to VPS → Run workflow**.
+
+---
+
+## 📁 Project Structure
+
+```
+smartclinic/
+├── App/
+│   ├── app.py                  # FastAPI router & all endpoints
+│   └── queue_manager.py        # Fonnte message queue with delay
+├── LLM/
+│   ├── groq_service.py         # Groq LLM integration
+│   └── requirements.txt
+├── rasa/
+│   ├── actions/
+│   │   └── actions.py          # Custom Rasa actions
+│   ├── data/                   # NLU training data & stories
+│   ├── models/                 # Trained Rasa models
+│   └── config.yml
+├── chat_history/               # Local JSON chat memory (per number)
+├── chat_state/                 # Onboarding state (per number)
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions CI/CD
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── .env
 ```
