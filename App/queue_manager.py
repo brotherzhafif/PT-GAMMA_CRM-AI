@@ -12,13 +12,14 @@ class MessageQueueManager:
     def __init__(self):
         self.msg_queue = queue.Queue()
         self.token = os.getenv('FONNTE_TOKEN', '').strip()
-        # Jalankan worker thread secara otomatis saat init
-        threading.Thread(target=self._worker, daemon=True).name = "FonnteQueueWorker"
-        threading.Thread(target=self._worker).start()
+        worker_thread = threading.Thread(target=self._worker, name="FonnteQueueWorker", daemon=True)
+        worker_thread.start()
+        print(f"[QUEUE] Worker thread '{worker_thread.name}' started. Token loaded: {'yes' if self.token else 'NO - cek .env!'}")
 
     def add_to_queue(self, target, message):
         """Masukkan pesan ke antrean"""
         self.msg_queue.put({"target": target, "message": message})
+        print(f"[QUEUE] Pesan dari {target} masuk antrean. Queue size: {self.msg_queue.qsize()}")
 
     def _worker(self):
         """Worker yang berjalan terus menerus memproses antrean"""
@@ -30,8 +31,7 @@ class MessageQueueManager:
             target = item['target']
             message = item['message']
 
-            # ── Logic untuk simulasi perilaku balasan manusia (minimalisir blokir oleh WA) ─────────────────────────────────────────────────────────
-            # 1. Simulasi Waktu Mengetik (Jeda Acak)
+            # ── Logic untuk simulasi perilaku balasan manusia (minimalisir blokir oleh WA) ──
             delay = random.uniform(3.0, 7.0) 
             print(f"[QUEUE] Menunggu {delay:.2f} detik sebelum kirim ke {target}...")
             time.sleep(delay)
@@ -52,7 +52,7 @@ class MessageQueueManager:
 
         try:
             response = requests.post(url, data=payload, headers=headers)
-            print(f"[QUEUE] Sent to {target}. Response: {response.text}")
+            print(f"[QUEUE] Sent to {target}. Status: {response.status_code} | Response: {response.text}")
         except Exception as e:
             print(f"[QUEUE] Error sending to {target}: {e}")
 
