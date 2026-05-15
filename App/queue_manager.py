@@ -32,7 +32,7 @@ class MessageQueueManager:
             message = item['message']
 
             # ── Logic untuk simulasi perilaku balasan manusia (minimalisir blokir oleh WA) ──
-            delay = random.uniform(3.0, 7.0) 
+            delay = random.uniform(3.0, 5.0) 
             print(f"[QUEUE] Menunggu {delay:.2f} detik sebelum kirim ke {target}...")
             time.sleep(delay)
 
