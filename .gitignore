@@ -14,7 +14,6 @@ ngrok/
 
 # Rasa
 .rasa/
-models/
 
 # Python virtual environments
 .venv/
@@ -62,6 +61,5 @@ docker-compose.yml.old
 
 step_by_step_run_guide.md.resolved
 .rasa/
-models/
 .keras/
 .config/
