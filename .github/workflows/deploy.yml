@@ -23,11 +23,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout kode (opsional, untuk future steps seperti test) ──────
+      #  1. Checkout kode (opsional, untuk future steps seperti test) 
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. SSH ke VPS dan jalankan deploy script ──────────────────────────
+      #  2. SSH ke VPS dan jalankan deploy script 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -57,7 +57,7 @@ jobs:
 
             echo "✅ Deploy selesai!"
 
-      # ── 3. Notifikasi status deploy (opsional) ────────────────────────────
+      #  3. Notifikasi status deploy (opsional) 
       - name: Notify success
         if: success()
         run: echo "Deploy berhasil ke VPS!"

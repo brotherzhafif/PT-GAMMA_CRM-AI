@@ -1,0 +1,78 @@
+# ======================================================
+# SmartClinic CRM AI — models.py
+# Semua Pydantic models untuk request & response API
+#
+# Last Change   :   16 May 2026
+# Developer     :   Raja Zhafif Raditya Harahap
+# ======================================================
+
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+# Webhook 
+
+class WebhookPayload(BaseModel):
+    sender: str = Field(..., description="Nomor WhatsApp pengirim", examples=["6281234567890"])
+    message: str = Field(..., description="Isi pesan masuk", examples=["Jadwal dokter hari ini?"])
+
+
+class ChatResponse(BaseModel):
+    status: str
+    source: Optional[str] = None
+    reply: Optional[str] = None
+
+
+# Messages 
+
+class ChatRecord(BaseModel):
+    id: Optional[str] = Field(default=None)
+    sender_number: str
+    message_text: str
+    direction: str = Field(..., description="inbound atau outbound")
+    source: Optional[str] = Field(default=None, description="fonnte, rasa, groq, manual, broadcast, atau admin")
+    created_at: Optional[str] = Field(default=None)
+
+
+# Patients 
+
+class PatientRecord(BaseModel):
+    id: Optional[str] = Field(default=None)
+    phone_number: str = Field(..., description="Nomor WhatsApp pasien", examples=["6281234567890"])
+    name: Optional[str] = Field(default=None, description="Nama pasien")
+    created_at: Optional[str] = Field(default=None)
+
+
+class SavePatientPayload(BaseModel):
+    phone_number: str = Field(..., description="Nomor WhatsApp pasien", examples=["6281234567890"])
+    name: Optional[str] = Field(default=None, description="Nama pasien (opsional)")
+
+
+# Send 
+
+class SendMessagePayload(BaseModel):
+    target: str = Field(..., description="Nomor WhatsApp tujuan", examples=["6281234567890"])
+    message: str = Field(..., description="Isi pesan yang akan dikirim")
+
+
+class BroadcastPayload(BaseModel):
+    message: str = Field(..., description="Isi pesan yang akan dikirim ke semua pasien")
+
+
+class BroadcastResult(BaseModel):
+    status: str
+    total_sent: int
+    recipients: List[str]
+
+
+# Handoff 
+
+class AdminReplyPayload(BaseModel):
+    message: str = Field(..., description="Pesan balasan dari admin ke pasien")
+
+
+class HandoffSession(BaseModel):
+    phone_number: str
+    started_at: str
+    last_admin_reply_at: Optional[str] = None
+    timeout_at: str
