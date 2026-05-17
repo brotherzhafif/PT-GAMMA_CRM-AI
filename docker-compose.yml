@@ -6,23 +6,31 @@ services:
     container_name: fastapi_chatbot
     environment:
       - PYTHONPATH=/app
+      - TZ=Asia/Jakarta
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - .:/app
+      - chat_history:/app/chat_history
+      - chat_state:/app/chat_state
+      - handoff_state:/app/handoff_state
     env_file:
       - ./.env
     networks:
       - hana-network
     depends_on:
       - rasa
+      - wa-service
+    restart: unless-stopped
 
   rasa:
     image: rasa/rasa:3.6.15-full
-    container_name: rasa_server
     platform: linux/amd64
+    container_name: rasa_server
+    environment:
+      - TZ=Asia/Jakarta
     ports:
-      - "5005:5005"
+      - "127.0.0.1:5005:5005"
     volumes:
       - ./rasa:/app
     command: run --enable-api --cors "*" --model models
@@ -30,13 +38,16 @@ services:
       - hana-network
     depends_on:
       - action_server
+    restart: unless-stopped
 
   action_server:
     image: rasa/rasa-sdk:3.6.2
-    container_name: rasa_action_server
     platform: linux/amd64
+    container_name: rasa_action_server
+    environment:
+      - TZ=Asia/Jakarta
     ports:
-      - "5055:5055"
+      - "127.0.0.1:5055:5055"
     user: root
     volumes:
       - ./rasa/actions:/app/actions
@@ -44,25 +55,32 @@ services:
     command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
     networks:
       - hana-network
+    restart: unless-stopped
 
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: ngrok_tunnel
+  wa-service:
+    build:
+      context: ./wa-service
+      dockerfile: Dockerfile
+    container_name: wa_service
+    environment:
+      - TZ=Asia/Jakarta
+      - PORT=3000
     ports:
-      - "4040:4040"
-    env_file:
-      - ./.env
-    command:
-      - "http"
-      # FIX: Pakai http://app:5000 — di dalam Docker network, service dirujuk
-      # pakai nama service-nya ("app"), bukan hostname bare.
-      # Tanpa "http://" ngrok bisa gagal resolve atau salah protokol.
-      - "http://app:5000"
+      # Hanya expose ke localhost — tidak perlu akses dari luar
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # Session WA disimpan persistent agar tidak perlu scan QR ulang setelah restart
+      - wa_session:/app/.wwebjs_auth
     networks:
       - hana-network
-    depends_on:
-      - app
+    restart: unless-stopped
 
 networks:
   hana-network:
     driver: bridge
+
+volumes:
+  chat_history:
+  chat_state:
+  handoff_state:
+  wa_session:   # Persistent WA session

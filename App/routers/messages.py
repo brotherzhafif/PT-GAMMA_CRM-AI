@@ -42,6 +42,19 @@ def get_all_messages(limit: int = 100):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get(
+    "/latest",
+    response_model=List[dict],
+    summary="Ambil chat terbaru semua customer",
+    description="Mengambil 1 pesan terbaru per nomor beserta nama pasien. Untuk sidebar CRM.",
+)
+def get_latest_messages():
+    _require_supabase()
+    try:
+        response = supabase.rpc("get_latest_messages").execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get(
     "/{phone_number}",

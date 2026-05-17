@@ -53,10 +53,14 @@ class SavePatientPayload(BaseModel):
 class SendMessagePayload(BaseModel):
     target: str = Field(..., description="Nomor WhatsApp tujuan", examples=["6281234567890"])
     message: str = Field(..., description="Isi pesan yang akan dikirim")
+    attachment_url: Optional[str] = Field(default=None, description="URL file attachment (PDF, gambar). Jika diisi, dikirim via whatsapp-web.js")
+    filename: Optional[str] = Field(default=None, description="Nama file yang tampil di WhatsApp (opsional)")
 
 
 class BroadcastPayload(BaseModel):
     message: str = Field(..., description="Isi pesan yang akan dikirim ke semua pasien")
+    attachment_url: Optional[str] = Field(default=None, description="URL file attachment (PDF, gambar). Jika diisi, dikirim via whatsapp-web.js")
+    filename: Optional[str] = Field(default=None, description="Nama file yang tampil di WhatsApp (opsional)")
 
 
 class BroadcastResult(BaseModel):

@@ -6,6 +6,9 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import os
+import requests
+
 from fastapi import APIRouter, HTTPException
 
 from App.config import supabase
@@ -25,14 +28,34 @@ router = APIRouter(prefix="/api/send", tags=["Send"])
 @router.post(
     "",
     summary="Kirim pesan ke satu nomor",
-    description="Kirim pesan manual ke satu nomor WhatsApp melalui antrian Fonnte. Tercatat di Supabase sebagai outbound/manual.",
+    description="Kirim pesan ke satu nomor. Jika ada attachment_url, dikirim via whatsapp-web.js. Jika tidak, dikirim via Fonnte.",
 )
 def send_message(payload: SendMessagePayload):
     try:
-        fonnte_queue.add_to_queue(payload.target, payload.message)
-        save_to_supabase(payload.target, payload.message, direction="outbound", source="manual")
-        print(f"[SEND] Manual → {payload.target}: {payload.message[:60]}...")
+        if payload.attachment_url:
+            # Kirim via whatsapp-web.js (attachment) 
+            WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
+            response = requests.post(
+                f"{WA_SERVICE_URL}/send-attachment",
+                json={
+                    "target": payload.target,
+                    "message": payload.message,
+                    "attachment_url": payload.attachment_url,
+                    "filename": payload.filename,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            source = "wa-service"
+        else:
+            # Kirim via Fonnte (teks biasa) 
+            fonnte_queue.add_to_queue(payload.target, payload.message)
+            source = "manual"
+
+        save_to_supabase(payload.target, payload.message, direction="outbound", source=source)
+        print(f"[SEND] {source} → {payload.target}: {payload.message[:60]}...")
         return {"status": "ok", "message": f"Pesan untuk {payload.target} masuk antrian"}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -56,16 +79,36 @@ def broadcast_message(payload: BroadcastPayload):
         if not patients:
             raise HTTPException(
                 status_code=404,
-                detail="Tidak ada nomor pasien tersimpan. Tambahkan dulu via POST /api/patients",
+                detail="Tidak ada nomor pasien tersimpan.",
             )
 
+        WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
         recipients = []
+
         for patient in patients:
             number = patient.get("phone_number")
             if not number:
                 continue
-            fonnte_queue.add_to_queue(number, payload.message)
-            save_to_supabase(number, payload.message, direction="outbound", source="broadcast")
+
+            if payload.attachment_url:
+                # Kirim via whatsapp-web.js 
+                requests.post(
+                    f"{WA_SERVICE_URL}/send-attachment",
+                    json={
+                        "target": number,
+                        "message": payload.message,
+                        "attachment_url": payload.attachment_url,
+                        "filename": payload.filename,
+                    },
+                    timeout=30,
+                )
+                source = "wa-service"
+            else:
+                # Kirim via Fonnte 
+                fonnte_queue.add_to_queue(number, payload.message)
+                source = "broadcast"
+
+            save_to_supabase(number, payload.message, direction="outbound", source=source)
             recipients.append(number)
 
         print(f"[BROADCAST] {len(recipients)} pesan masuk antrian")

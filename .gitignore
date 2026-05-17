@@ -5,6 +5,10 @@ __pycache__/
 .venv/
 .agents/
 
+chat_history
+chat_state
+handoff_state
+
 # -------------------------
 # 📁IGNORE DIRECTORIES
 # -------------------------
