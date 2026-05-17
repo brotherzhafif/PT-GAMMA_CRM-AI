@@ -62,12 +62,82 @@ rules:
       - intent: nlu_fallback
       - action: utter_default
 
-  - rule: Provide booking link
-    steps:
-      - intent: intent_ingin_booking
-      - action: utter_berikan_link_booking
-
   - rule: Handle rating survey
     steps:
       - intent: intent_berikan_rating
       - action: utter_terima_kasih_rating
+
+  # Trigger awal booking
+  - rule: Mulai alur booking
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+
+  #  Aktivasi form berdasarkan tipe pasien
+  - rule: Aktifkan form pasien baru
+    condition:
+      - slot_was_set:
+          - booking_tipe_pasien: baru
+    steps:
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+
+  - rule: Aktifkan form pasien lama
+    condition:
+      - slot_was_set:
+          - booking_tipe_pasien: lama
+    steps:
+      - intent: booking_pasien_lama
+      - action: utter_booking_intro_lama
+      - action: booking_form_lama
+      - active_loop: booking_form_lama
+
+  #  Submit form
+  - rule: Submit form pasien baru
+    condition:
+      - active_loop: booking_form_baru
+    steps:
+      - action: booking_form_baru
+      - active_loop: null
+      - slot_was_set:
+          - requested_slot: null
+      - action: action_booking_form_baru_submit
+      - action: action_booking_review
+
+  - rule: Submit form pasien lama
+    condition:
+      - active_loop: booking_form_lama
+    steps:
+      - action: booking_form_lama
+      - active_loop: null
+      - slot_was_set:
+          - requested_slot: null
+      - action: action_booking_form_lama_submit
+      - action: action_booking_review
+
+  #  Konfirmasi
+  - rule: Konfirmasi booking
+    steps:
+      - intent: booking_konfirmasi
+      - action: action_booking_confirm
+
+  # Ubah data booking
+  - rule: Ubah data booking
+    steps:
+      - intent: booking_ubah_data
+      - action: action_slot_reset_booking
+      - action: utter_booking_tanya_tipe
+
+  # Batal
+  - rule: Batalkan booking kapan saja
+    steps:
+      - intent: booking_batalkan
+      - action: action_booking_cancel
+
+  # Reschedule
+  - rule: Reschedule booking
+    steps:
+      - intent: booking_reschedule
+      - action: utter_booking_reschedule_info

@@ -47,7 +47,7 @@ ALUR_GEJALA = """
 === ALUR WAJIB SAAT PASIEN SEBUT GEJALA/KELUHAN ===
 1. Empati singkat (1 kalimat).
 2. Rekomendasikan poli yang paling relevan dari daftar poli klinik.
-3. Tawarkan booking: "Apakah Bapak/Ibu ingin saya bantu daftarkan ke [poli]? Booking: [link]"
+3. Tawarkan booking: "Apakah Bapak/Ibu ingin saya bantu daftarkan ke [poli]? (Mohon Ketik "Booking" untuk bantuan pendaftaran)"
 4. Tambahkan DISCLAIMER di akhir.
 JANGAN panjang lebar menjelaskan penyebab medis.
  
@@ -55,7 +55,7 @@ CONTOH:
 Pasien: "Saya mual"
 Hana: "Mohon maaf Bapak/Ibu kurang enak badan. Untuk keluhan mual, kami sarankan ke Poli Penyakit Dalam (Sp.PD) atau Poli Umum.
  
-Apakah Bapak/Ibu ingin saya bantu daftarkan sekarang? Booking: [link booking]
+Apakah Bapak/Ibu ingin saya bantu daftarkan sekarang? (Mohon Ketik "Booking" untuk bantuan pendaftaran)
  
 📋 Catatan: Saya adalah asisten virtual berbasis AI dan tidak dapat memberikan saran medis atau diagnosis. Untuk kondisi kesehatan Anda, silakan berkonsultasi langsung dengan dokter kami."
 """
@@ -74,7 +74,7 @@ ROLES = {
   4. Jika pasien bertanya, langsung berikan pilihan bantuan: pendaftaran, jadwal dokter, atau lokasi.
 
 KAPABILITAS:
-1. Booking janji temu (Berikan Hyperlink saja).
+1. Booking janji temu (Mohon ketik "Booking" untuk bantuan pendaftaran).
 2. Info jadwal dokter, layanan, dan spesialisasi klinik.
 3. Reschedule / pembatalan janji temu.
 4. Info antrian, jam buka, lokasi, prosedur, harga umum.
