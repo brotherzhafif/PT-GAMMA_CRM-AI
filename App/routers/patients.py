@@ -10,7 +10,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 
 from App.config import supabase
-from App.models import PatientRecord, SavePatientPayload
+from App.models import PatientRecord, SavePatientPayload, UpdatePatientPayload
 from App.helpers import _require_supabase
 
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
