@@ -8,7 +8,7 @@
 //  GET  /qr               Ambil QR code untuk login (base64)
 //  POST /send-attachment  Kirim file ke nomor WA
 //
-// Last Change   :   16 May 2026
+// Last Change   :   18 May 2026
 // Developer     :   Raja Zhafif Raditya Harahap
 // ======================================================
 
