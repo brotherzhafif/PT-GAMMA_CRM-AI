@@ -11,7 +11,7 @@
 
 from fastapi import FastAPI
 
-from App.routers import webhook, patients, messages, send, handoff
+from App.routers import webhook, patients, messages, send, handoff, wa
 
 app = FastAPI(
     title="SmartClinic CRM AI",
@@ -25,6 +25,7 @@ app.include_router(patients.router)
 app.include_router(messages.router)
 app.include_router(send.router)
 app.include_router(handoff.router)
+app.include_router(wa.router)
 
 
 # ======================================================

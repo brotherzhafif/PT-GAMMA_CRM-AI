@@ -4,9 +4,9 @@
 // Menggunakan whatsapp-web.js + Puppeteer
 //
 // Endpoint:
-//   GET  /status           Cek status koneksi WA
-//   GET  /qr               Ambil QR code untuk login (base64)
-//   POST /send-attachment  Kirim file ke nomor WA
+//  GET  /status           Cek status koneksi WA
+//  GET  /qr               Ambil QR code untuk login (base64)
+//  POST /send-attachment  Kirim file ke nomor WA
 //
 // Last Change   :   16 May 2026
 // Developer     :   Raja Zhafif Raditya Harahap
@@ -22,12 +22,12 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 3000
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// State 
 let qrCodeData = null      // QR code string untuk ditampilkan
 let isReady = false        // true jika WA sudah terkoneksi
 let isInitializing = true  // true selama proses init/scan QR
 
-// ── WhatsApp Client ───────────────────────────────────────────────────────────
+// WhatsApp Client 
 const client = new Client({
     authStrategy: new LocalAuth({
         // Session disimpan di folder /app/.wwebjs_auth di dalam container
@@ -48,7 +48,7 @@ const client = new Client({
     },
 })
 
-// ── Events ────────────────────────────────────────────────────────────────────
+// Events 
 
 client.on('qr', (qr) => {
     qrCodeData = qr
@@ -88,7 +88,7 @@ client.initialize()
 console.log('[WA] Initializing WhatsApp client...')
 
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// Helper 
 
 /**
  * Format nomor WA — pastikan pakai format internasional tanpa +
@@ -213,7 +213,7 @@ app.post('/send-attachment', async (req, res) => {
 })
 
 
-// ── Start Server ──────────────────────────────────────────────────────────────
+// Start Server 
 app.listen(PORT, () => {
     console.log(`[WA] Service berjalan di http://0.0.0.0:${PORT}`)
     console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-attachment`)
