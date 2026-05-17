@@ -48,6 +48,14 @@ jobs:
             ${{ secrets.ENV_FILE }}
             EOF
 
+            echo "🔓 Hapus Chromium lock file agar wa-service tidak crash saat restart..."
+            # Hapus hanya lock file, bukan seluruh volume
+            # Sehingga session WA tetap tersimpan dan tidak perlu scan QR ulang
+            docker run --rm \
+              -v smartclinic_wa_session:/data \
+              alpine sh -c "find /data -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' | xargs rm -f" \
+              2>/dev/null || true
+
             echo "🐳 Build ulang image dan restart container..."
             docker compose down
             docker compose up -d --build
