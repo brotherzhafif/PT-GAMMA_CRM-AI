@@ -34,3 +34,113 @@ stories:
     steps:
       - intent: emergency
       - action: utter_emergency
+
+  #=================================================================
+  # Alur-alur booking pasien baru dan lama dengan berbagai skenario
+  #=================================================================
+
+  # ── Alur 1: Booking Pasien Baru (happy path) ─────────────────
+  - story: booking pasien baru - happy path
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+      - active_loop: null
+      - slot_was_set:
+          - requested_slot: null
+      - action: action_booking_form_baru_submit
+      - action: action_booking_review
+
+  # ── Alur 2: Booking Pasien Baru → Konfirmasi ─────────────────
+  - story: booking pasien baru - konfirmasi
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+      - active_loop: null
+      - action: action_booking_form_baru_submit
+      - action: action_booking_review
+      - intent: booking_konfirmasi
+      - action: action_booking_confirm
+
+  # ── Alur 3: Booking Pasien Baru → Ubah Data ──────────────────
+  - story: booking pasien baru - ubah data
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+      - active_loop: null
+      - action: action_booking_form_baru_submit
+      - action: action_booking_review
+      - intent: booking_ubah_data
+      - action: action_slot_reset_booking
+      - action: utter_booking_tanya_tipe
+
+  # ── Alur 4: Booking Pasien Lama (happy path) ─────────────────
+  - story: booking pasien lama - happy path
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_lama
+      - action: utter_booking_intro_lama
+      - action: booking_form_lama
+      - active_loop: booking_form_lama
+      - active_loop: null
+      - slot_was_set:
+          - requested_slot: null
+      - action: action_booking_form_lama_submit
+      - action: action_booking_review
+
+  # ── Alur 5: Booking Pasien Lama → Konfirmasi ─────────────────
+  - story: booking pasien lama - konfirmasi
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_lama
+      - action: utter_booking_intro_lama
+      - action: booking_form_lama
+      - active_loop: booking_form_lama
+      - active_loop: null
+      - action: action_booking_form_lama_submit
+      - action: action_booking_review
+      - intent: booking_konfirmasi
+      - action: action_booking_confirm
+
+  # ── Alur 6: Batalkan di tengah booking ───────────────────────
+  - story: booking - batalkan di form
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+      - intent: booking_batalkan
+      - action: action_booking_cancel
+
+  # ── Alur 7: Reschedule setelah booking selesai ───────────────
+  - story: reschedule booking
+    steps:
+      - intent: booking_reschedule
+      - action: utter_booking_reschedule_info
+
+  # ── Alur 8: Booking lalu minta admin ─────────────────────────
+  - story: booking pasien baru lalu minta admin
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pasien_baru
+      - action: utter_booking_intro_baru
+      - action: booking_form_baru
+      - active_loop: booking_form_baru
+      - intent: request_human_agent
+      - action: utter_request_human_agent

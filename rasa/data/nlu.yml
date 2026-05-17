@@ -364,7 +364,6 @@ nlu:
       - yoi
       - nah iya
       - nah bener
-      - oke lanjut
       - iya betul kak
       - udah bener
       - bener banget
@@ -428,6 +427,7 @@ nlu:
 
   - intent: intent_ingin_booking
     examples: |
+      - Booking
       - saya mau booking
       - daftar dokter
       - mau reservasi
@@ -481,11 +481,198 @@ nlu:
       - mantap
       - jelek
 
-# =============================================================
-# SYNONYM — Memetakan variasi kata informal ke kata standar
-# sehingga NLU bisa mengenali lebih banyak ekspresi tanpa
-# perlu menambahkan contoh satu per satu di setiap intent.
-# =============================================================
+  #=================================================================
+  # Intent dan entitas untuk alur booking pasien baru dan lama
+  #=================================================================
+
+  - intent: booking_pasien_baru
+    examples: |
+      - 1
+      - saya pasien baru
+      - belum pernah berobat di sini
+      - pertama kali ke sini
+      - baru pertama datang ke klinik ini
+      - saya baru mau daftar
+      - belum pernah daftar sebelumnya
+      - pasien baru kak
+      - ini pertama kali saya ke klinik ini
+      - saya belum pernah berobat di sini sebelumnya
+      - baru pertama kali mau periksa
+      - mau daftar sebagai pasien baru
+      - pilih 2
+      - [2]
+      - opsi 2
+      - yang baru
+
+  #
+  - intent: booking_pasien_lama
+    examples: |
+      - 2
+      - saya sudah pernah berobat
+      - saya pasien lama
+      - pernah ke sini sebelumnya
+      - sudah pernah periksa di sini
+      - saya sudah terdaftar
+      - pasien lama kak
+      - sudah pernah berobat di sini
+      - pernah daftar sebelumnya
+      - saya sudah pernah ke sini
+      - sudah pernah kak
+      - pilih 1
+      - [1]
+      - opsi 1
+      - yang sudah pernah
+
+  #  Intent:  NIK
+  - intent: booking_berikan_nik
+    examples: |
+      - NIK saya [1234567890123456](nik)
+      - nik [3471234567890001](nik)
+      - nomor KTP [3578901234560002](nik)
+      - [3471011234560003](nik)
+      - ktp saya [3578121234560004](nik)
+      - no ktp [3471231234560005](nik)
+      - nik nya [1234123456780006](nik)
+
+  # Intent:  Tanggal Lahir
+  - intent: booking_berikan_tgl_lahir
+    examples: |
+      - tanggal lahir saya [01/01/1990](tanggal_lahir)
+      - lahir [15/08/1995](tanggal_lahir)
+      - tgl lahir [20/03/2000](tanggal_lahir)
+      - [05/12/1988](tanggal_lahir)
+      - lahirnya [10/07/1992](tanggal_lahir)
+      - saya lahir tanggal [25/06/1985](tanggal_lahir)
+      - ttl [01/01/2001](tanggal_lahir)
+
+  # Intent:  Keluhan
+  - intent: booking_berikan_keluhan
+    examples: |
+      - saya sakit kepala
+      - keluhan saya demam dan batuk
+      - saya batuk pilek sejak kemarin
+      - mual dan muntah
+      - perut saya sakit
+      - saya ada keluhan nyeri punggung
+      - keluhannya demam tinggi
+      - sakit tenggorokan
+      - saya pusing dan lemas
+      - ada luka di kaki
+      - keluhan saya sesak napas ringan
+      - gigi saya sakit
+      - saya flu sudah 3 hari
+      - keluhannya gatal-gatal di kulit
+      - saya mau kontrol tekanan darah
+      - mau kontrol rutin
+      - cek kesehatan umum
+      - mau periksa mata
+      - mau konsultasi gizi
+
+  # Intent: Berikan Tanggal Kunjungan
+  - intent: booking_berikan_tgl_kunjungan
+    examples: |
+      - saya mau datang [besok](tanggal_kunjungan)
+      - rencananya [Senin](tanggal_kunjungan)
+      - tanggal kunjungan [25/05/2026](tanggal_kunjungan)
+      - mau ke klinik [hari ini](tanggal_kunjungan)
+      - [Rabu](tanggal_kunjungan) depan
+      - rencana datang [Jumat](tanggal_kunjungan)
+      - [26/05/2026](tanggal_kunjungan)
+      - mau datang tanggal [28 Mei 2026](tanggal_kunjungan)
+      - enaknya [Sabtu](tanggal_kunjungan) deh
+      - [lusa](tanggal_kunjungan)
+
+  #  Intent: Konfirmasi Booking
+  - intent: booking_konfirmasi
+    examples: |
+      - ya benar
+      - betul kak
+      - iya konfirmasi
+      - sudah benar datanya
+      - ya lanjut
+      - konfirmasi
+      - benar semua
+      - iya itu benar
+      - lanjutkan saja
+      - ya silakan proses
+      - fix kak
+      - iya sudah sesuai
+      - oke lanjut
+
+  # Intent: Ubah Data Booking
+  - intent: booking_ubah_data
+    examples: |
+      - ada yang salah
+      - mau ubah datanya
+      - salah kak tolong perbaiki
+      - ada yang perlu dikoreksi
+      - mau ganti tanggal
+      - ubah tanggal 
+      - ganti dokternya
+      - salah nama
+      - keluhan mau diganti
+      - koreksi dulu
+      - mau edit data
+
+  #  Intent: Batalkan Booking
+  - intent: booking_batalkan
+    examples: |
+      - batalkan booking saya
+      - saya mau cancel janji
+      - batal saja kak
+      - cancel booking
+      - saya tidak jadi ke klinik
+      - tidak jadi daftar
+      - hapus janji temu saya
+      - batalin dong
+      - cancel deh
+      - saya mau membatalkan pendaftaran
+
+  #  Intent: Reschedule
+  - intent: booking_reschedule
+    examples: |
+      - mau ganti jadwal
+      - reschedule dong
+      - ubah tanggal kunjungan
+      - pindah jadwal bisa ga
+      - ganti hari kunjungan
+      - mau ubah janji temu
+      - jadwalnya dipindah dulu
+      - reschedule ke hari lain
+      - bisa geser jadwalnya
+
+  # Daftar Poli dan Hari untuk memudahkan RASA mengenali layanan Klinik dan nama hari.
+  - lookup: poli
+    examples: |
+      - poli umum
+      - poli anak
+      - poli gigi
+      - poli kandungan
+      - poli kulit
+      - poli THT
+      - poli mata
+      - poli saraf
+      - poli dalam
+      - poli gizi
+      - UGD
+      - KIA
+      - MCU
+
+  - lookup: nama_hari
+    examples: |
+      - Senin
+      - Selasa
+      - Rabu
+      - Kamis
+      - Jumat
+      - Sabtu
+      - Minggu
+
+  # =============================================================
+  # SYNONYM — Memetakan variasi kata informal ke kata standar
+  # sehingga NLU bisa mengenali lebih banyak ekspresi tanpa
+  # perlu menambahkan contoh satu per satu di setiap intent.
+  # =============================================================
 
   - synonym: tidak
     examples: |
@@ -645,10 +832,29 @@ nlu:
       - kritis
       - parah banget
 
-# =============================================================
-# REGEX — Pola ekspresi reguler untuk menangkap variasi
-# format angka, singkatan, dan pola teks yang berulang.
-# =============================================================
+  - synonym: konfirmasi
+    examples: |
+      - iya
+      - ya
+      - benar
+      - betul
+      - fix
+      - oke
+      - lanjut
+      - setuju
+
+  - synonym: batal
+    examples: |
+      - cancel
+      - batalkan
+      - tidak jadi
+      - hapus
+      - gak jadi
+
+  # =============================================================
+  # REGEX — Pola ekspresi reguler untuk menangkap variasi
+  # format angka, singkatan, dan pola teks yang berulang.
+  # =============================================================
 
   - regex: nomor_antrian
     examples: |
@@ -702,3 +908,19 @@ nlu:
       - (ada|tersedia|available)\s*\w+\s*(ga|gak|tidak|engga|enggak)\??
       - \w+\s*(ada|tersedia)\s*(ga|gak|tidak|kah|ngga)\??
       - (bisa|bs)\s*(pake|pakai|gunain|menggunakan)\s*\w+\s*(ga|gak|tidak)\??
+
+  - regex: nik
+    examples: |
+      - \b\d{16}\b
+
+  # ── Regex Entity: Tanggal ─────────────────────────────────────
+  - regex: tanggal_lahir
+    examples: |
+      - \b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b
+      - \b\d{1,2}\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4}\b
+
+  - regex: tanggal_kunjungan
+    examples: |
+      - \b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b
+      - \b(besok|lusa|hari ini)\b
+      - \b(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu)\b

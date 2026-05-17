@@ -15,10 +15,161 @@ intents:
   - nlu_fallback
   - intent_ingin_booking
   - intent_berikan_rating
+  - booking_pasien_baru
+  - booking_pasien_lama
+  - booking_berikan_nik
+  - booking_berikan_tgl_lahir
+  - booking_berikan_keluhan
+  - booking_berikan_tgl_kunjungan
+  - booking_konfirmasi
+  - booking_ubah_data
+  - booking_batalkan
+  - booking_reschedule
+
+entities:
+  - nik
+  - tanggal_lahir
+  - nama_lengkap
+  - tanggal_kunjungan
+  - keluhan
+  - poli
+
+slots:
+  konteks_percakapan:
+    type: text
+    influence_conversation: true
+    mappings:
+      - type: from_intent
+        intent: intent_ingin_booking
+        value: booking
+      - type: from_intent
+        intent: goodbye
+        value: survey
+
+  # Tipe pasien
+  booking_tipe_pasien:
+    type: categorical
+    values:
+      - baru
+      - lama
+    mappings:
+      - type: from_intent
+        intent: booking_pasien_baru
+        value: baru
+      - type: from_intent
+        intent: booking_pasien_lama
+        value: lama
+
+  # Data identitas
+  booking_nik:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: nik
+      - type: from_text
+        intent: booking_berikan_nik
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_nik
+          - active_loop: booking_form_lama
+            requested_slot: booking_nik
+
+  booking_nama:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: nama_lengkap
+      - type: from_text
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_nama
+
+  booking_tgl_lahir:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: tanggal_lahir
+      - type: from_text
+        intent: booking_berikan_tgl_lahir
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_tgl_lahir
+
+  # Data kunjungan
+  booking_keluhan:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: keluhan
+      - type: from_text
+        intent: booking_berikan_keluhan
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_keluhan
+          - active_loop: booking_form_lama
+            requested_slot: booking_keluhan
+
+  booking_tgl_kunjungan:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: tanggal_kunjungan
+      - type: from_text
+        intent: booking_berikan_tgl_kunjungan
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_tgl_kunjungan
+          - active_loop: booking_form_lama
+            requested_slot: booking_tgl_kunjungan
+
+  # Status flow
+  booking_step:
+    type: categorical
+    values:
+      - tanya_tipe
+      - form_baru
+      - form_lama
+      - review
+      - selesai
+      - batalkan
+    mappings:
+      - type: custom
+
+  booking_id_konfirmasi:
+    type: text
+    mappings:
+      - type: custom
+
+forms:
+  # Form Pasien Baru
+  booking_form_baru:
+    required_slots:
+      - booking_nama
+      - booking_nik
+      - booking_tgl_lahir
+      - booking_keluhan
+      - booking_tgl_kunjungan
+
+  # Form Pasien Lama
+  booking_form_lama:
+    required_slots:
+      - booking_nik
+      - booking_keluhan
+      - booking_tgl_kunjungan
 
 actions:
   - action_fetch_schedule
   - action_fetch_queue
+  - action_start_booking
+  - action_booking_form_baru_submit
+  - action_booking_form_lama_submit
+  - action_booking_review
+  - action_booking_confirm
+  - action_booking_cancel
+  - action_booking_reschedule
+  - validate_booking_form_baru
+  - validate_booking_form_lama
+  - action_slot_reset_booking
 
 responses:
   utter_greet:
@@ -53,14 +204,79 @@ responses:
   utter_default:
     - text: "Mohon maaf, saya kurang memahami pertanyaan Anda. Saya bisa membantu untuk:\n\n1. 📅 Cek jadwal dokter\n2. 🔢 Cek antrian\n3. 🏥 Info layanan klinik\n\nSilakan coba tanyakan kembali."
 
-  utter_berikan_link_booking:
-    - text: "Silakan lengkapi data diri dan pilih jadwal Anda melalui tautan berikut ya: [Form Booking Klinik](https://dummy-booking.com)"
+  ##utter_berikan_link_booking:
+  ##  - text: "Silakan lengkapi data diri dan pilih jadwal Anda melalui tautan berikut ya: [Form Booking Klinik](https://dummy-booking.com)"
 
   utter_minta_rating:
     - text: "Seberapa puas Anda dengan pelayanan saya hari ini? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas)."
 
   utter_terima_kasih_rating:
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
+
+  utter_booking_tanya_tipe:
+    - text: |
+        Halo! Selamat datang di layanan pendaftaran digital Klinik SmartClinic 🏥
+
+        Agar saya bisa membantu lebih cepat, apakah Anda sebelumnya sudah pernah berobat ke klinik kami?
+
+        *[1] 👤 Sudah Pernah*
+        *[2] 🆕 Pasien Baru*
+
+        _(Balas dengan angka 1 atau 2)_
+
+  #  Form pasien baru
+  utter_booking_intro_baru:
+    - text: |
+        Selamat bergabung di Klinik SmartClinic! 😊
+
+        Karena ini kunjungan pertama Anda, mohon lengkapi data berikut. Saya akan tanya satu per satu ya.
+
+  utter_ask_booking_nama:
+    - text: "📝 *Nama Lengkap* (sesuai KTP):\nSilakan ketik nama lengkap Anda."
+
+  utter_ask_booking_nik:
+    - text: "🪪 *NIK* (16 digit):\nSilakan ketik NIK Anda yang tertera di KTP."
+
+  utter_ask_booking_tgl_lahir:
+    - text: "🎂 *Tanggal Lahir*:\nSilakan ketik dalam format DD/MM/YYYY\n_(Contoh: 15/08/1995)_"
+
+  utter_ask_booking_keluhan:
+    - text: "🩺 *Keluhan yang dirasakan*:\nCeritakan keluhan utama Anda saat ini."
+
+  utter_ask_booking_tgl_kunjungan:
+    - text: "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?\n_(Contoh: besok, Senin, atau 25/05/2026)_"
+
+  utter_booking_intro_lama:
+    - text: |
+        Senang menyapa Anda kembali! 😊
+
+        Mohon bantu isi data berikut agar kami bisa langsung mencocokkan jadwal Anda.
+
+  utter_ask_booking_nik_lama:
+    - text: "🪪 *NIK atau Nama Lengkap*:\nSilakan ketik NIK (16 digit) atau nama lengkap yang terdaftar."
+
+  utter_booking_nik_invalid:
+    - text: "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang."
+
+  utter_booking_tgl_invalid:
+    - text: "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n_(Contoh: 15/08/1995)_"
+
+  utter_booking_tgl_kunjungan_invalid:
+    - text: "⚠️ Tanggal kunjungan tidak valid. Pilih *besok*, nama *hari*, atau tanggal format *DD/MM/YYYY*."
+
+  utter_booking_batalkan:
+    - text: |
+        Baik, pendaftaran Anda telah dibatalkan. ❌
+
+        Jika Anda ingin mendaftar kembali, ketik *booking* kapan saja. Semoga lekas sehat! 🙏
+
+  utter_booking_reschedule_info:
+    - text: |
+        Untuk reschedule, silakan hubungi admin klinik kami:
+        📞 *0812-XXXX-XXXX* (WhatsApp)
+        🕐 Senin–Sabtu, 08.00–17.00 WIB
+
+        Atau ketik *admin* untuk dihubungkan langsung. 🙏
 
 session_config:
   session_expiration_time: 60
