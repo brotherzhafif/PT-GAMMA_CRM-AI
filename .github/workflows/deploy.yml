@@ -41,7 +41,7 @@ jobs:
             cd ${{ secrets.VPS_APP_DIR }}
 
             echo "⬇️  Pull kode terbaru dari GitHub..."
-            git pull origin main
+            git pull --rebase origin main
 
             echo "📝 Update .env dari GitHub Secret..."
             cat > .env << 'EOF'
