@@ -6,9 +6,8 @@ services:
     container_name: fastapi_chatbot
     environment:
       - PYTHONPATH=/app
-      - TZ=Asia/Jakarta
     ports:
-      - "127.0.0.1:5000:5000"
+      - "5000:5000"
     volumes:
       - .:/app
       - chat_history:/app/chat_history
@@ -25,12 +24,10 @@ services:
 
   rasa:
     image: rasa/rasa:3.6.15-full
-    platform: linux/amd64
     container_name: rasa_server
-    environment:
-      - TZ=Asia/Jakarta
+    platform: linux/amd64
     ports:
-      - "127.0.0.1:5005:5005"
+      - "5005:5005"
     volumes:
       - ./rasa:/app
     command: run --enable-api --cors "*" --model models
@@ -42,12 +39,10 @@ services:
 
   action_server:
     image: rasa/rasa-sdk:3.6.2
-    platform: linux/amd64
     container_name: rasa_action_server
-    environment:
-      - TZ=Asia/Jakarta
+    platform: linux/amd64
     ports:
-      - "127.0.0.1:5055:5055"
+      - "5055:5055"
     user: root
     volumes:
       - ./rasa/actions:/app/actions
@@ -67,7 +62,7 @@ services:
       - PORT=3000
     ports:
       # Hanya expose ke localhost — tidak perlu akses dari luar
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       # Session WA disimpan persistent agar tidak perlu scan QR ulang setelah restart
       - wa_session:/app/.wwebjs_auth
