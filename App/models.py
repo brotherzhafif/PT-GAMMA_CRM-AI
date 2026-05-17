@@ -48,6 +48,10 @@ class SavePatientPayload(BaseModel):
     name: Optional[str] = Field(default=None, description="Nama pasien (opsional)")
 
 
+class UpdatePatientPayload(BaseModel):
+    name: Optional[str] = Field(default=None, description="Nama baru pasien")
+    phone_number: Optional[str] = Field(default=None, description="Nomor HP baru pasien")
+
 # Send 
 
 class SendMessagePayload(BaseModel):

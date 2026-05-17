@@ -58,6 +58,38 @@ def save_patient(payload: SavePatientPayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.patch(
+    "/{phone_number}",
+    response_model=PatientRecord,
+    summary="Update data pasien",
+    description="Update nama atau nomor HP pasien. Hanya field yang diisi yang akan diupdate.",
+)
+def update_patient(phone_number: str, payload: UpdatePatientPayload):
+    _require_supabase()
+    try:
+        # Bangun dict update — hanya field yang tidak None
+        update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate")
+
+        response = (
+            supabase.table("patients")
+            .update(update_data)
+            .eq("phone_number", phone_number)
+            .execute()
+        )
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail=f"Nomor {phone_number} tidak ditemukan")
+
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete(
     "/{phone_number}",
     summary="Hapus nomor pasien",
