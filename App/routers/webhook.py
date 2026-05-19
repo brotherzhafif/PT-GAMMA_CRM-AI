@@ -144,13 +144,18 @@ def webhook(payload: WebhookPayload):
 
         rasa_result = query_rasa(input_pesan, no_hp)
         if rasa_result:
-            print(f"[DEBUG] Rasa → intent: '{rasa_result['intent']}', confidence: {rasa_result['confidence']:.4f}")
+            print(f"[DEBUG] Rasa → intent: '{rasa_result['intent']}', confidence: {rasa_result['confidence']:.4f}, form_active: {rasa_result.get('is_form_active')}")
 
-        if (
-            rasa_result
-            and rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD
-            and rasa_result["intent"] in RASA_TRUSTED_INTENTS
-            and rasa_result["reply"]
+        is_form_active = rasa_result and rasa_result.get("is_form_active")
+
+        # Prioritaskan Rasa jika form sedang aktif, ATAU jika intent sangat dipercaya
+        if rasa_result and (
+            (is_form_active and rasa_result["reply"]) or 
+            (
+                rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD
+                and rasa_result["intent"] in RASA_TRUSTED_INTENTS
+                and rasa_result["reply"]
+            )
         ):
             reply = rasa_result["reply"]
             source = "rasa"

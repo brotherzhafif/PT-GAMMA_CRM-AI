@@ -618,7 +618,8 @@ class ActionBookingConfirm(Action):
             "sumber": "whatsapp",
         }
 
-        result = api_post("/appointments", payload)
+        # result = api_post("/appointments", payload)
+        result = None # Dimatikan sementara karena API masih dalam pengerjaan
 
         if result:
             # ── Response dari API ──
