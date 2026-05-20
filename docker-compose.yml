@@ -70,6 +70,18 @@ services:
       - hana-network
     restart: unless-stopped
 
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle_log_viewer
+    profiles:
+      - debug # Mencegah Dozzle ikut menyala saat auto-deploy rutin.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - hana-network
+
 networks:
   hana-network:
     driver: bridge
