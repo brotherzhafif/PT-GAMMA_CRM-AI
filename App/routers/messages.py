@@ -8,9 +8,10 @@
 
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException
+from datetime import datetime, timezone
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from supabase import create_client
+from supabase._async.client import AsyncClient, create_client as acreate_client
 from App.config import supabase_url, supabase_key
 from App.helpers import _require_supabase
 
@@ -19,33 +20,31 @@ router = APIRouter(prefix="/api/messages", tags=["Messages"])
 def make_sse(event_type: str, data):
     return f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
 
+async def get_async_client() -> AsyncClient:
+    return await acreate_client(supabase_url, supabase_key)
+
 # ======================================================
 #
 #                  MESSAGES ENDPOINTS
 #
 # ======================================================
 
-@router.get(
-    "",
-    summary="Stream semua pesan via SSE",
-    description="SSE — kirim initial data lalu push update setiap ada pesan baru. Gunakan EventSource di frontend.",
-)
+@router.get("", summary="Stream semua pesan via SSE")
 async def get_all_messages(limit: int = 100):
     _require_supabase()
 
     async def generator():
+        client = await get_async_client()
         queue = asyncio.Queue()
-        client = create_client(supabase_url, supabase_key)
 
         def on_insert(payload):
             queue.put_nowait(payload.get("new"))
 
-        client.channel("msgs-all") \
-            .on("postgres_changes", {"event": "INSERT", "schema": "public", "table": "messages"}, on_insert) \
-            .subscribe()
+        channel = client.channel("msgs-all")
+        channel.on_postgres_changes("INSERT", schema="public", table="messages", callback=on_insert)
+        await channel.subscribe()
 
-        # Initial data
-        result = client.table("messages").select("*").order("created_at", desc=False).limit(limit).execute()
+        result = await client.table("messages").select("*").order("created_at", desc=False).limit(limit).execute()
         yield make_sse("initial", result.data)
 
         try:
@@ -56,77 +55,68 @@ async def get_all_messages(limit: int = 100):
                 except asyncio.TimeoutError:
                     yield make_sse("heartbeat", None)
         except asyncio.CancelledError:
-            pass
+            await client.remove_channel(channel)
 
     return StreamingResponse(generator(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.get(
-    "/latest",
-    summary="Stream latest messages via SSE",
-    description="SSE — 1 pesan terbaru per nomor beserta nama dan status handoff. Push setiap ada pesan baru atau perubahan handoff.",
-)
+@router.get("/latest", summary="Stream latest messages via SSE")
 async def get_latest_messages():
     _require_supabase()
 
     async def generator():
+        client = await get_async_client()
         queue = asyncio.Queue()
-        client = create_client(supabase_url, supabase_key)
 
         def on_change(payload):
             queue.put_nowait(True)
 
-        client.channel("msgs-latest-msg") \
-            .on("postgres_changes", {"event": "INSERT", "schema": "public", "table": "messages"}, on_change) \
-            .subscribe()
+        ch_msg = client.channel("msgs-latest-msg")
+        ch_msg.on_postgres_changes("INSERT", schema="public", table="messages", callback=on_change)
+        await ch_msg.subscribe()
 
-        client.channel("msgs-latest-pat") \
-            .on("postgres_changes", {"event": "UPDATE", "schema": "public", "table": "patients"}, on_change) \
-            .subscribe()
+        ch_pat = client.channel("msgs-latest-pat")
+        ch_pat.on_postgres_changes("UPDATE", schema="public", table="patients", callback=on_change)
+        await ch_pat.subscribe()
 
-        # Initial data
-        result = client.rpc("get_latest_messages").execute()
+        result = await client.rpc("get_latest_messages").execute()
         yield make_sse("initial", result.data)
 
         try:
             while True:
                 try:
                     await asyncio.wait_for(queue.get(), timeout=30)
-                    result = client.rpc("get_latest_messages").execute()
+                    result = await client.rpc("get_latest_messages").execute()
                     yield make_sse("update", result.data)
                 except asyncio.TimeoutError:
                     yield make_sse("heartbeat", None)
         except asyncio.CancelledError:
-            pass
+            await client.remove_channel(ch_msg)
+            await client.remove_channel(ch_pat)
 
     return StreamingResponse(generator(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.get(
-    "/{phone_number}",
-    summary="Stream pesan per nomor via SSE",
-    description="SSE — stream semua pesan satu nomor lalu push setiap ada pesan baru dari nomor tersebut.",
-)
+@router.get("/{phone_number}", summary="Stream pesan per nomor via SSE")
 async def get_messages_by_number(phone_number: str):
     _require_supabase()
 
     async def generator():
+        client = await get_async_client()
         queue = asyncio.Queue()
-        client = create_client(supabase_url, supabase_key)
 
         def on_insert(payload):
             new_msg = payload.get("new", {})
             if new_msg.get("sender_number") == phone_number:
                 queue.put_nowait(new_msg)
 
-        client.channel(f"msgs-{phone_number}") \
-            .on("postgres_changes", {"event": "INSERT", "schema": "public", "table": "messages"}, on_insert) \
-            .subscribe()
+        channel = client.channel(f"msgs-{phone_number}")
+        channel.on_postgres_changes("INSERT", schema="public", table="messages", callback=on_insert)
+        await channel.subscribe()
 
-        # Initial data
-        result = client.table("messages").select("*") \
+        result = await client.table("messages").select("*") \
             .eq("sender_number", phone_number) \
             .order("created_at", desc=False).execute()
 
@@ -144,7 +134,7 @@ async def get_messages_by_number(phone_number: str):
                 except asyncio.TimeoutError:
                     yield make_sse("heartbeat", None)
         except asyncio.CancelledError:
-            pass
+            await client.remove_channel(channel)
 
     return StreamingResponse(generator(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

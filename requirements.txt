@@ -4,4 +4,4 @@ pydantic
 requests
 python-dotenv
 groq
-supabase
+supabase>=2.4.0
