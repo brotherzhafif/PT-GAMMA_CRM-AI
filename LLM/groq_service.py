@@ -21,6 +21,11 @@ JADWAL_REDIRECT = (
 
 KLINIK_INFO = """
 === DATA KLINIK SMART CLINIC ===
+Lokasi Smart Clinic:
+📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284\n🏪 *Patokan:* Sebelah utara UPN Veteran Yogyakarta, berhadapan dengan Indomaret\n🗺️ *Google Maps:* https://maps.google.com/?q=-7.7218,110.3568\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏 
+
+Biaya Layanan:
+ "Untuk informasi biaya layanan, berikut gambaran umum:\n\n💰 Konsultasi Umum: Mulai dari Rp 50.000\n💰 Pendaftaran: Rp 25.000\n\nKlinik menerima pembayaran tunai, QRIS, dan BPJS.\n\nUntuk detail biaya spesifik, silakan hubungi admin klinik kami."
  
 POLIKLINIK:
 Poli Umum | Poli Anak (Sp.A) | Poli Penyakit Dalam (Sp.PD)
