@@ -9,8 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install seluruh dependencies (termasuk devDependencies jika dibutuhkan saat build)
-# Gunakan npm ci agar instalasi lebih clean dan cepat sesuai package-lock.json
-RUN npm ci && npm cache clean --force
+RUN npm install && npm cache clean --force
 
 
 # ==========================================
