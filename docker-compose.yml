@@ -46,6 +46,8 @@ services:
     user: root
     volumes:
       - ./rasa/actions:/app/actions
+    env_file:
+      - ./.env
     entrypoint: []
     command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
     networks:
@@ -88,4 +90,4 @@ volumes:
   chat_history:
   chat_state:
   handoff_state:
-  wa_session:   # Persistent WA session
+  wa_session: # Persistent WA session

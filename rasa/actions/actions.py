@@ -1,3 +1,5 @@
+# Log last change: 20 May 2026
+
 """
 Rasa Custom Actions — SmartClinic API Integration
 ==================================================
@@ -7,6 +9,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama)
 """
 
+import os
 import re
 import requests
 from datetime import datetime, timedelta
@@ -17,9 +20,9 @@ from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import SlotSet, ActiveLoop
 
 # ── SmartClinic API Configuration ─────────────────────────────────────────────
-SMARTCLINIC_BASE_URL = "https://smartclinic-rekam-medis.onrender.com/api/v1"
-SMARTCLINIC_EMAIL = "admin@smartclinic.id"
-SMARTCLINIC_PASSWORD = "Admin@1234"
+SMARTCLINIC_BASE_URL = os.getenv("SMARTCLINIC_BASE_URL", "https://smartclinic-rekam-medis.onrender.com/api/v1")
+SMARTCLINIC_EMAIL    = os.getenv("SMARTCLINIC_EMAIL", "")
+SMARTCLINIC_PASSWORD = os.getenv("SMARTCLINIC_PASSWORD", "")
 
 # Token cache (untuk future auto-refresh)
 _token_cache = {
@@ -28,10 +31,36 @@ _token_cache = {
 }
 
 
-def get_access_token() -> str | None:
-    """Return hardcoded token for testing."""
-    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MDAyOGEyMS1mOGNhLTRjZWYtOGY0OS0wOTIzNDJmMGFjZmUiLCJlbWFpbCI6ImFkbWluQHNtYXJ0Y2xpbmljLmlkIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc4MTQ2MTQ1LCJleHAiOjE3NzgxNDcwNDV9.1-KvNS0l1f5Oba9HJmINuZE8omkNmFs0B-cnFTHfgmk"
+# ==============================================
+# RASA ACTIONS 
+# ==============================================
 
+# Action: Get Access to RME API and Token
+def get_access_token() -> str | None:
+    env_token = os.getenv("SMARTCLINIC_ACCESS_TOKEN", "").strip()
+    if env_token:
+        return env_token
+
+    if _token_cache["access_token"] and _token_cache["expires_at"]:
+        if datetime.now() < _token_cache["expires_at"]:
+            return _token_cache["access_token"]
+
+    try:
+        resp = requests.post(
+            f"{SMARTCLINIC_BASE_URL}/auth/login",
+            json={"email": SMARTCLINIC_EMAIL, "password": SMARTCLINIC_PASSWORD},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        token = data.get("data", {}).get("accessToken") or data.get("accessToken")
+        if token:
+            _token_cache["access_token"] = token
+            _token_cache["expires_at"] = datetime.now() + timedelta(minutes=15)
+            return token
+    except Exception as e:
+        print(f"[SmartClinic] ERROR saat login: {e}")
+    return None
 
 def api_get(endpoint: str, params: dict = None) -> dict | None:
     """Make authenticated GET request to SmartClinic API."""
@@ -75,7 +104,7 @@ def api_post(endpoint: str, payload: dict) -> dict | None:
 
 
 
-# Action: Fetch Doctor Schedule
+# Action: Fetch Doctor Schedule (RME)
 class ActionFetchSchedule(Action):
     def name(self) -> Text:
         return "action_fetch_schedule"
@@ -147,7 +176,7 @@ class ActionFetchSchedule(Action):
         return []
 
 
-#  Action: Fetch Queue Status
+#  Action: Fetch Queue Status (RME)
 class ActionFetchQueue(Action):
     def name(self) -> Text:
         return "action_fetch_queue"
@@ -222,7 +251,7 @@ class ActionFetchQueue(Action):
 
 
 #==========================================================
-#                    BOOKING ACTIONS 
+# BOOKING ACTIONS 
 #==========================================================
 
 

@@ -190,6 +190,12 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Handoff timeout (opsional, default: 15 menit)
 HANDOFF_TIMEOUT_MINUTES=15
+
+# RME API Credentials
+SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis.onrender.com/api/v1
+SMARTCLINIC_EMAIL=AI_RME_email_credentials
+SMARTCLINIC_PASSWORD=AI_RME_password_credentials
+SMARTCLINIC_ACCESS_TOKEN=your_RME_access_token_from_login
 ```
 
 ---
