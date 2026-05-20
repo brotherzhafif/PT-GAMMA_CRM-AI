@@ -29,36 +29,36 @@ async def get_async_client() -> AsyncClient:
 #
 # ======================================================
 
-@router.get("", summary="Stream semua pesan via SSE")
-async def get_all_messages(limit: int = 100):
-    _require_supabase()
+# @router.get("", summary="Stream semua pesan via SSE")
+# async def get_all_messages(limit: int = 100):
+#     _require_supabase()
 
-    async def generator():
-        client = await get_async_client()
-        queue = asyncio.Queue()
+#     async def generator():
+#         client = await get_async_client()
+#         queue = asyncio.Queue()
 
-        def on_insert(payload):
-            queue.put_nowait(payload.get("new"))
+#         def on_insert(payload):
+#             queue.put_nowait(payload.get("new"))
 
-        channel = client.channel("msgs-all")
-        channel.on_postgres_changes("INSERT", schema="public", table="messages", callback=on_insert)
-        await channel.subscribe()
+#         channel = client.channel("msgs-all")
+#         channel.on_postgres_changes("INSERT", schema="public", table="messages", callback=on_insert)
+#         await channel.subscribe()
 
-        result = await client.table("messages").select("*").order("created_at", desc=False).limit(limit).execute()
-        yield make_sse("initial", result.data)
+#         result = await client.table("messages").select("*").order("created_at", desc=False).limit(limit).execute()
+#         yield make_sse("initial", result.data)
 
-        try:
-            while True:
-                try:
-                    new_msg = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield make_sse("new_message", new_msg)
-                except asyncio.TimeoutError:
-                    yield make_sse("heartbeat", None)
-        except asyncio.CancelledError:
-            await client.remove_channel(channel)
+#         try:
+#             while True:
+#                 try:
+#                     new_msg = await asyncio.wait_for(queue.get(), timeout=30)
+#                     yield make_sse("new_message", new_msg)
+#                 except asyncio.TimeoutError:
+#                     yield make_sse("heartbeat", None)
+#         except asyncio.CancelledError:
+#             await client.remove_channel(channel)
 
-    return StreamingResponse(generator(), media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+#     return StreamingResponse(generator(), media_type="text/event-stream",
+#         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/latest", summary="Stream latest messages via SSE")
