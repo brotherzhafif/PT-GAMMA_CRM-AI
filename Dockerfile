@@ -26,8 +26,7 @@ WORKDIR /app
 COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/requirements.txt .
 
-# Install dependencies langsung dari wheels lokal (tanpa perlu download ulang & build-essential)
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
 # Copy seluruh source code utama
