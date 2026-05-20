@@ -219,11 +219,10 @@ responses:
 
         Agar saya bisa membantu lebih cepat, apakah Anda sebelumnya sudah pernah berobat ke klinik kami?
 
-        *[1] 👤 Sudah Pernah*
-        *[2] 🆕 Pasien Baru*
+        👤 Sudah Pernah
+        🆕 Pasien Baru
 
-        _(Balas dengan angka 1 atau 2)_
-
+        _(Balas dengan mengetik: *BARU* atau *LAMA*)_
   #  Form pasien baru
   utter_booking_intro_baru:
     - text: |

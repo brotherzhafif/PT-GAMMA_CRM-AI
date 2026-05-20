@@ -487,7 +487,8 @@ nlu:
 
   - intent: booking_pasien_baru
     examples: |
-      - 2
+      - baru
+      - BARU
       - saya pasien baru
       - belum pernah berobat di sini
       - pertama kali ke sini
@@ -499,15 +500,13 @@ nlu:
       - saya belum pernah berobat di sini sebelumnya
       - baru pertama kali mau periksa
       - mau daftar sebagai pasien baru
-      - pilih 2
-      - [2]
-      - opsi 2
       - yang baru
 
   #
   - intent: booking_pasien_lama
     examples: |
-      - 1
+      - lama
+      - LAMA
       - saya sudah pernah berobat
       - saya pasien lama
       - pernah ke sini sebelumnya
@@ -518,9 +517,6 @@ nlu:
       - pernah daftar sebelumnya
       - saya sudah pernah ke sini
       - sudah pernah kak
-      - pilih 1
-      - [1]
-      - opsi 1
       - yang sudah pernah
 
   #  Intent:  NIK
