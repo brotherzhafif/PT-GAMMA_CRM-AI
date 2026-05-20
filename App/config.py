@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — config.py
 # Semua konfigurasi, konstanta, dan inisialisasi client
 #
-# Last Change   :   15 May 2026
+# Last Change   :   18 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 #                   MHD. Rafy Firdaus
 #                   Wahyu Hardiyantara
