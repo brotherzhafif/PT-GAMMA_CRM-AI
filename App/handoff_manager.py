@@ -13,6 +13,7 @@
 import json
 import os
 from datetime import datetime, timedelta
+from App.config import supabase
 
 HANDOFF_DIR = "handoff_state"
 HANDOFF_TIMEOUT_MINUTES = int(os.getenv("HANDOFF_TIMEOUT_MINUTES", "15"))
@@ -75,12 +76,16 @@ def start_handoff(no_hp: str):
         "started_at": datetime.now().isoformat(),
         "last_admin_reply_at": None,
     })
+    if supabase:
+        supabase.table("patients").update({"is_handoff": True}).eq("phone_number", no_hp).execute()
     print(f"[Handoff] {no_hp} masuk mode handoff")
 
 
 def end_handoff(no_hp: str):
     """Akhiri handoff, kembalikan ke bot."""
     _delete(no_hp)
+    if supabase:
+        supabase.table("patients").update({"is_handoff": False}).eq("phone_number", no_hp).execute()
     print(f"[Handoff] {no_hp} keluar dari handoff — bot aktif kembali")
 
 
