@@ -1,13 +1,30 @@
-# ======================================================
-# wa-service/Dockerfile
-# Node.js + Chromium untuk whatsapp-web.js di ARM64
-# ======================================================
+# ==========================================
+# STAGE 1: Builder (Install Node Dependencies)
+# ==========================================
+FROM node:20-bullseye-slim AS builder
 
-# Pakai node:20-bullseye karena Chromium tersedia native di ARM64
+WORKDIR /app
+
+# Copy package files duluan untuk memanfaatkan Docker cache layer
+COPY package*.json ./
+
+# Install seluruh dependencies (termasuk devDependencies jika dibutuhkan saat build)
+# Gunakan npm ci agar instalasi lebih clean dan cepat sesuai package-lock.json
+RUN npm ci && npm cache clean --force
+
+
+# ==========================================
+# STAGE 2: Production (Final Slim Image)
+# ==========================================
 FROM node:20-bullseye-slim
 
-# Install Chromium dan dependencies Puppeteer
-RUN apt-get update && apt-get install -y \
+# Set environment variabel Puppeteer di awal agar terbaca oleh system
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production
+
+# Install Chromium & runtime dependencies saja (tanpa build tools tambahan)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-freefont-ttf \
     libatk-bridge2.0-0 \
@@ -23,24 +40,19 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
-    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Install qrcode library (untuk convert QR string ke PNG)
-RUN npm install -g qrcode
+# Install global CLI tools jika memang dibutuhkan di runtime
+RUN npm install -g qrcode && npm cache clean --force
 
 WORKDIR /app
 
-# Copy package.json dan install dependencies
+# Copy node_modules hasil instalasi bersih dari Stage 1
+COPY --from=builder /app/node_modules ./node_modules
 COPY package.json .
-RUN npm install
 
-# Copy source code
+# Copy source code utama
 COPY index.js .
-
-# Beritahu Puppeteer pakai Chromium yang sudah terinstall (bukan download sendiri)
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 EXPOSE 3000
 
