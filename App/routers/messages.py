@@ -9,7 +9,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from supabase._async.client import AsyncClient, create_client as acreate_client
 from App.config import supabase_url, supabase_key
@@ -62,7 +62,7 @@ async def get_all_messages(limit: int = 100):
 
 
 @router.get("/latest", summary="Stream latest messages via SSE")
-async def get_latest_messages():
+async def get_latest_messages(limit: int = Query(default=50, ge=1, le=100)):
     _require_supabase()
 
     async def generator():
@@ -80,14 +80,15 @@ async def get_latest_messages():
         ch_pat.on_postgres_changes("UPDATE", schema="public", table="patients", callback=on_change)
         await ch_pat.subscribe()
 
-        result = await client.rpc("get_latest_messages").execute()
+        result = await client.rpc("get_latest_messages", {"lim_val": limit}).execute()
         yield make_sse("initial", result.data)
 
         try:
             while True:
                 try:
                     await asyncio.wait_for(queue.get(), timeout=30)
-                    result = await client.rpc("get_latest_messages").execute()
+                    # 2. Oper parameter 'lim_val' juga saat ada update data baru
+                    result = await client.rpc("get_latest_messages", {"lim_val": limit}).execute()
                     yield make_sse("update", result.data)
                 except asyncio.TimeoutError:
                     yield make_sse("heartbeat", None)
@@ -95,12 +96,15 @@ async def get_latest_messages():
             await client.remove_channel(ch_msg)
             await client.remove_channel(ch_pat)
 
-    return StreamingResponse(generator(), media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        generator(), 
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 
 @router.get("/{phone_number}", summary="Stream pesan per nomor via SSE")
-async def get_messages_by_number(phone_number: str):
+async def get_messages_by_number(phone_number: str, limit: int = 50):
     _require_supabase()
 
     async def generator():
@@ -118,7 +122,7 @@ async def get_messages_by_number(phone_number: str):
 
         result = await client.table("messages").select("*") \
             .eq("sender_number", phone_number) \
-            .order("created_at", desc=False).execute()
+            .order("created_at", desc=True).limit(limit).execute()
 
         if not result.data:
             yield make_sse("error", {"detail": f"Tidak ada pesan untuk nomor {phone_number}"})
