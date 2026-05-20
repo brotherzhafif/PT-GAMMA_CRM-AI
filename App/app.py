@@ -10,6 +10,7 @@
 # ======================================================
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from App.routers import webhook, patients, messages, send, handoff, wa
 
@@ -17,6 +18,15 @@ app = FastAPI(
     title="SmartClinic CRM AI",
     description="Hybrid routing API untuk webhook Fonnte, Rasa, dan Groq LLM.",
     version="1.0.0",
+)
+
+# Allow CORS from any origin (use with caution in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 #  Register Routers 
