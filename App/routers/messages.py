@@ -72,31 +72,47 @@ async def get_messages_by_number(request: Request, phone_number: str, limit: int
     _require_supabase()
 
     async def generator():
+        # 1. Ambil data awal (kita biarkan desc=True untuk limitasi data terbaru di database)
         result = supabase.table("messages").select("*") \
             .eq("sender_number", phone_number) \
             .order("created_at", desc=True).limit(limit).execute()
 
-        if not result.data:
-            yield {"event": "error", "data": __import__('json').dumps(
-                {"detail": f"Tidak ada pesan untuk nomor {phone_number}"}
-            )}
-            return
+        # Kita balik urutan datanya di Python biar kronologis sejak awal (Lama -> Baru)
+        initial_data = list(reversed(result.data)) if result.data else []
 
-        known_ids = {r["id"] for r in result.data}
-        yield {"event": "initial", "data": __import__('json').dumps(result.data)}
+        # Kirim data awal ke frontend dengan event 'initial'
+        yield {"event": "initial", "data": __import__('json').dumps(initial_data)}
+
+        # Simpan state ID pesan yang sudah diketahui
+        known_ids = {r["id"] for r in result.data} if result.data else set()
 
         while True:
             if await request.is_disconnected():
                 break
+                
             await asyncio.sleep(2)
-            new = supabase.table("messages").select("*") \
+            
+            # Cek apakah ada pesan baru masuk
+            check_new = supabase.table("messages").select("id") \
                 .eq("sender_number", phone_number) \
-                .order("created_at", desc=True).limit(10).execute()
-            new_msgs = [m for m in new.data if m["id"] not in known_ids]
-            if new_msgs:
-                for m in new_msgs:
-                    known_ids.add(m["id"])
-                yield {"event": "new_message", "data": __import__('json').dumps(new_msgs)}
+                .order("created_at", desc=True).limit(5).execute()
+                
+            has_new = any(m["id"] not in known_ids for m in check_new.data) if check_new.data else False
+
+            if has_new:
+                # 2. Jika terdeteksi ada pesan baru, tarik riwayat utuh terupdate sesuai limit
+                updated_result = supabase.table("messages").select("*") \
+                    .eq("sender_number", phone_number) \
+                    .order("created_at", desc=True).limit(limit).execute()
+                
+                # Update daftar known_ids
+                known_ids = {r["id"] for r in updated_result.data}
+                
+                # Balik urutan agar kronologis (Lama -> Baru)
+                updated_data = list(reversed(updated_result.data))
+                
+                # Kirim data utuh menggunakan event 'update' agar frontend merender ulang secara realtime
+                yield {"event": "update", "data": __import__('json').dumps(updated_data)}
             else:
                 yield {"event": "heartbeat", "data": "null"}
 
