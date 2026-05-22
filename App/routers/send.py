@@ -51,7 +51,6 @@ BROADCAST_EXAMPLE = {
         "Kirim pesan teks ke satu nomor via Fonnte, atau kirim attachment via wa-service "
         "jika attachment_url diisi. Pesan tetap dicatat ke Supabase sebagai outbound."
     ),
-    summary="Kirim pesan ke satu nomor",
     responses={
         200: {
             "description": "Pesan berhasil dimasukkan antrian",

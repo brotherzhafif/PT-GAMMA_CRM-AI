@@ -144,43 +144,43 @@ def get_campaign_by_name(campaign_name: str = Path(..., description="Nama campai
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get(
-    "/template/latest",
-    response_model=CampaignRecord,
-    summary="Ambil template campaign dari campaign terakhir",
-    description="Dipakai frontend untuk prefill campaign baru dari campaign sebelumnya.",
-    responses={
-        200: {
-            "description": "Template campaign berhasil diambil",
-            "content": {"application/json": {"example": CAMPAIGN_EXAMPLE}},
-        },
-        404: {
-            "description": "Belum ada campaign",
-            "content": {"application/json": {"example": {"detail": "Belum ada campaign untuk dijadikan template"}}},
-        },
-        500: {
-            "description": "Gagal mengambil template",
-            "content": {"application/json": {"example": ERROR_EXAMPLE}},
-        },
-    },
-)
-def get_latest_campaign_template():
-    _require_supabase()
-    try:
-        response = (
-            supabase.table("campaigns")
-            .select(_campaign_select_columns())
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Belum ada campaign untuk dijadikan template")
-        return _campaign_row(response.data[0])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.get(
+#     "/template/latest",
+#     response_model=CampaignRecord,
+#     summary="Ambil template campaign dari campaign terakhir",
+#     description="Dipakai frontend untuk prefill campaign baru dari campaign sebelumnya.",
+#     responses={
+#         200: {
+#             "description": "Template campaign berhasil diambil",
+#             "content": {"application/json": {"example": CAMPAIGN_EXAMPLE}},
+#         },
+#         404: {
+#             "description": "Belum ada campaign",
+#             "content": {"application/json": {"example": {"detail": "Belum ada campaign untuk dijadikan template"}}},
+#         },
+#         500: {
+#             "description": "Gagal mengambil template",
+#             "content": {"application/json": {"example": ERROR_EXAMPLE}},
+#         },
+#     },
+# )
+# def get_latest_campaign_template():
+#     _require_supabase()
+#     try:
+#         response = (
+#             supabase.table("campaigns")
+#             .select(_campaign_select_columns())
+#             .order("created_at", desc=True)
+#             .limit(1)
+#             .execute()
+#         )
+#         if not response.data:
+#             raise HTTPException(status_code=404, detail="Belum ada campaign untuk dijadikan template")
+#         return _campaign_row(response.data[0])
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
@@ -305,39 +305,39 @@ def update_campaign(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch(
-    "/by-name/{campaign_name}/cancel",
-    response_model=CampaignRecord,
-    summary="Cancel campaign berdasarkan nama",
-    description="Menandai campaign sebagai canceled tanpa menghapus datanya.",
-    responses={
-        200: {
-            "description": "Campaign berhasil dibatalkan",
-            "content": {"application/json": {"example": {**CAMPAIGN_EXAMPLE, "status": "canceled"}}},
-        },
-        404: {
-            "description": "Campaign tidak ditemukan",
-            "content": {"application/json": {"example": ERROR_EXAMPLE}},
-        },
-        500: {
-            "description": "Campaign gagal dibatalkan",
-            "content": {"application/json": {"example": ERROR_EXAMPLE}},
-        },
-    },
-)
-def cancel_campaign(campaign_name: str = Path(..., description="Nama campaign yang akan dibatalkan", examples=["Promo Cek Gigi Mei"])):
-    _require_supabase()
-    try:
-        response = (
-            supabase.table("campaigns")
-            .update({"status": "canceled"})
-            .eq("campaign_name", campaign_name)
-            .execute()
-        )
-        if not response.data:
-            raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
-        return _campaign_row(response.data[0])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.patch(
+#     "/by-name/{campaign_name}/cancel",
+#     response_model=CampaignRecord,
+#     summary="Cancel campaign berdasarkan nama",
+#     description="Menandai campaign sebagai canceled tanpa menghapus datanya.",
+#     responses={
+#         200: {
+#             "description": "Campaign berhasil dibatalkan",
+#             "content": {"application/json": {"example": {**CAMPAIGN_EXAMPLE, "status": "canceled"}}},
+#         },
+#         404: {
+#             "description": "Campaign tidak ditemukan",
+#             "content": {"application/json": {"example": ERROR_EXAMPLE}},
+#         },
+#         500: {
+#             "description": "Campaign gagal dibatalkan",
+#             "content": {"application/json": {"example": ERROR_EXAMPLE}},
+#         },
+#     },
+# )
+# def cancel_campaign(campaign_name: str = Path(..., description="Nama campaign yang akan dibatalkan", examples=["Promo Cek Gigi Mei"])):
+#     _require_supabase()
+#     try:
+#         response = (
+#             supabase.table("campaigns")
+#             .update({"status": "canceled"})
+#             .eq("campaign_name", campaign_name)
+#             .execute()
+#         )
+#         if not response.data:
+#             raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
+#         return _campaign_row(response.data[0])
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
