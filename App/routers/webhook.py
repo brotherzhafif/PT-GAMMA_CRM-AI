@@ -7,7 +7,7 @@
 # ======================================================
 
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, MAX_FALLBACK_BEFORE_HANDOFF
 from App.models import WebhookPayload, ChatResponse
@@ -32,6 +32,18 @@ router = APIRouter()
 groq = GroqService()
 
 
+WEBHOOK_REQUEST_EXAMPLE = {
+    "sender": "6281234567890",
+    "message": "Halo, jadwal dokter hari ini apa ya?",
+}
+
+WEBHOOK_RESPONSE_EXAMPLE = {
+    "status": "ok",
+    "source": "rasa",
+    "reply": "Jadwal dokter hari ini tersedia pukul 09.00 - 17.00.",
+}
+
+
 # ======================================================
 #
 #                   SYSTEM ENDPOINT
@@ -42,6 +54,12 @@ groq = GroqService()
     "/",
     tags=["System"],
     summary="Health check",
+    responses={
+        200: {
+            "description": "Service aktif",
+            "content": {"application/json": {"example": {"status": "ok", "message": "SmartClinic CRM AI is running!", "docs": "/docs"}}},
+        },
+    },
 )
 def home():
     return {
@@ -60,8 +78,31 @@ def home():
         "Entry point utama. Pesan diklasifikasikan oleh Rasa; "
         "jika confidence rendah atau intent tidak dikenal, Groq LLM mengambil alih."
     ),
+    responses={
+        200: {
+            "description": "Pesan berhasil diproses",
+            "content": {"application/json": {"examples": {
+                "normalReply": {"summary": "Contoh respons normal", "value": WEBHOOK_RESPONSE_EXAMPLE},
+                "handoffReply": {"summary": "Contoh saat handoff aktif", "value": {"status": "handoff", "source": "handoff", "reply": None}},
+            }}},
+        },
+        500: {
+            "description": "Gagal memproses webhook",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
 )
-def webhook(payload: WebhookPayload):
+def webhook(
+    payload: WebhookPayload = Body(
+        ...,
+        examples={
+            "webhookExample": {
+                "summary": "Contoh payload webhook masuk",
+                "value": WEBHOOK_REQUEST_EXAMPLE,
+            }
+        },
+    )
+):
     try:
         no_hp = payload.sender
         input_pesan = payload.message.strip()

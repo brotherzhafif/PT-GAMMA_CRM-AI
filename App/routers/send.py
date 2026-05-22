@@ -9,7 +9,7 @@
 import os
 import requests
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult
@@ -17,6 +17,20 @@ from App.helpers import save_to_supabase, _require_supabase
 from App.queue_manager import fonnte_queue
 
 router = APIRouter(prefix="/api/send", tags=["Send"])
+
+
+SEND_EXAMPLE = {
+    "status": "ok",
+    "message": "Pesan untuk 6281234567890 masuk antrian",
+}
+
+SEND_ERROR_EXAMPLE = {"detail": "..."}
+
+BROADCAST_EXAMPLE = {
+    "status": "ok",
+    "total_sent": 2,
+    "recipients": ["6281234567890", "6289876543210"],
+}
 
 
 # ======================================================
@@ -29,8 +43,33 @@ router = APIRouter(prefix="/api/send", tags=["Send"])
     "",
     summary="Kirim pesan ke satu nomor",
     description="Kirim pesan ke satu nomor. Jika ada attachment_url, dikirim via whatsapp-web.js. Jika tidak, dikirim via Fonnte.",
+    responses={
+        200: {
+            "description": "Pesan berhasil dimasukkan antrian",
+            "content": {"application/json": {"example": SEND_EXAMPLE}},
+        },
+        500: {
+            "description": "Gagal mengirim pesan",
+            "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}},
+        },
+    },
 )
-def send_message(payload: SendMessagePayload):
+def send_message(
+    payload: SendMessagePayload = Body(
+        ...,
+        examples={
+            "sendMessageExample": {
+                "summary": "Contoh request kirim pesan",
+                "value": {
+                    "target": "6281234567890",
+                    "message": "Halo, ini pesan dari admin SmartClinic.",
+                    "attachment_url": None,
+                    "filename": None,
+                },
+            }
+        },
+    )
+):
     try:
         if payload.attachment_url:
             # Kirim via whatsapp-web.js (attachment) 
@@ -69,8 +108,36 @@ def send_message(payload: SendMessagePayload):
         "Setiap pesan dimasukkan ke antrian Fonnte dengan delay acak (anti-blokir WA). "
         "Semua pengiriman dicatat di Supabase sebagai outbound/broadcast."
     ),
+    responses={
+        200: {
+            "description": "Broadcast berhasil dikirim",
+            "content": {"application/json": {"example": BROADCAST_EXAMPLE}},
+        },
+        404: {
+            "description": "Tidak ada nomor pasien",
+            "content": {"application/json": {"example": {"detail": "Tidak ada nomor pasien tersimpan."}}},
+        },
+        500: {
+            "description": "Broadcast gagal",
+            "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}},
+        },
+    },
 )
-def broadcast_message(payload: BroadcastPayload):
+def broadcast_message(
+    payload: BroadcastPayload = Body(
+        ...,
+        examples={
+            "broadcastExample": {
+                "summary": "Contoh request broadcast",
+                "value": {
+                    "message": "Promo pemeriksaan gigi hari ini tersedia untuk pasien kami.",
+                    "attachment_url": None,
+                    "filename": None,
+                },
+            }
+        },
+    )
+):
     _require_supabase()
     try:
         response = supabase.table("patients").select("phone_number").execute()

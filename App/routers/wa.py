@@ -17,10 +17,18 @@ router = APIRouter(prefix="/api/wa", tags=["WA Service"])
 
 WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 
+WA_STATUS_EXAMPLE = {"status": "connected", "ready": True, "has_qr": False}
+
 
 @router.get(
     "/status",
     summary="Cek status koneksi WhatsApp",
+    responses={
+        200: {
+            "description": "Status koneksi berhasil dibaca",
+            "content": {"application/json": {"example": WA_STATUS_EXAMPLE}},
+        },
+    },
 )
 def wa_status():
     try:
@@ -34,6 +42,15 @@ def wa_status():
     "/qr-stream",
     summary="Stream QR code untuk login WhatsApp (SSE)",
     description="Membuka koneksi streaming SSE yang mengirimkan data QR code (Base64 PNG) secara realtime.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+        },
+        500: {
+            "description": "Gagal membuka stream QR",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
 )
 async def wa_qr_stream(request: Request):
     async def event_generator():
