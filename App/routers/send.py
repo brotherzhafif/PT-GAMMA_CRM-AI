@@ -24,6 +24,11 @@ SEND_EXAMPLE = {
     "message": "Pesan untuk 6281234567890 masuk antrian",
 }
 
+SEND_ATTACHMENT_EXAMPLE = {
+    "status": "ok",
+    "message": "Pesan untuk 6281234567890 masuk antrian",
+}
+
 SEND_ERROR_EXAMPLE = {"detail": "..."}
 
 BROADCAST_EXAMPLE = {
@@ -42,11 +47,22 @@ BROADCAST_EXAMPLE = {
 @router.post(
     "",
     summary="Kirim pesan ke satu nomor",
-    description="Kirim pesan ke satu nomor. Jika ada attachment_url, dikirim via whatsapp-web.js. Jika tidak, dikirim via Fonnte.",
+    description=(
+        "Kirim pesan teks ke satu nomor via Fonnte, atau kirim attachment via wa-service "
+        "jika attachment_url diisi. Pesan tetap dicatat ke Supabase sebagai outbound."
+    ),
+    summary="Kirim pesan ke satu nomor",
     responses={
         200: {
             "description": "Pesan berhasil dimasukkan antrian",
-            "content": {"application/json": {"example": SEND_EXAMPLE}},
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "textMessage": {"summary": "Pesan teks", "value": SEND_EXAMPLE},
+                        "attachmentMessage": {"summary": "Pesan dengan attachment", "value": SEND_ATTACHMENT_EXAMPLE},
+                    }
+                }
+            },
         },
         500: {
             "description": "Gagal mengirim pesan",

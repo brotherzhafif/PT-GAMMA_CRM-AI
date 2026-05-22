@@ -36,79 +36,50 @@ WhatsApp (Patient)
 
 ---
 
-## 📦 Modules
+## 📦 Modules & Major Components
 
-### 1. FastAPI Router (`app.py` + `App/routers/`)
+Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode (file referensi ada di paren):
 
-Entry point utama. Tipis — hanya inisialisasi FastAPI dan register semua router.
+- FastAPI router (entrypoint)
+     - File: `App/app.py` — inisialisasi FastAPI, daftarkan semua router, dan start background scheduler.
+     - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan. Untuk eksplorasi interaktif gunakan: https://ai-crm.brotherzhafif.my.id/docs
 
-**Endpoints:**
+- Routers (lokasi: `App/routers/`)
+     - `webhook.py` — `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte). [App/routers/webhook.py](App/routers/webhook.py#L1)
+     - `patients.py` — CRUD pasien (`/api/patients`). [App/routers/patients.py](App/routers/patients.py#L1)
+     - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`). [App/routers/messages.py](App/routers/messages.py#L1)
+     - `send.py` — kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`). [App/routers/send.py](App/routers/send.py#L1)
+     - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`). [App/routers/handoff.py](App/routers/handoff.py#L1)
+     - `wa.py` — helper endpoints menuju wa-service (status, qr-stream). [App/routers/wa.py](App/routers/wa.py#L1)
+     - `campaign.py` — marketing/campaigns (`/api/marketing/campaigns` prefix). [App/routers/campaign.py](App/routers/campaign.py#L1)
 
-| Method   | Endpoint                      | Router File   | Description                       |
-| -------- | ----------------------------- | ------------- | --------------------------------- |
-| `GET`    | `/`                           | `webhook.py`  | Health check                      |
-| `POST`   | `/webhook`                    | `webhook.py`  | Terima pesan masuk dari Fonnte    |
-| `GET`    | `/api/patients`               | `patients.py` | Ambil semua pasien terdaftar      |
-| `POST`   | `/api/patients`               | `patients.py` | Daftarkan pasien baru (upsert)    |
-| `DELETE` | `/api/patients/{number}`      | `patients.py` | Hapus pasien                      |
-| `GET`    | `/api/messages`               | `messages.py` | Ambil semua pesan (`?limit=N`)    |
-| `GET`    | `/api/messages/{number}`      | `messages.py` | Ambil pesan per nomor             |
-| `POST`   | `/api/send`                   | `send.py`     | Kirim pesan ke satu nomor         |
-| `POST`   | `/api/send/broadcast`         | `send.py`     | Broadcast ke semua pasien         |
-| `GET`    | `/api/handoff`                | `handoff.py`  | Daftar sesi handoff aktif         |
-| `POST`   | `/api/handoff/{number}`       | `handoff.py`  | Mulai handoff manual              |
-| `DELETE` | `/api/handoff/{number}`       | `handoff.py`  | Akhiri handoff, bot aktif kembali |
-| `POST`   | `/api/handoff/{number}/reply` | `handoff.py`  | Admin balas pesan ke pasien       |
+- Rasa NLP (lokasi: `rasa/`)
+     - Framework: Rasa (use the action server for custom actions in `rasa/actions/actions.py`).
+     - Confidence threshold dan trusted intents: Rasa digunakan untuk intent terstruktur; trusted intents (handled directly) mencakup greetings, scheduling queries, simple FAQs, dan booking/rating intents.
 
----
+- Groq LLM (lokasi: `LLM/groq_service.py`)
+     - Digunakan sebagai fallback dan untuk teks kontekstual/keluhan.
+     - Roles: `default` (informasi klinik) dan `triage` (keluhan kesehatan — dipicu oleh keyword seperti `sakit`, `demam`, `nyeri`).
+     - Chat memory: 5 percakapan terakhir per nomor disimpan sebagai local JSON di `chat_history/` dan digunakan untuk konteks LLM.
 
-### 2. Rasa NLP Module (`rasa/`)
+- Handoff manager (`App/handoff_manager.py`)
+     - Mengatur state handoff per nomor, timeout otomatis, dan helper untuk dashboard/admin.
+     - Trigger: keyword oleh pasien atau auto-handoff setelah Groq fallback berulang.
+     - Default timeout bisa disesuaikan via env var `HANDOFF_TIMEOUT_MINUTES`.
 
-Menangani intent terstruktur dengan confidence threshold **0.75**.
+- Queue manager (`App/queue_manager.py`)
+     - Menangani antrean pengiriman ke Fonnte dengan delay acak (3–7 detik) untuk mensimulasikan pengetikan dan mengurangi risiko pemblokiran.
 
-**Trusted intents** (dijawab langsung tanpa LLM):
-`greet`, `goodbye`, `ask_schedule`, `ask_queue`, `ask_services`, `ask_location`, `ask_cost`, `request_human_agent`, `emergency`, `affirm`, `deny`, `intent_ingin_booking`, `intent_berikan_rating`
+- Campaign scheduler (`App/campaign_scheduler.py`)
+     - Background worker yang memicu campaign terjadwal ke tabel `campaigns` dan memasukkannya ke queue untuk dikirim.
 
-**Custom Actions:**
-
-- `action_fetch_schedule` — jadwal dokter realtime
-- `action_fetch_queue` — status antrian pasien
-
----
-
-### 3. Groq LLM Module (`LLM/groq_service.py`)
-
-Menangani pesan kontekstual dan keluhan menggunakan Groq Cloud API (Llama 3).
-
-**Roles:**
-
-- `default` — info umum klinik
-- `triage` — keluhan kesehatan (trigger by keyword: `sakit`, `demam`, `nyeri`, dll)
-
-**Memory:** 5 percakapan terakhir per nomor, disimpan di `chat_history/` sebagai JSON lokal.
+- Persistence & helpers
+     - Supabase client/config di `App/config.py` dan helper functions di `App/helpers.py` (simpan ke DB, upsert pasien, query Rasa, dsb).
+     - Local state folders: `chat_history/`, `chat_state/`, `handoff_state/` untuk menyimpan JSON state per nomor.
 
 ---
 
-### 4. Handoff Manager (`App/handoff_manager.py`)
-
-Mengelola mode handoff per nomor HP.
-
-**Flow:**
-
-- Pasien ketik keyword (`admin`, `cs`, `manusia`, dll) → bot berhenti, admin handle dari dashboard
-- Bot gagal jawab 3x berturut-turut → auto handoff dengan notif ke pasien
-- Admin tidak balas dalam **15 menit** → otomatis kembali ke bot
-- Admin klik "Serahkan ke Bot" di dashboard → `DELETE /api/handoff/{number}`
-
-State disimpan di `handoff_state/` sebagai file JSON per nomor.
-
----
-
-### 5. Queue Manager (`App/queue_manager.py`)
-
-Anti-spam: delay acak 3–7 detik sebelum setiap pesan terkirim ke Fonnte, mensimulasikan perilaku ketik manusia.
-
----
+Jika ingin file-by-file ringkasan (contoh: semua endpoint di tiap router dengan contoh request/response), saya bisa generate halaman dokumentasi Markdown otomatis dari decorator `responses`/`Body(..., examples=...)` di setiap router — beri tahu kalau mau saya generate itu.
 
 ## 🛠 Tech Stack
 
