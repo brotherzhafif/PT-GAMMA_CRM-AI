@@ -71,6 +71,8 @@ class SaveCampaignPayload(BaseModel):
     campaign_name: str = Field(..., description="Nama campaign")
     schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
     campaign_message: str = Field(..., description="Isi pesan campaign")
+    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (opsional)")
+    filename: Optional[str] = Field(default=None, description="Nama file attachment (opsional)")
     status: Optional[str] = Field(default=None, description="Status campaign")
 
 
@@ -78,6 +80,8 @@ class UpdateCampaignPayload(BaseModel):
     campaign_name: Optional[str] = Field(default=None, description="Nama campaign baru")
     schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign baru")
     campaign_message: Optional[str] = Field(default=None, description="Isi pesan campaign baru")
+    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign baru (opsional)")
+    filename: Optional[str] = Field(default=None, description="Nama file attachment baru (opsional)")
     status: Optional[str] = Field(default=None, description="Status campaign baru")
 
 # Send 
