@@ -3,7 +3,7 @@
 # Endpoint: /api/marketing/campaigns
 #
 # Last Change   :   22 May 2026
-# Developer     :   GitHub Copilot
+# Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
 from datetime import datetime, timedelta, timezone
@@ -13,8 +13,6 @@ from fastapi import APIRouter, Body, HTTPException, Path
 from App.config import supabase
 from App.helpers import _require_supabase
 from App.models import CampaignRecord, SaveCampaignPayload, UpdateCampaignPayload
-from App.models import BroadcastPayload
-from App.routers.send import broadcast_message as send_broadcast_message
 
 router = APIRouter(prefix="/api/marketing/campaigns", tags=["Marketing Campaigns"])
 
@@ -26,7 +24,7 @@ CAMPAIGN_EXAMPLE = {
     "campaign_message": "Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei.",
     "attachment_url": "https://example.com/promo-cekgigi.jpg",
     "filename": "promo-cekgigi.jpg",
-    "status": "draft",
+    "status": "scheduled",
     "created_at": "2026-05-22T10:00:00Z",
     "updated_at": "2026-05-22T10:00:00Z",
 }
@@ -96,7 +94,7 @@ def get_all_campaigns(limit: int = 100, include_canceled: bool = False):
         response = (
             supabase.table("campaigns")
             .select(_campaign_select_columns())
-            .order("created_at", desc=True)
+            .order("campaign_name", desc=False)
             .limit(limit)
             .execute()
         )
@@ -213,7 +211,7 @@ def create_campaign(
                     "campaign_message": "Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei.",
                     "attachment_url": "https://example.com/promo-cekgigi.jpg",
                     "filename": "promo-cekgigi.jpg",
-                    "status": "draft",
+                    "status": "scheduled",
                 },
             }
         },
@@ -230,7 +228,7 @@ def create_campaign(
             "campaign_message": payload.campaign_message,
             "attachment_url": payload.attachment_url,
             "filename": payload.filename,
-            "status": payload.status or "draft",
+            "status": payload.status or "scheduled",
         }
         response = supabase.table("campaigns").insert(insert_data).execute()
         if not response.data:
@@ -307,8 +305,8 @@ def update_campaign(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete(
-    "/by-name/{campaign_name}",
+@router.patch(
+    "/by-name/{campaign_name}/cancel",
     response_model=CampaignRecord,
     summary="Cancel campaign berdasarkan nama",
     description="Menandai campaign sebagai canceled tanpa menghapus datanya.",
@@ -339,80 +337,6 @@ def cancel_campaign(campaign_name: str = Path(..., description="Nama campaign ya
         if not response.data:
             raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
         return _campaign_row(response.data[0])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post(
-    "/broadcast/{campaign_name}",
-    summary="Broadcast campaign by name",
-    description="Ambil campaign tersimpan lalu teruskan campaign message dan attachment ke endpoint broadcast.",
-    responses={
-        200: {
-            "description": "Campaign berhasil diteruskan ke broadcast",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "ok",
-                        "message": "Campaign berhasil diteruskan ke broadcast",
-                        "campaign_name": "Promo Cek Gigi Mei",
-                        "broadcast_result": {
-                            "status": "ok",
-                            "total_sent": 2,
-                            "recipients": ["6281234567890", "6289876543210"],
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Campaign tidak bisa dibroadcast",
-            "content": {"application/json": {"example": {"detail": "Campaign yang sudah canceled tidak bisa dibroadcast"}}},
-        },
-        404: {
-            "description": "Campaign tidak ditemukan",
-            "content": {"application/json": {"example": ERROR_EXAMPLE}},
-        },
-        500: {
-            "description": "Gagal meneruskan campaign ke broadcast",
-            "content": {"application/json": {"example": {"detail": "..."}}},
-        },
-    },
-)
-def broadcast_campaign(
-    campaign_name: str = Path(..., description="Nama campaign yang akan dibroadcast", examples=["Promo Cek Gigi Mei"])
-):
-    _require_supabase()
-    try:
-        response = (
-            supabase.table("campaigns")
-            .select(_campaign_select_columns())
-            .eq("campaign_name", campaign_name)
-            .limit(1)
-            .execute()
-        )
-        if not response.data:
-            raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
-
-        campaign = _campaign_row(response.data[0])
-        if campaign.get("status") == "canceled":
-            raise HTTPException(status_code=400, detail="Campaign yang sudah canceled tidak bisa dibroadcast")
-
-        broadcast_payload = BroadcastPayload(
-            message=campaign["campaign_message"],
-            attachment_url=campaign.get("attachment_url"),
-            filename=campaign.get("filename"),
-        )
-        broadcast_result = send_broadcast_message(broadcast_payload)
-
-        return {
-            "status": "ok",
-            "message": "Campaign berhasil diteruskan ke broadcast",
-            "campaign_name": campaign["campaign_name"],
-            "broadcast_result": broadcast_result,
-        }
     except HTTPException:
         raise
     except Exception as e:

@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — models.py
 # Semua Pydantic models untuk request & response API
 #
-# Last Change   :   16 May 2026
+# Last Change   :   22 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -60,6 +60,8 @@ class CampaignRecord(BaseModel):
     campaign_name: str = Field(..., description="Nama campaign")
     schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
     campaign_message: str = Field(..., description="Isi pesan campaign")
+    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (gambar/PDF)")
+    filename: Optional[str] = Field(default=None, description="Nama file attachment yang dikirim ke broadcast")
     status: Optional[str] = Field(default=None, description="Status campaign")
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
