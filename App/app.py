@@ -12,7 +12,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from App.routers import webhook, patients, messages, send, handoff, wa
+from App.routers import webhook, patients, messages, send, handoff, wa, campaign
 
 app = FastAPI(
     title="SmartClinic CRM AI",
@@ -36,6 +36,7 @@ app.include_router(messages.router)
 app.include_router(send.router)
 app.include_router(handoff.router)
 app.include_router(wa.router)
+app.include_router(campaign.router)
 
 
 # ======================================================

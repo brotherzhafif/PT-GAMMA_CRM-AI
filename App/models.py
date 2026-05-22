@@ -52,6 +52,32 @@ class UpdatePatientPayload(BaseModel):
     name: Optional[str] = Field(default=None, description="Nama baru pasien")
     phone_number: Optional[str] = Field(default=None, description="Nomor HP baru pasien")
 
+
+# Marketing Campaigns
+
+class CampaignRecord(BaseModel):
+    id: Optional[str] = Field(default=None)
+    campaign_name: str = Field(..., description="Nama campaign")
+    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
+    campaign_message: str = Field(..., description="Isi pesan campaign")
+    status: Optional[str] = Field(default=None, description="Status campaign")
+    created_at: Optional[str] = Field(default=None)
+    updated_at: Optional[str] = Field(default=None)
+
+
+class SaveCampaignPayload(BaseModel):
+    campaign_name: str = Field(..., description="Nama campaign")
+    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
+    campaign_message: str = Field(..., description="Isi pesan campaign")
+    status: Optional[str] = Field(default=None, description="Status campaign")
+
+
+class UpdateCampaignPayload(BaseModel):
+    campaign_name: Optional[str] = Field(default=None, description="Nama campaign baru")
+    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign baru")
+    campaign_message: Optional[str] = Field(default=None, description="Isi pesan campaign baru")
+    status: Optional[str] = Field(default=None, description="Status campaign baru")
+
 # Send 
 
 class SendMessagePayload(BaseModel):
