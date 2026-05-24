@@ -1,8 +1,8 @@
 # ======================================================
-# SmartClinic CRM AI — routers/wa.py
-# Endpoint: /api/wa
+# SmartClinic CRM AI — routers/status.py
+# Endpoint: /api/status
 #
-# Last Change   :   18 May 2026
+# Last Change   :   25 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -10,19 +10,19 @@ import os
 import json
 import requests
 import asyncio
-from fastapi.responses import JSONResponse
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from App.smartclinic_auth import get_smartclinic_token_status
 
-router = APIRouter(prefix="/api/wa", tags=["Settings"])
+router = APIRouter(prefix="/api/status", tags=["System"])
 
 WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 
 WA_STATUS_EXAMPLE = {"status": "connected", "ready": True, "has_qr": False}
 WA_QR_STREAM_CONNECTED_EXAMPLE = "event: status\ndata: connected"
 WA_QR_STREAM_UPDATE_EXAMPLE = "event: qr_update\ndata: data:image/png;base64,..."
+WA_CONNECTION_STATUS_EXAMPLE = "event: status\ndata: {\"status\":\"connected\"}"
 SMARTCLINIC_TOKEN_STATUS_EXAMPLE = {
     "status": "valid",
     "valid": True,
@@ -34,38 +34,16 @@ SMARTCLINIC_TOKEN_STATUS_EXAMPLE = {
 
 
 @router.get(
-    "/status",
-    summary="Cek status koneksi WhatsApp",
-    description="Mengecek status koneksi WhatsApp dari wa-service dan mengembalikan status terkini.",
-    responses={
-        200: {
-            "description": "Status koneksi berhasil dibaca",
-            "content": {"application/json": {"example": WA_STATUS_EXAMPLE}},
-        },
-        500: {
-            "description": "Gagal membaca status koneksi",
-            "content": {"application/json": {"example": {"status": "unreachable", "ready": False, "has_qr": False}}},
-        },
-    },
-)
-def wa_status():
-    try:
-        response = requests.get(f"{WA_SERVICE_URL}/status", timeout=5)
-        return response.json()
-    except Exception:
-        return {"status": "unreachable", "ready": False, "has_qr": False}
-
-
-@router.get(
-    "/qr-stream",
-    summary="Stream QR code untuk login WhatsApp (SSE)",
-    description="Membuka koneksi streaming SSE yang mengirimkan data QR code (Base64 PNG) secara realtime.",
+    "/whatsapp-connection",
+    summary="Stream koneksi WhatsApp (SSE)",
+    description="Membuka satu stream SSE untuk status koneksi WhatsApp dan QR code login secara realtime.",
     responses={
         200: {
             "description": "Stream SSE aktif",
             "content": {
                 "text/event-stream": {
                     "examples": {
+                        "status": {"summary": "Status koneksi", "value": WA_CONNECTION_STATUS_EXAMPLE},
                         "qrUpdate": {"summary": "QR code baru", "value": WA_QR_STREAM_UPDATE_EXAMPLE},
                         "connected": {"summary": "Sudah terhubung", "value": WA_QR_STREAM_CONNECTED_EXAMPLE},
                     }
@@ -78,17 +56,34 @@ def wa_status():
         },
     },
 )
-async def wa_qr_stream(request: Request):
+async def whatsapp_connection_stream(request: Request):
     async def event_generator():
+        last_status = None
+
         while True:
             # Jika user menutup tab browser atau pindah halaman, hentikan loop
             if await request.is_disconnected():
                 break
 
             try:
-                # Ambil data dari Node.js wa-service (yang me-return base64)
+                # Ambil data dari Node.js wa-service (yang me-return status + base64)
+                status_response = requests.get(f"{WA_SERVICE_URL}/status", timeout=3)
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    if status_data != last_status:
+                        last_status = status_data
+                        yield {
+                            "event": "status",
+                            "data": json.dumps(status_data),
+                        }
+                else:
+                    yield {
+                        "event": "status",
+                        "data": json.dumps({"status": "unreachable", "ready": False, "has_qr": False}),
+                    }
+
                 response = requests.get(f"{WA_SERVICE_URL}/qr", timeout=3)
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     status = data.get("status")
@@ -123,15 +118,15 @@ async def wa_qr_stream(request: Request):
                     "data": f"Gagal fetch ke wa-service: {str(e)}"
                 }
 
-            # Polling setiap 2 atau 3 detik sekali untuk cek apakah QR diperbarui oleh Puppeteer
+            # Polling setiap 2 atau 3 detik sekali untuk cek apakah status/QR diperbarui oleh Puppeteer
             await asyncio.sleep(3)
 
     return EventSourceResponse(event_generator())
 
 
 @router.get(
-    "/token-status-stream",
-    summary="Stream status token SmartClinic (SSE)",
+    "/rme-connection",
+    summary="Stream koneksi RME SmartClinic (SSE)",
     description="Mengirim status token SmartClinic, preview token, dan waktu perubahan terakhir secara realtime.",
     responses={
         200: {
