@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from App.config import supabase
 from App.helpers import _require_supabase
 
-router = APIRouter(prefix="/api/messages", tags=["Messages"])
+router = APIRouter(prefix="/api/messages", tags=["Unified Chat"])
 
 
 LATEST_MESSAGES_EXAMPLE = [

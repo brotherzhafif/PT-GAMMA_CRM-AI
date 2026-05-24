@@ -20,7 +20,7 @@ from App.handoff_manager import (
 )
 from App.queue_manager import fonnte_queue
 
-router = APIRouter(prefix="/api/handoff", tags=["Handoff"])
+router = APIRouter(prefix="/api/handoff", tags=["Unified Chat"])
 
 
 HANDOFF_SESSION_EXAMPLE = {

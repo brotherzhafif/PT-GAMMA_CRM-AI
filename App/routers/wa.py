@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/wa", tags=["WA Service"])
+router = APIRouter(prefix="/api/wa", tags=["Settings"])
 
 WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 

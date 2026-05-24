@@ -47,9 +47,9 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode (file refer
 - Routers (lokasi: `App/routers/`)
      - `webhook.py` — `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte). [App/routers/webhook.py](App/routers/webhook.py#L1)
      - `patients.py` — CRUD pasien (`/api/patients`). [App/routers/patients.py](App/routers/patients.py#L1)
-     - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`). [App/routers/messages.py](App/routers/messages.py#L1)
+     - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`), tampil di grup OpenAPI `Unified Chat`. [App/routers/messages.py](App/routers/messages.py#L1)
      - `send.py` — kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`). [App/routers/send.py](App/routers/send.py#L1)
-     - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`). [App/routers/handoff.py](App/routers/handoff.py#L1)
+     - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`), tampil di grup OpenAPI `Unified Chat`. [App/routers/handoff.py](App/routers/handoff.py#L1)
      - `wa.py` — helper endpoints menuju wa-service (status, qr-stream). [App/routers/wa.py](App/routers/wa.py#L1)
      - `campaign.py` — marketing/campaigns (`/api/marketing/campaigns` prefix). [App/routers/campaign.py](App/routers/campaign.py#L1)
 
