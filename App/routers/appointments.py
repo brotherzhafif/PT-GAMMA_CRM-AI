@@ -53,7 +53,7 @@ async def _proxy_smartclinic(
     )
 
 
-@queues_router.get(
+@router.get(
     "",
     summary="Ambil daftar queues",
     description="Meneruskan query params tanggal, dokterId, dan status ke SmartClinic tanpa perubahan.",
