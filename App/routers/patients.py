@@ -13,10 +13,10 @@ from fastapi import APIRouter, Body, HTTPException, Path, Request, Response
 from pydantic import BaseModel, Field
 
 try:
-    from App.config import SMARTCLINIC_BASE_URL
+    from App.config import SMARTCLINIC_BASE_URL, supabase
     from App.helpers import get_smartclinic_token
 except ImportError:  # pragma: no cover - fallback only if helper is unavailable
-    from App.config import SMARTCLINIC_BASE_URL
+    from App.config import SMARTCLINIC_BASE_URL, supabase
 
     async def get_smartclinic_token() -> str:
         raise RuntimeError("get_smartclinic_token() is not available")
@@ -67,6 +67,19 @@ async def _proxy_smartclinic(
         status_code=upstream.status_code,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+def _sync_patient_to_supabase(payload: PatientPayload) -> None:
+    if supabase is None:
+        return
+
+    supabase.table("patients").upsert(
+        {
+            "phone_number": payload.telepon,
+            "name": payload.namaLengkap,
+        },
+        on_conflict="phone_number",
+    ).execute()
 
 
 @router.get(
@@ -122,7 +135,13 @@ async def create_patient(
         },
     )
 ):
-    return await _proxy_smartclinic("POST", SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
+    response = await _proxy_smartclinic("POST", SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
+    if response.status_code < 400:
+        try:
+            _sync_patient_to_supabase(payload)
+        except Exception:
+            pass
+    return response
 
 
 @router.get(
@@ -205,7 +224,13 @@ async def update_patient(
         },
     ),
 ):
-    return await _proxy_smartclinic("PUT", f"{SMARTCLINIC_PATIENTS_PATH}/{id}", json=payload.model_dump(exclude_none=True))
+    response = await _proxy_smartclinic("PUT", f"{SMARTCLINIC_PATIENTS_PATH}/{id}", json=payload.model_dump(exclude_none=True))
+    if response.status_code < 400:
+        try:
+            _sync_patient_to_supabase(payload)
+        except Exception:
+            pass
+    return response
 
 
 @router.delete(

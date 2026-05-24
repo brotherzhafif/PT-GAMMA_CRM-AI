@@ -80,7 +80,7 @@ def start_handoff(no_hp: str):
         "last_admin_reply_at": None,
     })
     if supabase:
-        supabase.table("patients").update({"is_handoff": True}).eq("telepon", normalized_phone).execute()
+        supabase.table("patients").update({"is_handoff": True}).eq("phone_number", normalized_phone).execute()
     print(f"[Handoff] {normalized_phone} masuk mode handoff")
 
 
@@ -89,7 +89,7 @@ def end_handoff(no_hp: str):
     normalized_phone = normalize_phone_number(no_hp)
     _delete(normalized_phone)
     if supabase:
-        supabase.table("patients").update({"is_handoff": False}).eq("telepon", normalized_phone).execute()
+        supabase.table("patients").update({"is_handoff": False}).eq("phone_number", normalized_phone).execute()
     print(f"[Handoff] {normalized_phone} keluar dari handoff — bot aktif kembali")
 
 

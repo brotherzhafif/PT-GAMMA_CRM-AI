@@ -156,7 +156,7 @@ def broadcast_message(
 ):
     _require_supabase()
     try:
-        response = supabase.table("patients").select("telepon").execute()
+        response = supabase.table("patients").select("phone_number").execute()
         patients = response.data
 
         if not patients:
@@ -169,7 +169,7 @@ def broadcast_message(
         recipients = []
 
         for patient in patients:
-            number = normalize_phone_number(patient.get("telepon", ""))
+            number = normalize_phone_number(patient.get("phone_number", ""))
             if not number:
                 continue
 

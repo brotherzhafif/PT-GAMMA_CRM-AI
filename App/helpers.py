@@ -11,6 +11,7 @@ import os
 import re
 from datetime import datetime
 from typing import Optional
+import requests
 from fastapi import HTTPException
 
 from App.config import (
@@ -70,8 +71,8 @@ def upsert_patient(no_hp: str, name: Optional[str] = None):
         return
     normalized_phone = normalize_phone_number(no_hp)
     supabase.table("patients").upsert(
-        {"telepon": normalized_phone, "namaLengkap": name},
-        on_conflict="telepon",
+        {"phone_number": normalized_phone, "name": name},
+        on_conflict="phone_number",
     ).execute()
     label = f"nama: {name}" if name else "tanpa nama"
     print(f"[Patient] Upsert {normalized_phone} ({label})")
@@ -82,7 +83,7 @@ def is_patient_registered(no_hp: str) -> bool:
     if supabase is None:
         return False
     normalized_phone = normalize_phone_number(no_hp)
-    result = supabase.table("patients").select("id").eq("telepon", normalized_phone).execute()
+    result = supabase.table("patients").select("id").eq("phone_number", normalized_phone).execute()
     return len(result.data) > 0
 
 
