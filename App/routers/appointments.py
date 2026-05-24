@@ -1,6 +1,6 @@
 # ======================================================
 # SmartClinic CRM AI — routers/appointments.py
-# Endpoint: /api/queues/appointments
+# Endpoint: /api/appointments
 #
 # Last Change   :   25 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
@@ -9,14 +9,14 @@
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Body, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from App.config import SMARTCLINIC_BASE_URL, supabase
 from App.helpers import get_smartclinic_token, normalize_phone_number
 
 
-router = APIRouter(prefix="/api/queues", tags=["Appointments"])
+router = APIRouter(prefix="/api/appointment", tags=["Appointments"])
 
 SMARTCLINIC_APPOINTMENTS_PATH = "/queues/appointments"
 
@@ -51,6 +51,34 @@ async def _proxy_smartclinic(
         status_code=upstream.status_code,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+@queues_router.get(
+    "",
+    summary="Ambil daftar queues",
+    description="Meneruskan query params tanggal, dokterId, dan status ke SmartClinic tanpa perubahan.",
+    responses={
+        200: {
+            "description": "Daftar queues berhasil diambil",
+            "content": {"application/json": {"example": {"data": []}}},
+        },
+        400: {
+            "description": "Request tidak valid",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+        500: {
+            "description": "Gagal mengambil queues",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_queues(request: Request):
+    tanggal = request.query_params.get("tanggal")
+    if not tanggal:
+        raise HTTPException(status_code=422, detail="tanggal wajib diisi")
+
+    query_params = list(request.query_params.multi_items())
+    return await _proxy_smartclinic("GET", "/queues", params=query_params)
 
 
 def _lookup_rme_patient_id(phone_number: str) -> str:
