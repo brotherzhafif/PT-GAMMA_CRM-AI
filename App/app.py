@@ -12,7 +12,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from App.routers import webhook, patients, messages, send, handoff, wa, campaign
+from App.routers import webhook, patients, messages, send, handoff, wa, campaign, schedules
 from App.campaign_scheduler import start_campaign_scheduler
 
 app = FastAPI(
@@ -32,12 +32,13 @@ app.add_middleware(
 
 #  Register Routers 
 app.include_router(webhook.router)
-app.include_router(patients.router)
-app.include_router(messages.router)
 app.include_router(send.router)
+app.include_router(campaign.router)
+app.include_router(messages.router)
 app.include_router(handoff.router)
 app.include_router(wa.router)
-app.include_router(campaign.router)
+app.include_router(schedules.router)
+app.include_router(patients.router)
 
 
 @app.on_event("startup")
