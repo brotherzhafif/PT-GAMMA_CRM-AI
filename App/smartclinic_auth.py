@@ -59,6 +59,34 @@ def _is_token_valid(cache: dict) -> bool:
     return datetime.now(timezone.utc) < expires_at_dt
 
 
+def get_smartclinic_token_status() -> dict:
+    """Baca status token cache tanpa memicu login ulang."""
+    cache = _load_token_cache()
+    access_token = cache.get("access_token")
+    expires_at = cache.get("expires_at")
+    cached_at = cache.get("cached_at")
+
+    valid = _is_token_valid(cache)
+    status = "valid" if valid else ("expired" if access_token else "missing")
+
+    token_preview = None
+    if access_token:
+        if len(access_token) > 16:
+            token_preview = f"{access_token[:8]}...{access_token[-8:]}"
+        else:
+            token_preview = access_token
+
+    return {
+        "status": status,
+        "valid": valid,
+        "token_preview": token_preview,
+        "cached_at": cached_at,
+        "last_change_at": cached_at,
+        "expires_at": expires_at,
+        "base_url": SMARTCLINIC_BASE_URL,
+    }
+
+
 def _login_sync() -> str:
     if not SMARTCLINIC_EMAIL or not SMARTCLINIC_PASSWORD:
         raise RuntimeError("SMARTCLINIC_EMAIL dan SMARTCLINIC_PASSWORD harus diisi di .env")

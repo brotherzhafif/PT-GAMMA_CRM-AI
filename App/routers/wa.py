@@ -7,11 +7,14 @@
 # ======================================================
 
 import os
+import json
 import requests
 import asyncio
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
+
+from App.smartclinic_auth import get_smartclinic_token_status
 
 router = APIRouter(prefix="/api/wa", tags=["Settings"])
 
@@ -20,6 +23,14 @@ WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 WA_STATUS_EXAMPLE = {"status": "connected", "ready": True, "has_qr": False}
 WA_QR_STREAM_CONNECTED_EXAMPLE = "event: status\ndata: connected"
 WA_QR_STREAM_UPDATE_EXAMPLE = "event: qr_update\ndata: data:image/png;base64,..."
+SMARTCLINIC_TOKEN_STATUS_EXAMPLE = {
+    "status": "valid",
+    "valid": True,
+    "token_preview": "eyJhbGci...cMpsc",
+    "cached_at": "2026-05-25T20:33:53.458Z",
+    "last_change_at": "2026-05-25T20:33:53.458Z",
+    "expires_at": "2026-05-25T20:43:53.458Z",
+}
 
 
 @router.get(
@@ -114,5 +125,47 @@ async def wa_qr_stream(request: Request):
 
             # Polling setiap 2 atau 3 detik sekali untuk cek apakah QR diperbarui oleh Puppeteer
             await asyncio.sleep(3)
+
+    return EventSourceResponse(event_generator())
+
+
+@router.get(
+    "/token-status-stream",
+    summary="Stream status token SmartClinic (SSE)",
+    description="Mengirim status token SmartClinic, preview token, dan waktu perubahan terakhir secara realtime.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+            "content": {
+                "text/event-stream": {
+                    "examples": {
+                        "tokenStatus": {"summary": "Status token", "value": "event: status\ndata: {\"status\":\"valid\"}"},
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Gagal membuka stream status token",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def smartclinic_token_status_stream(request: Request):
+    async def event_generator():
+        last_payload = None
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            payload = get_smartclinic_token_status()
+            if payload != last_payload:
+                last_payload = payload
+                yield {
+                    "event": "status",
+                    "data": json.dumps(payload),
+                }
+
+            await asyncio.sleep(5)
 
     return EventSourceResponse(event_generator())

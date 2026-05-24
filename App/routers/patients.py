@@ -86,6 +86,8 @@ async def _proxy_smartclinic(
 )
 async def get_all_patients(request: Request):
     query_params = list(request.query_params.multi_items())
+    if not query_params:
+        query_params = [("page", "1"), ("limit", "100")]
     return await _proxy_smartclinic("GET", SMARTCLINIC_PATIENTS_PATH, params=query_params)
 
 
