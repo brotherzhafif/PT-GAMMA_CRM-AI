@@ -17,7 +17,7 @@ from typing import Any, Text, Dict, List, Optional
 
 from rasa_sdk import Action, Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
-from rasa_sdk.events import SlotSet, ActiveLoop
+from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction
 
 # ── SmartClinic API Configuration ─────────────────────────────────────────────
 SMARTCLINIC_BASE_URL = os.getenv("SMARTCLINIC_BASE_URL", "https://smartclinic-rekam-medis.onrender.com/api/v1")
@@ -101,6 +101,35 @@ def api_post(endpoint: str, payload: dict) -> dict | None:
     except Exception as e:
         print(f"[SmartClinic API Error] POST {endpoint}: {e}")
         return None
+
+
+def get_patient_from_supabase(sender_id: str) -> dict:
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        # Mock data untuk keperluan testing (sebelum BE update kolom)
+        return {
+            "nama": "Budi Santoso",
+            "nik": "1234567890123456",
+            "date_of_birth": "15/08/1995"
+        }
+        
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+    url = f"{SUPABASE_URL}/rest/v1/patients?sender_id=eq.{sender_id}&select=nama,nik,date_of_birth"
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and isinstance(data, list):
+                return data[0]
+    except Exception as e:
+        print(f"Supabase error: {e}")
+    return {}
 
 
 
@@ -344,17 +373,78 @@ class ActionStartBooking(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        dispatcher.utter_message(response="utter_booking_tanya_tipe")
+        sender_id = tracker.sender_id
+        patient_data = get_patient_from_supabase(sender_id)
+        
+        nik = patient_data.get("nik")
+        dob = patient_data.get("date_of_birth")
+        
+        if nik and dob:
+            dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=nik)
+            return [
+                SlotSet("booking_tipe_pasien", None),
+                SlotSet("booking_nik", None),
+                SlotSet("booking_nama", None),
+                SlotSet("booking_tgl_lahir", None),
+                SlotSet("booking_keluhan", None),
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("booking_step", "tanya_untuk_siapa"),
+                SlotSet("booking_untuk_siapa", None)
+            ]
+        else:
+            dispatcher.utter_message(response="utter_booking_tanya_tipe")
+            return [
+                SlotSet("booking_tipe_pasien", None),
+                SlotSet("booking_nik", None),
+                SlotSet("booking_nama", None),
+                SlotSet("booking_tgl_lahir", None),
+                SlotSet("booking_keluhan", None),
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("booking_step", "tanya_tipe"),
+            ]
 
-        return [
-            SlotSet("booking_tipe_pasien", None),
-            SlotSet("booking_nik", None),
-            SlotSet("booking_nama", None),
-            SlotSet("booking_tgl_lahir", None),
-            SlotSet("booking_keluhan", None),
-            SlotSet("booking_tgl_kunjungan", None),
-            SlotSet("booking_step", "tanya_tipe"),
-        ]
+
+class ActionHandleUntukSiapa(Action):
+    def name(self) -> Text:
+        return "action_handle_untuk_siapa"
+
+    def run(
+        self,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: Dict[Text, Any],
+    ) -> List[Dict[Text, Any]]:
+
+        intent = tracker.latest_message.get("intent", {}).get("name")
+        
+        if intent == "intent_diri_sendiri":
+            sender_id = tracker.sender_id
+            patient_data = get_patient_from_supabase(sender_id)
+            nama = patient_data.get("nama", "")
+            nik = patient_data.get("nik", "")
+            dob = patient_data.get("date_of_birth", "")
+            
+            # Langsung trigger pertanyaan keluhan dengan bypass form
+            dispatcher.utter_message(response="utter_booking_intro_baru")
+            
+            return [
+                SlotSet("booking_nama", nama),
+                SlotSet("booking_nik", nik),
+                SlotSet("booking_tgl_lahir", dob),
+                SlotSet("booking_tipe_pasien", "baru"),
+                SlotSet("booking_step", "form_baru"),
+                ActiveLoop("booking_form_baru"),
+                FollowupAction("booking_form_baru")
+            ]
+        else:
+            # Orang Lain
+            dispatcher.utter_message(response="utter_booking_intro_baru")
+            return [
+                SlotSet("booking_tipe_pasien", "baru"),
+                SlotSet("booking_step", "form_baru"),
+                ActiveLoop("booking_form_baru"),
+                FollowupAction("booking_form_baru")
+            ]
 
 
 #  Validasi Form Pasien Baru

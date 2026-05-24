@@ -14,6 +14,8 @@ intents:
   - deny
   - nlu_fallback
   - intent_ingin_booking
+  - intent_diri_sendiri
+  - intent_orang_lain
   - intent_berikan_rating
   - booking_pasien_baru
   - booking_pasien_lama
@@ -61,6 +63,19 @@ slots:
         value: lama
 
   # Data identitas
+  booking_untuk_siapa:
+    type: categorical
+    values:
+      - diri sendiri
+      - orang lain
+    mappings:
+      - type: from_intent
+        intent: intent_diri_sendiri
+        value: diri sendiri
+      - type: from_intent
+        intent: intent_orang_lain
+        value: orang lain
+
   booking_nik:
     type: text
     mappings:
@@ -161,6 +176,7 @@ actions:
   - action_fetch_schedule
   - action_fetch_queue
   - action_start_booking
+  - action_handle_untuk_siapa
   - action_booking_form_baru_submit
   - action_booking_form_lama_submit
   - action_booking_review
@@ -212,6 +228,9 @@ responses:
 
   utter_terima_kasih_rating:
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
+
+  utter_ask_booking_untuk_siapa:
+    - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan. Apakah Anda ingin mendaftar untuk *Diri Sendiri* atau untuk *Orang Lain*?"
 
   utter_booking_tanya_tipe:
     - text: |

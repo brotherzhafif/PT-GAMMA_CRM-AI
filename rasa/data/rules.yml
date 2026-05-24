@@ -73,6 +73,16 @@ rules:
       - intent: intent_ingin_booking
       - action: action_start_booking
 
+  - rule: Handle booking untuk siapa diri sendiri
+    steps:
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
+
+  - rule: Handle booking untuk siapa orang lain
+    steps:
+      - intent: intent_orang_lain
+      - action: action_handle_untuk_siapa
+
   #  Aktivasi form berdasarkan tipe pasien
   - rule: Aktifkan form pasien baru
     condition:

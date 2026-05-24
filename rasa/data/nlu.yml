@@ -425,6 +425,29 @@ nlu:
       - cerita dong tentang sejarah indonesia
       - buatin cerpen dong
 
+  - intent: intent_diri_sendiri
+    examples: |
+      - buat saya
+      - diri sendiri
+      - untuk saya
+      - saya sendiri
+      - buat diri saya sendiri
+      - iya diri sendiri
+      - sendiri
+      - untuk aku
+      - buat aku
+
+  - intent: intent_orang_lain
+    examples: |
+      - buat orang lain
+      - untuk orang lain
+      - untuk istri
+      - buat anak saya
+      - orang lain
+      - untuk suami
+      - buat saudara
+      - daftarkan orang lain
+
   - intent: intent_ingin_booking
     examples: |
       - Booking
