@@ -6,17 +6,19 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import json
 from typing import Any, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Body, HTTPException, Path, Request, Response
+from fastapi import APIRouter, Body, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field
 
 try:
     from App.config import SMARTCLINIC_BASE_URL, supabase
-    from App.helpers import get_smartclinic_token
+    from App.helpers import get_smartclinic_token, normalize_phone_number
 except ImportError:  # pragma: no cover - fallback only if helper is unavailable
     from App.config import SMARTCLINIC_BASE_URL, supabase
+    from App.helpers import normalize_phone_number
 
     async def get_smartclinic_token() -> str:
         raise RuntimeError("get_smartclinic_token() is not available")
@@ -137,11 +139,77 @@ async def create_patient(
 ):
     response = await _proxy_smartclinic("POST", SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
     if response.status_code < 400:
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
+
         try:
-            _sync_patient_to_supabase(payload)
-        except Exception:
-            pass
+            response_body = getattr(response, "body", b"") or b""
+            upstream_payload = json.loads(response_body.decode("utf-8") if isinstance(response_body, (bytes, bytearray)) else str(response_body))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Respons SmartClinic tidak valid") from exc
+
+        rme_patient_id = (upstream_payload.get("data") or {}).get("id") if isinstance(upstream_payload, dict) else None
+        if not rme_patient_id:
+            raise HTTPException(status_code=502, detail="SmartClinic tidak mengembalikan data.id")
+
+        try:
+            supabase.table("patients").upsert(
+                {
+                    "rme_patient_id": rme_patient_id,
+                    "phone_number": payload.telepon,
+                    "name": payload.namaLengkap,
+                },
+                on_conflict="phone_number",
+            ).execute()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Gagal menyimpan mapping pasien ke Supabase: {exc}") from exc
     return response
+
+
+@router.get(
+    "/by-phone",
+    summary="Cari pasien berdasarkan nomor telepon",
+    responses={
+        200: {
+            "description": "Pasien ditemukan",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "8de0f7b2-4b90-4c4b-8c59-12b7b7f8a111",
+                        "rme_patient_id": "f1a2b3c4-d5e6-7f80-1234-56789abcdef0",
+                        "phone_number": "6281234567890",
+                        "name": "Budi Santoso",
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Pasien tidak ditemukan",
+            "content": {"application/json": {"example": {"detail": "Pasien dengan nomor 6281234567890 tidak ditemukan"}}},
+        },
+        500: {
+            "description": "Gagal membaca data pasien",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasien")):
+    if supabase is None:
+        raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
+
+    normalized_phone = normalize_phone_number(phone)
+    response = (
+        supabase.table("patients")
+        .select("id, rme_patient_id, phone_number, name")
+        .eq("phone_number", normalized_phone)
+        .limit(1)
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan")
+
+    return response.data[0]
 
 
 @router.get(
