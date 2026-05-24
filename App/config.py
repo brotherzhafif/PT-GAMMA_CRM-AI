@@ -26,6 +26,14 @@ supabase: Optional[Client] = (
 #  Fonnte 
 FONNTE_TOKEN = os.getenv("FONNTE_TOKEN")
 
+#  SmartClinic RME API 
+SMARTCLINIC_BASE_URL = os.getenv(
+    "SMARTCLINIC_BASE_URL",
+    "https://smartclinic-rekam-medis.onrender.com/api/v1",
+)
+SMARTCLINIC_EMAIL = os.getenv("SMARTCLINIC_EMAIL")
+SMARTCLINIC_PASSWORD = os.getenv("SMARTCLINIC_PASSWORD")
+
 #  Rasa 
 RASA_URL = os.getenv("RASA_URL", "http://rasa:5005")
 RASA_CONFIDENCE_THRESHOLD = 0.75

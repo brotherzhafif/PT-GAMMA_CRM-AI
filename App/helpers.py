@@ -8,6 +8,7 @@
 
 import json
 import os
+import re
 import requests
 from datetime import datetime
 from typing import Optional
@@ -25,6 +26,20 @@ from App.config import (
 
 # Supabase 
 
+def normalize_phone_number(phone_number: str) -> str:
+    """Normalize nomor HP ke format 62xxxxxxxxx."""
+    digits = re.sub(r"\D+", "", phone_number or "")
+
+    if digits.startswith("00"):
+        digits = digits[2:]
+
+    if digits.startswith("0"):
+        digits = f"62{digits[1:]}"
+    elif digits.startswith("8"):
+        digits = f"62{digits}"
+
+    return digits
+
 def _require_supabase():
     """Guard: raise 500 jika Supabase belum dikonfigurasi."""
     if supabase is None:
@@ -39,8 +54,9 @@ def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "sy
     if supabase is None:
         print("[Supabase] Skip save — belum dikonfigurasi.")
         return None
+    normalized_phone = normalize_phone_number(no_hp)
     return supabase.table("messages").insert({
-        "sender_number": no_hp,
+        "sender_number": normalized_phone,
         "message_text": message,
         "direction": direction,
         "source": source,
@@ -52,19 +68,21 @@ def upsert_patient(no_hp: str, name: Optional[str] = None):
     if supabase is None:
         print(f"[Patient] Skip upsert {no_hp} — Supabase belum dikonfigurasi.")
         return
+    normalized_phone = normalize_phone_number(no_hp)
     supabase.table("patients").upsert(
-        {"phone_number": no_hp, "name": name},
-        on_conflict="phone_number",
+        {"telepon": normalized_phone, "namaLengkap": name},
+        on_conflict="telepon",
     ).execute()
     label = f"nama: {name}" if name else "tanpa nama"
-    print(f"[Patient] Upsert {no_hp} ({label})")
+    print(f"[Patient] Upsert {normalized_phone} ({label})")
 
 
 def is_patient_registered(no_hp: str) -> bool:
     """Cek apakah nomor sudah ada di tabel patients."""
     if supabase is None:
         return False
-    result = supabase.table("patients").select("id").eq("phone_number", no_hp).execute()
+    normalized_phone = normalize_phone_number(no_hp)
+    result = supabase.table("patients").select("id").eq("telepon", normalized_phone).execute()
     return len(result.data) > 0
 
 

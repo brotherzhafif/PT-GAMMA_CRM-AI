@@ -1,41 +1,78 @@
 # ======================================================
 # SmartClinic CRM AI — routers/patients.py
-# Endpoint: /api/patients
+# Endpoint: /api/v1/patients
 #
-# Last Change   :   16 May 2026
+# Last Change   :   25 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
-from typing import List
-from fastapi import APIRouter, Body, HTTPException, Path
+from typing import Any, Literal, Optional
 
-from App.config import supabase
-from App.models import PatientRecord, SavePatientPayload, UpdatePatientPayload
-from App.helpers import _require_supabase
+import httpx
+from fastapi import APIRouter, Body, HTTPException, Path, Request, Response
+from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/patients", tags=["Patients"])
+try:
+    from App.config import SMARTCLINIC_BASE_URL
+    from App.helpers import get_smartclinic_token
+except ImportError:  # pragma: no cover - fallback only if helper is unavailable
+    from App.config import SMARTCLINIC_BASE_URL
+
+    def get_smartclinic_token() -> str:
+        raise RuntimeError("get_smartclinic_token() is not available")
+
+
+router = APIRouter(prefix="/api/v1/patients", tags=["Patients"])
+
+SMARTCLINIC_PATIENTS_PATH = "/patients"
+
+class PatientPayload(BaseModel):
+    nik: str = Field(..., description="NIK pasien")
+    namaLengkap: str = Field(..., description="Nama lengkap pasien")
+    tanggalLahir: str = Field(..., description="Tanggal lahir pasien")
+    jenisKelamin: Literal["LAKI_LAKI", "PEREMPUAN"] = Field(..., description="Jenis kelamin pasien")
+    telepon: str = Field(..., description="Nomor telepon")
 
 
 PATIENT_EXAMPLE = {
     "id": "8de0f7b2-4b90-4c4b-8c59-12b7b7f8a111",
-    "phone_number": "6281234567890",
-    "name": "Budi Santoso",
-    "created_at": "2026-05-22T10:00:00Z",
+    "nik": "3174xxxxxxxxxxxx",
+    "namaLengkap": "Budi Santoso",
+    "tanggalLahir": "1990-01-15",
+    "jenisKelamin": "LAKI_LAKI",
+    "telepon": "6281234567890",
 }
 
-PATIENT_ERROR_EXAMPLE = {"detail": "Nomor 6281234567890 tidak ditemukan"}
+PATIENT_ERROR_EXAMPLE = {"detail": "Pasien tidak ditemukan"}
 
 
-# ======================================================
-#
-#               PATIENTS ENDPOINTS
-#
-# ======================================================
+async def _proxy_smartclinic(
+    method: str,
+    path: str,
+    *,
+    params: Optional[list[tuple[str, str]]] = None,
+    json: Optional[dict[str, Any]] = None,
+) -> Response:
+    token = get_smartclinic_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
+        try:
+            upstream = await client.request(method, path, params=params, json=json, headers=headers)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type"),
+    )
+
 
 @router.get(
     "",
-    response_model=List[PatientRecord],
-    summary="Ambil semua nomor pasien tersimpan",
+    summary="Ambil semua data pasien",
+    description="Meneruskan seluruh query params ke SmartClinic tanpa perubahan.",
     responses={
         200: {
             "description": "Daftar pasien berhasil diambil",
@@ -47,20 +84,14 @@ PATIENT_ERROR_EXAMPLE = {"detail": "Nomor 6281234567890 tidak ditemukan"}
         },
     },
 )
-def get_all_patients():
-    _require_supabase()
-    try:
-        response = supabase.table("patients").select("*").order("created_at", desc=False).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def get_all_patients(request: Request):
+    query_params = list(request.query_params.multi_items())
+    return await _proxy_smartclinic("GET", SMARTCLINIC_PATIENTS_PATH, params=query_params)
 
 
 @router.post(
     "",
-    response_model=PatientRecord,
-    summary="Simpan nomor pasien baru",
-    description="Jika nomor sudah ada, data diupdate (upsert). Tidak akan duplikat.",
+    summary="Buat data pasien baru",
     responses={
         200: {
             "description": "Pasien berhasil disimpan",
@@ -72,48 +103,77 @@ def get_all_patients():
         },
     },
 )
-def save_patient(
-    payload: SavePatientPayload = Body(
+async def create_patient(
+    payload: PatientPayload = Body(
         ...,
         examples={
-            "savePatientExample": {
-                "summary": "Contoh request simpan pasien",
+            "createPatientExample": {
+                "summary": "Contoh request create patient",
                 "value": {
-                    "phone_number": "6281234567890",
-                    "name": "Budi Santoso",
+                    "nik": "3174xxxxxxxxxxxx",
+                    "namaLengkap": "Budi Santoso",
+                    "tanggalLahir": "1990-01-15",
+                    "jenisKelamin": "LAKI_LAKI",
+                    "telepon": "6281234567890",
                 },
             }
         },
     )
 ):
-    _require_supabase()
-    try:
-        response = (
-            supabase.table("patients")
-            .upsert(
-                {"phone_number": payload.phone_number, "name": payload.name},
-                on_conflict="phone_number",
-            )
-            .execute()
-        )
-        return response.data[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return await _proxy_smartclinic("POST", SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
 
 
-@router.patch(
-    "/{phone_number}",
-    response_model=PatientRecord,
-    summary="Update data pasien",
-    description="Update nama atau nomor HP pasien. Hanya field yang diisi yang akan diupdate.",
+@router.get(
+    "/rm/{noRm}",
+    summary="Ambil data pasien berdasarkan nomor RM",
+    responses={
+        200: {
+            "description": "Pasien berhasil diambil",
+            "content": {"application/json": {"example": PATIENT_EXAMPLE}},
+        },
+        404: {
+            "description": "Pasien tidak ditemukan",
+            "content": {"application/json": {"example": PATIENT_ERROR_EXAMPLE}},
+        },
+        500: {
+            "description": "Gagal mengambil pasien",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")):
+    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
+
+
+@router.get(
+    "/{id}",
+    summary="Ambil data pasien berdasarkan ID",
+    responses={
+        200: {
+            "description": "Pasien berhasil diambil",
+            "content": {"application/json": {"example": PATIENT_EXAMPLE}},
+        },
+        404: {
+            "description": "Pasien tidak ditemukan",
+            "content": {"application/json": {"example": PATIENT_ERROR_EXAMPLE}},
+        },
+        500: {
+            "description": "Gagal mengambil pasien",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_patient_by_id(id: str = Path(..., description="ID pasien")):
+    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{id}")
+
+
+@router.put(
+    "/{id}",
+    summary="Perbarui data pasien",
     responses={
         200: {
             "description": "Pasien berhasil diupdate",
             "content": {"application/json": {"example": PATIENT_EXAMPLE}},
-        },
-        400: {
-            "description": "Tidak ada field yang diupdate",
-            "content": {"application/json": {"example": {"detail": "Tidak ada field yang diupdate"}}},
         },
         404: {
             "description": "Pasien tidak ditemukan",
@@ -125,50 +185,34 @@ def save_patient(
         },
     },
 )
-def update_patient(
-    phone_number: str = Path(..., description="Nomor HP pasien yang akan diupdate", examples=["6281234567890"]),
-    payload: UpdatePatientPayload = Body(
+async def update_patient(
+    id: str = Path(..., description="ID pasien"),
+    payload: PatientPayload = Body(
         ...,
         examples={
             "updatePatientExample": {
-                "summary": "Contoh request update pasien",
-                "value": {"name": "Budi Santoso Baru"},
+                "summary": "Contoh request update patient",
+                "value": {
+                    "nik": "3174xxxxxxxxxxxx",
+                    "namaLengkap": "Budi Santoso",
+                    "tanggalLahir": "1990-01-15",
+                    "jenisKelamin": "LAKI_LAKI",
+                    "telepon": "6281234567890",
+                },
             }
         },
     ),
 ):
-    _require_supabase()
-    try:
-        # Bangun dict update — hanya field yang tidak None
-        update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
-
-        if not update_data:
-            raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate")
-
-        response = (
-            supabase.table("patients")
-            .update(update_data)
-            .eq("phone_number", phone_number)
-            .execute()
-        )
-
-        if not response.data:
-            raise HTTPException(status_code=404, detail=f"Nomor {phone_number} tidak ditemukan")
-
-        return response.data[0]
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return await _proxy_smartclinic("PUT", f"{SMARTCLINIC_PATIENTS_PATH}/{id}", json=payload.model_dump(exclude_none=True))
 
 
 @router.delete(
-    "/{phone_number}",
-    summary="Hapus nomor pasien",
+    "/{id}",
+    summary="Hapus data pasien",
     responses={
         200: {
             "description": "Pasien berhasil dihapus",
-            "content": {"application/json": {"example": {"status": "ok", "message": "Nomor 6281234567890 berhasil dihapus"}}},
+            "content": {"application/json": {"example": {"status": "ok", "message": "Pasien berhasil dihapus"}}},
         },
         404: {
             "description": "Pasien tidak ditemukan",
@@ -180,19 +224,5 @@ def update_patient(
         },
     },
 )
-def delete_patient(phone_number: str = Path(..., description="Nomor HP pasien yang akan dihapus", examples=["6281234567890"])):
-    _require_supabase()
-    try:
-        response = (
-            supabase.table("patients")
-            .delete()
-            .eq("phone_number", phone_number)
-            .execute()
-        )
-        if not response.data:
-            raise HTTPException(status_code=404, detail=f"Nomor {phone_number} tidak ditemukan")
-        return {"status": "ok", "message": f"Nomor {phone_number} berhasil dihapus"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def delete_patient(id: str = Path(..., description="ID pasien")):
+    return await _proxy_smartclinic("DELETE", f"{SMARTCLINIC_PATIENTS_PATH}/{id}")

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Body, HTTPException
 
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult
-from App.helpers import save_to_supabase, _require_supabase
+from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number
 from App.queue_manager import fonnte_queue
 
 router = APIRouter(prefix="/api/send", tags=["Send"])
@@ -86,13 +86,14 @@ def send_message(
     )
 ):
     try:
+        target = normalize_phone_number(payload.target)
         if payload.attachment_url:
             # Kirim via whatsapp-web.js (attachment) 
             WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
             response = requests.post(
                 f"{WA_SERVICE_URL}/send-attachment",
                 json={
-                    "target": payload.target,
+                    "target": target,
                     "message": payload.message,
                     "attachment_url": payload.attachment_url,
                     "filename": payload.filename,
@@ -103,12 +104,12 @@ def send_message(
             source = "wa-service"
         else:
             # Kirim via Fonnte (teks biasa) 
-            fonnte_queue.add_to_queue(payload.target, payload.message)
+            fonnte_queue.add_to_queue(target, payload.message)
             source = "manual"
 
-        save_to_supabase(payload.target, payload.message, direction="outbound", source=source)
-        print(f"[SEND] {source} → {payload.target}: {payload.message[:60]}...")
-        return {"status": "ok", "message": f"Pesan untuk {payload.target} masuk antrian"}
+        save_to_supabase(target, payload.message, direction="outbound", source=source)
+        print(f"[SEND] {source} → {target}: {payload.message[:60]}...")
+        return {"status": "ok", "message": f"Pesan untuk {target} masuk antrian"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -155,7 +156,7 @@ def broadcast_message(
 ):
     _require_supabase()
     try:
-        response = supabase.table("patients").select("phone_number").execute()
+        response = supabase.table("patients").select("telepon").execute()
         patients = response.data
 
         if not patients:
@@ -168,7 +169,7 @@ def broadcast_message(
         recipients = []
 
         for patient in patients:
-            number = patient.get("phone_number")
+            number = normalize_phone_number(patient.get("telepon", ""))
             if not number:
                 continue
 

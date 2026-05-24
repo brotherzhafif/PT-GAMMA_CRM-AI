@@ -19,6 +19,7 @@ from App.helpers import (
     set_session_state,
     is_patient_registered,
     upsert_patient,
+    normalize_phone_number,
     query_rasa,
     is_handoff_keyword,
     increment_fallback,
@@ -104,7 +105,7 @@ def webhook(
     )
 ):
     try:
-        no_hp = payload.sender
+        no_hp = normalize_phone_number(payload.sender)
         input_pesan = payload.message.strip()
         waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
