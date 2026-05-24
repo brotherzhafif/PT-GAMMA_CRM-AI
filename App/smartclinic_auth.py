@@ -60,13 +60,25 @@ def _is_token_valid(cache: dict) -> bool:
 
 
 def get_smartclinic_token_status() -> dict:
-    """Baca status token cache tanpa memicu login ulang."""
+    """Baca status token cache dan refresh otomatis jika token sudah kedaluwarsa."""
     cache = _load_token_cache()
     access_token = cache.get("access_token")
     expires_at = cache.get("expires_at")
     cached_at = cache.get("cached_at")
 
     valid = _is_token_valid(cache)
+    if not valid and SMARTCLINIC_EMAIL and SMARTCLINIC_PASSWORD:
+        try:
+            get_smartclinic_token_sync()
+            cache = _load_token_cache()
+            access_token = cache.get("access_token")
+            expires_at = cache.get("expires_at")
+            cached_at = cache.get("cached_at")
+            valid = _is_token_valid(cache)
+        except Exception:
+            # Biarkan status turun ke expired/missing jika login ulang gagal.
+            pass
+
     status = "valid" if valid else ("expired" if access_token else "missing")
 
     token_preview = None
