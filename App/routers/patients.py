@@ -1,6 +1,6 @@
 # ======================================================
 # SmartClinic CRM AI — routers/patients.py
-# Endpoint: /api/v1/patients
+# Endpoint: /api/patients
 #
 # Last Change   :   25 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover - fallback only if helper is unavailable
         raise RuntimeError("get_smartclinic_token() is not available")
 
 
-router = APIRouter(prefix="/api/v1/patients", tags=["Patients"])
+router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
 SMARTCLINIC_PATIENTS_PATH = "/patients"
 

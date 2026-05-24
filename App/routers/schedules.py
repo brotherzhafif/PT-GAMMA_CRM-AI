@@ -1,6 +1,6 @@
 # ======================================================
 # SmartClinic CRM AI — routers/schedules.py
-# Endpoint: /api/v1/schedules
+# Endpoint: /api/schedules
 #
 # Last Change   :   25 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
@@ -15,7 +15,7 @@ from App.config import SMARTCLINIC_BASE_URL
 from App.smartclinic_auth import get_smartclinic_token
 
 
-router = APIRouter(prefix="/api/v1/schedules", tags=["Schedules"])
+router = APIRouter(prefix="/api/schedules", tags=["Schedules"])
 
 SMARTCLINIC_SCHEDULES_PATH = "/schedules"
 
