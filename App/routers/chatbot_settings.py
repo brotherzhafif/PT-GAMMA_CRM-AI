@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -56,7 +59,7 @@ def _chatbot_settings_row(record: dict) -> dict:
     }
 
 
-def _get_single_settings_row() -> dict | None:
+def _get_single_settings_row() -> Optional[dict] | None:
     _require_supabase()
     response = supabase.table("chatbot_settings").select(_chatbot_settings_columns()).order("created_at", desc=False).limit(1).execute()
     if not response.data:
