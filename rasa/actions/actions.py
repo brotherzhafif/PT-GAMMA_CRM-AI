@@ -9,7 +9,6 @@ Handles:
   - Booking Flow (Pasien Baru & Lama)
 """
 
-import os
 import re
 import requests
 from datetime import datetime, timedelta
@@ -19,48 +18,20 @@ from rasa_sdk import Action, Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction
 
-# ── SmartClinic API Configuration ─────────────────────────────────────────────
-SMARTCLINIC_BASE_URL = os.getenv("SMARTCLINIC_BASE_URL", "https://smartclinic-rekam-medis.onrender.com/api/v1")
-SMARTCLINIC_EMAIL    = os.getenv("SMARTCLINIC_EMAIL", "")
-SMARTCLINIC_PASSWORD = os.getenv("SMARTCLINIC_PASSWORD", "")
-
-# Token cache (untuk future auto-refresh)
-_token_cache = {
-    "access_token": None,
-    "expires_at": None,
-}
+from App.config import SMARTCLINIC_BASE_URL
+from App.smartclinic_auth import get_smartclinic_token_sync
 
 
 # ==============================================
 # RASA ACTIONS 
 # ==============================================
 
-# Action: Get Access to RME API and Token
 def get_access_token() -> str | None:
-    env_token = os.getenv("SMARTCLINIC_ACCESS_TOKEN", "").strip()
-    if env_token:
-        return env_token
-
-    if _token_cache["access_token"] and _token_cache["expires_at"]:
-        if datetime.now() < _token_cache["expires_at"]:
-            return _token_cache["access_token"]
-
     try:
-        resp = requests.post(
-            f"{SMARTCLINIC_BASE_URL}/auth/login",
-            json={"email": SMARTCLINIC_EMAIL, "password": SMARTCLINIC_PASSWORD},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        token = data.get("data", {}).get("accessToken") or data.get("accessToken")
-        if token:
-            _token_cache["access_token"] = token
-            _token_cache["expires_at"] = datetime.now() + timedelta(minutes=15)
-            return token
+        return get_smartclinic_token_sync()
     except Exception as e:
         print(f"[SmartClinic] ERROR saat login: {e}")
-    return None
+        return None
 
 def api_get(endpoint: str, params: dict = None) -> dict | None:
     """Make authenticated GET request to SmartClinic API."""

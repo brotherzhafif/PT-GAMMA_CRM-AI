@@ -18,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - fallback only if helper is unavailable
     from App.config import SMARTCLINIC_BASE_URL
 
-    def get_smartclinic_token() -> str:
+    async def get_smartclinic_token() -> str:
         raise RuntimeError("get_smartclinic_token() is not available")
 
 
@@ -53,7 +53,7 @@ async def _proxy_smartclinic(
     params: Optional[list[tuple[str, str]]] = None,
     json: Optional[dict[str, Any]] = None,
 ) -> Response:
-    token = get_smartclinic_token()
+    token = await get_smartclinic_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:

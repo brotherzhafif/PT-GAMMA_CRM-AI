@@ -9,7 +9,6 @@
 import json
 import os
 import re
-import requests
 from datetime import datetime
 from typing import Optional
 from fastapi import HTTPException
@@ -22,6 +21,7 @@ from App.config import (
     RASA_CONFIDENCE_THRESHOLD,
     HANDOFF_KEYWORDS,
 )
+from App.smartclinic_auth import get_smartclinic_token
 
 
 # Supabase 
