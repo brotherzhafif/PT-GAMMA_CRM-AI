@@ -38,48 +38,65 @@ WhatsApp (Patient)
 
 ## 📦 Modules & Major Components
 
-Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode (file referensi ada di paren):
+Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
-- FastAPI router (entrypoint)
-     - File: `App/app.py` — inisialisasi FastAPI, daftarkan semua router, dan start background scheduler.
-     - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan. Untuk eksplorasi interaktif gunakan: https://ai-crm.brotherzhafif.my.id/docs
+- **FastAPI router (entrypoint)**
+  - File: `App/app.py` — inisialisasi FastAPI, daftarkan semua router, dan start background scheduler.
+  - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan: https://ai-crm.brotherzhafif.my.id/docs
 
-- Routers (lokasi: `App/routers/`)
-     - `webhook.py` — `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte). [App/routers/webhook.py](App/routers/webhook.py#L1)
-     - `patients.py` — CRUD pasien (`/api/patients`). [App/routers/patients.py](App/routers/patients.py#L1)
-     - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`), tampil di grup OpenAPI `Unified Chat`. [App/routers/messages.py](App/routers/messages.py#L1)
-     - `send.py` — kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`). [App/routers/send.py](App/routers/send.py#L1)
-     - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`), tampil di grup OpenAPI `Unified Chat`. [App/routers/handoff.py](App/routers/handoff.py#L1)
-     - `wa.py` — helper endpoints menuju wa-service (status, qr-stream). [App/routers/wa.py](App/routers/wa.py#L1)
-     - `campaign.py` — marketing/campaigns (`/api/marketing/campaigns` prefix). [App/routers/campaign.py](App/routers/campaign.py#L1)
+- **Routers** (lokasi: `App/routers/`)
+  - `webhook.py` — `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte).
+  - `patients.py` — Proxy CRUD pasien ke SmartClinic RME API (`/api/v1/patients`). Setelah create pasien, otomatis insert mapping ke tabel Supabase `patients`. Includes endpoint `GET /api/v1/patients/by-phone` untuk AI agent lookup pasienId by nomor HP.
+  - `schedules.py` — Proxy jadwal dokter ke SmartClinic RME API (`/api/v1/schedules`, `/api/v1/schedules/weekly`, `/api/v1/schedules/slots`).
+  - `appointments.py` — Proxy janji temu & antrian ke SmartClinic RME API. Flow booking: lookup `rme_patient_id` by `phone_number` dari Supabase → hit `POST /api/v1/queues/appointments`. Includes `GET /api/v1/queues` untuk board antrian perawat/dokter.
+  - `chatbot_settings.py` — Konfigurasi AI chatbot (`GET /api/v1/chatbot-settings`, `PUT /api/v1/chatbot-settings`). Data disimpan di tabel Supabase `chatbot_settings`.
+  - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`), tampil di grup OpenAPI `Unified Chat`.
+  - `send.py` — kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`).
+  - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`), tampil di grup OpenAPI `Unified Chat`.
+  - `campaign.py` — marketing/campaigns (`/api/marketing/campaigns` prefix).
+  - `status.py` — helper endpoints menuju wa-service (status, qr-stream).
 
-- Rasa NLP (lokasi: `rasa/`)
-     - Framework: Rasa (use the action server for custom actions in `rasa/actions/actions.py`).
-     - Confidence threshold dan trusted intents: Rasa digunakan untuk intent terstruktur; trusted intents (handled directly) mencakup greetings, scheduling queries, simple FAQs, dan booking/rating intents.
+- **SmartClinic RME Integration** (lokasi: `App/smartclinic/`)
+  - Semua request ke SmartClinic RME menggunakan Bearer token dari `get_smartclinic_token()`.
+  - Token di-fetch via login otomatis menggunakan kredensial di `.env` (`SMARTCLINIC_EMAIL`, `SMARTCLINIC_PASSWORD`).
+  - Seluruh request dikirim sebagai role **ADMIN**.
 
-- Groq LLM (lokasi: `LLM/groq_service.py`)
-     - Digunakan sebagai fallback dan untuk teks kontekstual/keluhan.
-     - Roles: `default` (informasi klinik) dan `triage` (keluhan kesehatan — dipicu oleh keyword seperti `sakit`, `demam`, `nyeri`).
-     - Chat memory: 5 percakapan terakhir per nomor disimpan sebagai local JSON di `chat_history/` dan digunakan untuk konteks LLM.
+- **Rasa NLP** (lokasi: `rasa/`)
+  - Framework: Rasa — custom actions di `rasa/actions/actions.py`.
+  - Trusted intents (handled directly): greetings, scheduling queries, simple FAQs, booking/rating intents.
 
-- Handoff manager (`App/handoff_manager.py`)
-     - Mengatur state handoff per nomor, timeout otomatis, dan helper untuk dashboard/admin.
-     - Trigger: keyword oleh pasien atau auto-handoff setelah Groq fallback berulang.
-     - Default timeout bisa disesuaikan via env var `HANDOFF_TIMEOUT_MINUTES`.
+- **Groq LLM** (lokasi: `LLM/groq_service.py`)
+  - Fallback untuk teks kontekstual/keluhan.
+  - Roles: `default` (informasi klinik) dan `triage` (keluhan kesehatan — dipicu keyword seperti `sakit`, `demam`, `nyeri`).
+  - Chat memory: 5 percakapan terakhir per nomor di `chat_history/`.
 
-- Queue manager (`App/queue_manager.py`)
-     - Menangani antrean pengiriman ke Fonnte dengan delay acak (3–7 detik) untuk mensimulasikan pengetikan dan mengurangi risiko pemblokiran.
+- **Handoff manager** (`App/handoff_manager.py`)
+  - State handoff per nomor, timeout otomatis, helper untuk dashboard/admin.
+  - Default timeout via env var `HANDOFF_TIMEOUT_MINUTES`.
 
-- Campaign scheduler (`App/campaign_scheduler.py`)
-     - Background worker yang memicu campaign terjadwal ke tabel `campaigns` dan memasukkannya ke queue untuk dikirim.
+- **Queue manager** (`App/queue_manager.py`)
+  - Antrean pengiriman ke Fonnte dengan delay acak (3–7 detik).
 
-- Persistence & helpers
-     - Supabase client/config di `App/config.py` dan helper functions di `App/helpers.py` (simpan ke DB, upsert pasien, query Rasa, dsb).
-     - Local state folders: `chat_history/`, `chat_state/`, `handoff_state/` untuk menyimpan JSON state per nomor.
+- **Campaign scheduler** (`App/campaign_scheduler.py`)
+  - Background worker untuk campaign terjadwal dari tabel `campaigns`.
+
+- **Persistence & helpers**
+  - Supabase client/config di `App/config.py`, helper functions di `App/helpers.py`.
+  - Local state: `chat_history/`, `chat_state/`, `handoff_state/`.
 
 ---
 
-Jika ingin file-by-file ringkasan (contoh: semua endpoint di tiap router dengan contoh request/response), saya bisa generate halaman dokumentasi Markdown otomatis dari decorator `responses`/`Body(..., examples=...)` di setiap router — beri tahu kalau mau saya generate itu.
+## 🗄 Database (Supabase)
+
+### Tabel yang digunakan
+
+| Tabel | Keterangan |
+|-------|------------|
+| `patients` | Mapping pasien — `id` (auto), `rme_patient_id` (UUID dari SmartClinic), `phone_number`, `name`, `created_at`, `is_handoff` |
+| `messages` | Semua pesan inbound/outbound |
+| `campaigns` | Data campaign marketing |
+| `chatbot_settings` | Konfigurasi AI chatbot (single row) — `ai_name`, `primary_language`, `conversation_tone`, `handoff_threshold`, `handoff_message`, `ai_badge_enabled` |
+
 
 ## 🛠 Tech Stack
 
@@ -91,6 +108,7 @@ Jika ingin file-by-file ringkasan (contoh: semua endpoint di tiap router dengan 
 | LLM              | Groq Cloud API (Llama 3)         |
 | Database         | Supabase (PostgreSQL)            |
 | WhatsApp Gateway | Fonnte API                       |
+| RME Integration  | SmartClinic API                  |
 | Containerization | Docker + Docker Compose          |
 | Tunnel           | Cloudflare Tunnel                |
 | CI/CD            | GitHub Actions                   |
@@ -102,7 +120,7 @@ Jika ingin file-by-file ringkasan (contoh: semua endpoint di tiap router dengan 
 
 ```
 smartclinic/
-├── app.py                          # FastAPI init + include_router
+├── app.py
 ├── App/
 │   ├── __init__.py
 │   ├── config.py                   # Semua konstanta & env variables
@@ -110,29 +128,37 @@ smartclinic/
 │   ├── helpers.py                  # Helper functions (Supabase, JSON, Rasa, dll)
 │   ├── handoff_manager.py          # State handoff + auto timeout logic
 │   ├── queue_manager.py            # Fonnte message queue dengan delay
+│   ├── smartclinic/
+│   │   ├── __init__.py
+│   │   └── auth.py                 # get_smartclinic_token() — auto login & token cache
 │   └── routers/
 │       ├── __init__.py
 │       ├── webhook.py              # GET / + POST /webhook
-│       ├── patients.py             # /api/patients
+│       ├── patients.py             # /api/v1/patients + /api/v1/patients/by-phone
+│       ├── schedules.py            # /api/v1/schedules + /weekly + /slots
+│       ├── appointments.py         # /api/v1/queues/appointments + /api/v1/queues
+│       ├── chatbot_settings.py     # /api/v1/chatbot-settings
 │       ├── messages.py             # /api/messages
 │       ├── send.py                 # /api/send + /api/send/broadcast
-│       └── handoff.py              # /api/handoff
+│       ├── handoff.py              # /api/handoff
+│       ├── campaign.py             # /api/marketing/campaigns
+│       └── wa.py                   # wa-service helpers
 ├── LLM/
-│   ├── groq_service.py             # Groq LLM integration
+│   ├── groq_service.py
 │   └── requirements.txt
 ├── rasa/
 │   ├── actions/
-│   │   └── actions.py              # Custom Rasa actions
-│   ├── data/                       # NLU training data & stories
-│   ├── models/                     # Trained Rasa models
+│   │   └── actions.py
+│   ├── data/
+│   ├── models/
 │   └── config.yml
-├── chat_history/                   # Local JSON chat memory (per nomor)
-├── chat_state/                     # Onboarding state (per nomor)
-├── handoff_state/                  # Handoff state (per nomor)
+├── chat_history/
+├── chat_state/
+├── handoff_state/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml              # GitHub Actions CI/CD
-├── supabase_setup.sql              # Database setup script
+│       └── deploy.yml
+├── supabase_setup.sql
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
@@ -142,8 +168,6 @@ smartclinic/
 ---
 
 ## ⚙️ Environment Variables
-
-Buat file `.env` di root folder:
 
 ```env
 # Groq LLM
@@ -162,11 +186,10 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 # Handoff timeout (opsional, default: 15 menit)
 HANDOFF_TIMEOUT_MINUTES=15
 
-# RME API Credentials
+# SmartClinic RME API
 SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis.onrender.com/api/v1
-SMARTCLINIC_EMAIL=AI_RME_email_credentials
-SMARTCLINIC_PASSWORD=AI_RME_password_credentials
-SMARTCLINIC_ACCESS_TOKEN=your_RME_access_token_from_login
+SMARTCLINIC_EMAIL=your_rme_email
+SMARTCLINIC_PASSWORD=your_rme_password
 ```
 
 ---
@@ -200,36 +223,6 @@ Services yang berjalan:
 
 ---
 
-### Rasa — Local Development
-
-```bash
-pip install rasa==3.6.15
-cd rasa && rasa train
-rasa run actions
-rasa shell
-```
-
-### Train Rasa via Docker
-
-```bash
-docker run --rm \
-  -v $(pwd)/rasa:/app \
-  rasa/rasa:3.6.15-full train
-```
-
----
-
-## 🗄 Database Setup (Supabase)
-
-Jalankan `supabase_setup.sql` di **Supabase Dashboard → SQL Editor**. Script ini membuat:
-
-- Tabel `patients` — nomor & nama pasien (unique by phone_number)
-- Tabel `messages` — semua pesan inbound/outbound
-- Function `get_latest_messages()` — RPC untuk sidebar CRM
-- Index & Row Level Security
-
----
-
 ## 🔄 CI/CD
 
 Setiap push ke `main` otomatis deploy ke VPS via GitHub Actions.
@@ -244,4 +237,4 @@ Setiap push ke `main` otomatis deploy ke VPS via GitHub Actions.
 | `VPS_APP_DIR` | Path project di VPS (`/home/ubuntu/smartclinic`) |
 | `ENV_FILE`    | Seluruh isi `.env`                               |
 
-Untuk update env (misal rotate Fonnte token): update secret `ENV_FILE` di GitHub → **Actions → Deploy to VPS → Run workflow**.
+Untuk update env: update secret `ENV_FILE` di GitHub → **Actions → Deploy to VPS → Run workflow**.
