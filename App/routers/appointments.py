@@ -72,8 +72,12 @@ async def _proxy_smartclinic(
         },
     },
 )
-async def get_queues(request: Request):
-    tanggal = request.query_params.get("tanggal")
+async def get_queues(
+    tanggal: str,
+    dokterId: Optional[str] = None,
+    status: Optional[str] = None,
+    request: Request = None,
+):
     if not tanggal:
         raise HTTPException(status_code=422, detail="tanggal wajib diisi")
 

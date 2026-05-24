@@ -66,7 +66,7 @@ async def _proxy_smartclinic(
         },
     },
 )
-async def get_all_schedules(request: Request):
+async def get_all_schedules(dokterId: Optional[str] = None, request: Request = None):
     query_params = list(request.query_params.multi_items())
     return await _proxy_smartclinic("GET", SMARTCLINIC_SCHEDULES_PATH, params=query_params)
 
@@ -86,7 +86,12 @@ async def get_all_schedules(request: Request):
         },
     },
 )
-async def get_weekly_schedules(request: Request):
+async def get_weekly_schedules(
+    startDate: str,
+    endDate: Optional[str] = None,
+    dokterId: Optional[str] = None,
+    request: Request = None,
+):
     query_params = list(request.query_params.multi_items())
     return await _proxy_smartclinic("GET", f"{SMARTCLINIC_SCHEDULES_PATH}/weekly", params=query_params)
 
@@ -106,6 +111,6 @@ async def get_weekly_schedules(request: Request):
         },
     },
 )
-async def get_schedule_slots(request: Request):
+async def get_schedule_slots(tanggal: str, dokterId: Optional[str] = None, request: Request = None):
     query_params = list(request.query_params.multi_items())
     return await _proxy_smartclinic("GET", f"{SMARTCLINIC_SCHEDULES_PATH}/slots", params=query_params)
