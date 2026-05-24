@@ -6,7 +6,7 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -116,3 +116,29 @@ class HandoffSession(BaseModel):
     started_at: str
     last_admin_reply_at: Optional[str] = None
     timeout_at: str
+
+
+# Chatbot Settings
+
+class ChatbotSettingsRecord(BaseModel):
+    id: Optional[str] = Field(default=None)
+    ai_name: Optional[str] = Field(default=None)
+    primary_language: Optional[str] = Field(default=None)
+    conversation_tone: Optional[Literal["friendly", "professional", "caring"]] = Field(default=None)
+    handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100)
+    handoff_message: Optional[str] = Field(default=None)
+    ai_badge_enabled: Optional[bool] = Field(default=None)
+    created_at: Optional[str] = Field(default=None)
+    updated_at: Optional[str] = Field(default=None)
+
+
+class UpdateChatbotSettingsPayload(BaseModel):
+    ai_name: Optional[str] = Field(default=None, description="Nama AI")
+    primary_language: Optional[str] = Field(default=None, description="Bahasa utama percakapan")
+    conversation_tone: Optional[Literal["friendly", "professional", "caring"]] = Field(
+        default=None,
+        description="Nada percakapan",
+    )
+    handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100, description="Ambang handoff 0-100")
+    handoff_message: Optional[str] = Field(default=None, description="Pesan handoff")
+    ai_badge_enabled: Optional[bool] = Field(default=None, description="Tampilkan badge AI")
