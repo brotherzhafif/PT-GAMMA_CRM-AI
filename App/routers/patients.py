@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from App.config import supabase
 from App.helpers import normalize_phone_number
+from App.models import PatientPayload
 from App.smartclinic_auth import get_smartclinic_token
 
 
@@ -22,14 +23,6 @@ router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
 SMARTCLINIC_BASE_URL = "https://smartclinic-rekam-medis.onrender.com"
 SMARTCLINIC_PATIENTS_PATH = "/api/v1/patients"
-
-class PatientPayload(BaseModel):
-    nik: str = Field(..., description="NIK pasien")
-    namaLengkap: str = Field(..., description="Nama lengkap pasien")
-    tanggalLahir: str = Field(..., description="Tanggal lahir pasien")
-    jenisKelamin: Literal["LAKI_LAKI", "PEREMPUAN"] = Field(..., description="Jenis kelamin pasien")
-    telepon: str = Field(..., description="Nomor telepon")
-
 
 PATIENT_EXAMPLE = {
     "id": "rme_patient_uuid_from_smartclinic",
@@ -65,19 +58,26 @@ async def _smartclinic_request(
         media_type=upstream.headers.get("content-type"),
     )
 
+def _build_patient_supabase_row(rme_patient_id: str, payload: PatientPayload) -> dict:
+    return {
+        "rme_patient_id": rme_patient_id,
+        "phone_number": normalize_phone_number(payload.telepon),
+        "name": payload.namaLengkap,
+    }
+
 
 def _upsert_patient_to_supabase(rme_patient_id: str, payload: PatientPayload) -> None:
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
 
     supabase.table("patients").upsert(
-        {
-            "rme_patient_id": rme_patient_id,
-            "phone_number": payload.telepon,
-            "name": payload.namaLengkap,
-        },
-        on_conflict="rme_patient_id",
+        _build_patient_supabase_row(rme_patient_id, payload),
+        on_conflict="phone_number",
     ).execute()
+
+
+async def _delete_patient_in_smartclinic(rme_patient_id: str) -> None:
+    await _smartclinic_request("DELETE", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
 @router.get(
@@ -138,22 +138,42 @@ async def create_patient(
         SMARTCLINIC_PATIENTS_PATH,
         json_body=payload.model_dump(exclude_none=True),
     )
-    if response.status_code < 400:
-        try:
-            upstream_payload = json.loads(response.body.decode("utf-8"))
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail="Respons SmartClinic tidak valid") from exc
+    if response.status_code >= 400:
+        return response
 
-        rme_patient_id = (upstream_payload.get("data") or {}).get("id") if isinstance(upstream_payload, dict) else None
-        if not rme_patient_id:
-            raise HTTPException(status_code=502, detail="SmartClinic tidak mengembalikan data.id")
+    try:
+        upstream_payload = json.loads(response.body.decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Respons SmartClinic tidak valid") from exc
 
+    rme_patient_id = (upstream_payload.get("data") or {}).get("id") if isinstance(upstream_payload, dict) else None
+    if not rme_patient_id:
+        raise HTTPException(status_code=502, detail="SmartClinic tidak mengembalikan data.id")
+
+    try:
+        _upsert_patient_to_supabase(rme_patient_id, payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        rollback_error = None
         try:
-            _upsert_patient_to_supabase(rme_patient_id, payload)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Gagal menyimpan mapping pasien ke Supabase: {exc}") from exc
+            await _delete_patient_in_smartclinic(rme_patient_id)
+        except Exception as rollback_exc:
+            rollback_error = rollback_exc
+
+        if rollback_error is not None:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Gagal menyimpan mapping pasien ke Supabase dan gagal rollback data RME: "
+                    f"{exc}; rollback: {rollback_error}"
+                ),
+            ) from exc
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gagal menyimpan mapping pasien ke Supabase, data RME sudah dihapus lagi: {exc}",
+        ) from exc
     return response
 
 
