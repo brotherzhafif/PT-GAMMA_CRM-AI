@@ -10,9 +10,11 @@ import json
 import os
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
+
+import httpx
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 from App.config import (
     supabase,
@@ -48,6 +50,31 @@ def _require_supabase():
             status_code=500,
             detail="Supabase belum dikonfigurasi. Cek SUPABASE_URL dan SUPABASE_ANON_KEY di .env",
         )
+
+
+async def proxy_smartclinic(
+    method: str,
+    base_url: str,
+    path: str,
+    *,
+    params: Optional[list[tuple[str, str]]] = None,
+    json: Optional[dict[str, Any]] = None,
+) -> Response:
+    """Proxy request ke SmartClinic dengan token auth yang sudah di-cache."""
+    token = await get_smartclinic_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
+        try:
+            upstream = await client.request(method, path, params=params, json=json, headers=headers)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type"),
+    )
 
 
 def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "system"):

@@ -34,13 +34,14 @@ class ChatRecord(BaseModel):
     created_at: Optional[str] = Field(default=None)
 
 
-# # Patients 
+# Patients 
 
-# class PatientRecord(BaseModel):
-#     id: Optional[str] = Field(default=None)
-#     phone_number: str = Field(..., description="Nomor WhatsApp pasien", examples=["6281234567890"])
-#     name: Optional[str] = Field(default=None, description="Nama pasien")
-#     created_at: Optional[str] = Field(default=None)
+class PatientPayload(BaseModel):
+    nik: str = Field(..., description="NIK pasien")
+    namaLengkap: str = Field(..., description="Nama lengkap pasien")
+    tanggalLahir: str = Field(..., description="Tanggal lahir pasien")
+    jenisKelamin: Literal["LAKI_LAKI", "PEREMPUAN"] = Field(..., description="Jenis kelamin pasien")
+    telepon: str = Field(..., description="Nomor telepon")
 
 
 # class SavePatientPayload(BaseModel):

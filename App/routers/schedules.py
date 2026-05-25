@@ -8,11 +8,10 @@
 
 from typing import Optional
 
-import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 
 from App.config import SMARTCLINIC_BASE_URL
-from App.smartclinic_auth import get_smartclinic_token
+from App.helpers import proxy_smartclinic
 
 
 router = APIRouter(prefix="/api/schedules", tags=["Schedules"])
@@ -27,28 +26,6 @@ SCHEDULE_EXAMPLE = {
     "jamSelesai": "12:00",
     "kapasitasMaks": 20,
 }
-
-
-async def _proxy_smartclinic(
-    method: str,
-    path: str,
-    *,
-    params: Optional[list[tuple[str, str]]] = None,
-) -> Response:
-    token = await get_smartclinic_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
-        try:
-            upstream = await client.request(method, path, params=params, headers=headers)
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
-
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type"),
-    )
 
 
 @router.get(
@@ -68,7 +45,7 @@ async def _proxy_smartclinic(
 )
 async def get_all_schedules(dokterId: Optional[str] = None, request: Request = None):
     query_params = list(request.query_params.multi_items())
-    return await _proxy_smartclinic("GET", SMARTCLINIC_SCHEDULES_PATH, params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_SCHEDULES_PATH, params=query_params)
 
 
 @router.get(
@@ -93,7 +70,7 @@ async def get_weekly_schedules(
     request: Request = None,
 ):
     query_params = list(request.query_params.multi_items())
-    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_SCHEDULES_PATH}/weekly", params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_SCHEDULES_PATH}/weekly", params=query_params)
 
 
 @router.get(
@@ -113,4 +90,4 @@ async def get_weekly_schedules(
 )
 async def get_schedule_slots(tanggal: str, dokterId: Optional[str] = None, request: Request = None):
     query_params = list(request.query_params.multi_items())
-    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_SCHEDULES_PATH}/slots", params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_SCHEDULES_PATH}/slots", params=query_params)
