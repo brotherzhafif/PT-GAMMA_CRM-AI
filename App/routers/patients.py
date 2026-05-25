@@ -184,7 +184,7 @@ async def create_patient(
         },
     },
 )
-def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasien")):
+async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasien")):
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
 
@@ -204,7 +204,7 @@ def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasi
     if not rme_patient_id:
         raise HTTPException(status_code=404, detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan")
 
-    return _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
 @router.get(
