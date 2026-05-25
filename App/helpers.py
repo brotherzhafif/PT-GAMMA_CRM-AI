@@ -106,6 +106,7 @@ def upsert_patient(
       3. Simpan phone_number + name + rme_patient_id ke Supabase
     """
     from App.config import SMARTCLINIC_BASE_URL
+    from App.smartclinic_auth import get_smartclinic_token_sync
 
     normalized_phone = normalize_phone_number(no_hp)
 
@@ -118,12 +119,19 @@ def upsert_patient(
         "telepon": normalized_phone,
     }
     
+    # Dapatkan token secara sinkron
+    token = get_smartclinic_token_sync()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    
     # POST ke endpoint patient SmartClinic
     rme_patient_id = None
     try:
         resp = requests.post(
             f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             json=patient_body,
             timeout=15,
         )
@@ -136,15 +144,16 @@ def upsert_patient(
             get_resp = requests.get(
                 f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
                 params={"nik": nik},
+                headers={"Authorization": f"Bearer {token}"},
                 timeout=15,
             )
             if get_resp.status_code < 400:
                 get_data = get_resp.json()
                 data = get_data.get("data", get_data)
                 if isinstance(data, list) and len(data) > 0:
-                    rme_patient_id = data[0].get("id")
+                     rme_patient_id = data[0].get("id")
                 elif isinstance(data, dict):
-                    rme_patient_id = data.get("id")
+                     rme_patient_id = data.get("id")
                 print(f"[Patient] SmartClinic 409 — retrieved existing ID: {rme_patient_id}")
             else:
                 print(f"[Patient] SmartClinic 409 — GET failed: {get_resp.status_code}")
