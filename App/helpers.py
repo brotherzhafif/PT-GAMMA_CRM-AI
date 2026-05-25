@@ -64,18 +64,94 @@ def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "sy
     }).execute()
 
 
-def upsert_patient(no_hp: str, name: Optional[str] = None):
-    """Simpan atau update pasien di Supabase. Jika Supabase tidak ada, skip."""
-    if supabase is None:
-        print(f"[Patient] Skip upsert {no_hp} — Supabase belum dikonfigurasi.")
-        return
+def upsert_patient(
+    no_hp: str,
+    namaLengkap: Optional[str] = None,
+    nik: Optional[str] = None,
+    tanggalLahir: Optional[str] = None,
+    jenisKelamin: Optional[str] = None,
+):
+    """
+    Daftarkan pasien ke SmartClinic API, lalu simpan mapping ke Supabase.
+    Alur:
+      1. Susun body dari variabel yang sudah dipisah
+      2. POST ke /patients SmartClinic
+      3. Simpan phone_number + name + rme_patient_id ke Supabase
+    """
+    from App.config import SMARTCLINIC_BASE_URL
+
     normalized_phone = normalize_phone_number(no_hp)
+
+    # Susun req body sesuai format endpoint /patients (persis sama dengan format di API)
+    patient_body = {
+        "nik": nik or "",
+        "namaLengkap": namaLengkap or "",
+        "tanggalLahir": tanggalLahir or "",
+        "jenisKelamin": jenisKelamin or "LAKI_LAKI",
+        "telepon": normalized_phone,
+    }
+    
+    # POST ke endpoint patient SmartClinic
+    rme_patient_id = None
+    try:
+        resp = requests.post(
+            f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
+            headers={"Content-Type": "application/json"},
+            json=patient_body,
+            timeout=15,
+        )
+        if resp.status_code < 400:
+            resp_data = resp.json()
+            rme_patient_id = (resp_data.get("data") or {}).get("id")
+            print(f"[Patient] SmartClinic registered: {rme_patient_id}")
+        elif resp.status_code == 409:
+            # Pasien sudah ada — ambil ID via GET by NIK
+            get_resp = requests.get(
+                f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
+                params={"nik": nik},
+                timeout=15,
+            )
+            if get_resp.status_code < 400:
+                get_data = get_resp.json()
+                data = get_data.get("data", get_data)
+                if isinstance(data, list) and len(data) > 0:
+                    rme_patient_id = data[0].get("id")
+                elif isinstance(data, dict):
+                    rme_patient_id = data.get("id")
+                print(f"[Patient] SmartClinic 409 — retrieved existing ID: {rme_patient_id}")
+            else:
+                print(f"[Patient] SmartClinic 409 — GET failed: {get_resp.status_code}")
+        else:
+            print(f"[Patient] SmartClinic error {resp.status_code}: {resp.text}")
+    except Exception as e:
+        print(f"[Patient] Gagal POST ke SmartClinic: {e}")
+
+    # Simpan mapping ke Supabase
+    if supabase is None:
+        print(f"[Patient] Skip Supabase upsert — belum dikonfigurasi.")
+        return
+
+    sb_payload: dict = {"phone_number": normalized_phone}
+    if namaLengkap:
+        sb_payload["name"] = namaLengkap
+    if rme_patient_id:
+        sb_payload["rme_patient_id"] = rme_patient_id
+
     supabase.table("patients").upsert(
-        {"phone_number": normalized_phone, "name": name},
+        sb_payload,
         on_conflict="phone_number",
     ).execute()
-    label = f"nama: {name}" if name else "tanpa nama"
-    print(f"[Patient] Upsert {normalized_phone} ({label})")
+
+    parts = []
+    if namaLengkap:
+        parts.append(f"nama: {namaLengkap}")
+    if nik:
+        parts.append(f"nik: ***{nik[-4:]}")
+    if tanggalLahir:
+        parts.append(f"tglLahir: {tanggalLahir}")
+    if rme_patient_id:
+        parts.append(f"rmeId: {rme_patient_id}")
+    print(f"[Patient] Upsert {normalized_phone} ({', '.join(parts) if parts else 'tanpa data tambahan'})")
 
 
 def is_patient_registered(no_hp: str) -> bool:
@@ -137,15 +213,30 @@ def get_session_state(no_hp: str) -> Optional[str]:
         return None
 
 
-def set_session_state(no_hp: str, state: Optional[str]):
-    """Set atau hapus state sesi. Kirim state=None untuk clear."""
+def set_session_state(no_hp: str, state: Optional[str], data: Optional[dict] = None):
+    """Set atau hapus state sesi. Kirim state=None untuk clear. data adalah dict opsional untuk menyimpan data onboarding sementara."""
     file_path = os.path.join(STATE_DIR, f"{no_hp}.json")
     if state is None:
         if os.path.exists(file_path):
             os.remove(file_path)
         return
+    payload = {"state": state}
+    if data is not None:
+        payload["data"] = data
     with open(file_path, "w") as f:
-        json.dump({"state": state}, f)
+        json.dump(payload, f)
+
+
+def get_onboarding_data(no_hp: str) -> dict:
+    """Ambil data onboarding sementara dari file state. Return {} jika tidak ada."""
+    file_path = os.path.join(STATE_DIR, f"{no_hp}.json")
+    if not os.path.exists(file_path):
+        return {}
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f).get("data", {})
+    except Exception:
+        return {}
 
 
 # Rasa 

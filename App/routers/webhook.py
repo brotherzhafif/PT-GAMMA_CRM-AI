@@ -6,6 +6,7 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import re
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
@@ -17,6 +18,7 @@ from App.helpers import (
     get_chat_history_json,
     get_session_state,
     set_session_state,
+    get_onboarding_data,
     is_patient_registered,
     upsert_patient,
     normalize_phone_number,
@@ -122,42 +124,191 @@ def webhook(
         reply = ""
         source = "system"
 
-        #  Step 1: Onboarding (nomor baru) 
+        #  Step 1: Onboarding multi-step (nomor baru) 
+        SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
+
+        # ── Handle waiting_name ──
         if session_state == "waiting_name":
             nama = input_pesan.strip()
 
-            # Tolak jawaban yang terlalu pendek atau seperti bukan nama
-            SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
             if len(nama) < 2 or nama.lower() in SKIP_KEYWORDS:
-                # Simpan tanpa nama
-                upsert_patient(no_hp, name=None)
-                set_session_state(no_hp, None)
+                # Skip nama → lanjut tanya NIK
+                set_session_state(no_hp, "waiting_nik", data={})
                 reply = (
-                    "Oke, tidak apa-apa! Nomor kamu sudah kami simpan. "
-                    "Ada yang bisa kami bantu? 😊"
+                    "Oke, tidak apa-apa!\n\n"
+                    "Selanjutnya, silakan ketik *16 digit NIK* (Nomor Induk Kependudukan) kamu, "
+                    "atau ketik *skip* jika ingin melewati."
                 )
-                print(f"[Onboarding] {no_hp} skip nama → disimpan tanpa nama")
+                print(f"[Onboarding] {no_hp} skip nama → tanya NIK")
             else:
-                # Simpan dengan nama
-                upsert_patient(no_hp, name=nama)
-                set_session_state(no_hp, None)
+                # Simpan nama sementara → lanjut tanya NIK
+                set_session_state(no_hp, "waiting_nik", data={"namaLengkap": nama})
                 reply = (
-                    f"Terima kasih, *{nama}*! Data kamu sudah kami simpan. "
-                    f"Ada yang bisa kami bantu hari ini? 😊"
+                    f"Terima kasih, *{nama}*!\n\n"
+                    "Selanjutnya, silakan ketik *16 digit NIK* (Nomor Induk Kependudukan) kamu, "
+                    "atau ketik *skip* jika ingin melewati."
                 )
-                print(f"[Onboarding] {no_hp} → nama '{nama}' disimpan")
+                print(f"[Onboarding] {no_hp} → nama '{nama}' → tanya NIK")
 
             fonnte_queue.add_to_queue(no_hp, reply)
             save_chat_to_json(no_hp, input_pesan, reply, source=source)
             save_to_supabase(no_hp, reply, direction="outbound", source=source)
             return ChatResponse(status="ok", source=source, reply=reply)
 
+        # ── Handle waiting_nik ──
+        if session_state == "waiting_nik":
+            nik_input = input_pesan.strip()
+            onboarding_data = get_onboarding_data(no_hp)
+
+            if nik_input.lower() in SKIP_KEYWORDS:
+                set_session_state(no_hp, "waiting_dob", data=onboarding_data)
+                reply = (
+                    "Oke, dilewati.\n\n"
+                    "Selanjutnya, silakan masukkan *Tanggal Lahir* kamu dengan format *DD/MM/YYYY* "
+                    "(Contoh: 15/08/1995), atau ketik *skip*."
+                )
+                print(f"[Onboarding] {no_hp} skip NIK → tanya DOB")
+            else:
+                nik_digits = re.sub(r"\D", "", nik_input)
+                if len(nik_digits) != 16:
+                    reply = (
+                        "⚠️ NIK harus terdiri dari *16 digit angka*. "
+                        "Silakan cek kembali dan kirim ulang, atau ketik *skip* untuk melewati."
+                    )
+                    print(f"[Onboarding] {no_hp} → NIK invalid '{nik_input}'")
+                    fonnte_queue.add_to_queue(no_hp, reply)
+                    save_chat_to_json(no_hp, input_pesan, reply, source=source)
+                    save_to_supabase(no_hp, reply, direction="outbound", source=source)
+                    return ChatResponse(status="ok", source=source, reply=reply)
+
+                onboarding_data["nik"] = nik_digits
+                set_session_state(no_hp, "waiting_dob", data=onboarding_data)
+                reply = (
+                    "NIK valid! ✅\n\n"
+                    "Selanjutnya, silakan masukkan *Tanggal Lahir* kamu dengan format *DD/MM/YYYY* "
+                    "(Contoh: 15/08/1995), atau ketik *skip*."
+                )
+                print(f"[Onboarding] {no_hp} → NIK valid → tanya DOB")
+
+            fonnte_queue.add_to_queue(no_hp, reply)
+            save_chat_to_json(no_hp, input_pesan, reply, source=source)
+            save_to_supabase(no_hp, reply, direction="outbound", source=source)
+            return ChatResponse(status="ok", source=source, reply=reply)
+
+        # ── Handle waiting_dob ──
+        if session_state == "waiting_dob":
+            dob_input = input_pesan.strip()
+            onboarding_data = get_onboarding_data(no_hp)
+
+            if dob_input.lower() in SKIP_KEYWORDS:
+                set_session_state(no_hp, "waiting_gender", data=onboarding_data)
+                reply = (
+                    "Oke, dilewati.\n\n"
+                    "Terakhir, apa *jenis kelamin* kamu?\n"
+                    "Balas *Laki-laki* atau *Perempuan*, atau ketik *skip*."
+                )
+                print(f"[Onboarding] {no_hp} skip DOB → tanya Gender")
+            else:
+                match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", dob_input)
+                if not match:
+                    reply = (
+                        "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY* "
+                        "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati."
+                    )
+                    print(f"[Onboarding] {no_hp} → DOB invalid '{dob_input}'")
+                    fonnte_queue.add_to_queue(no_hp, reply)
+                    save_chat_to_json(no_hp, input_pesan, reply, source=source)
+                    save_to_supabase(no_hp, reply, direction="outbound", source=source)
+                    return ChatResponse(status="ok", source=source, reply=reply)
+
+                day, month, year = match.groups()
+                try:
+                    dob_date = datetime(int(year), int(month), int(day))
+                    tanggal_lahir = dob_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    reply = (
+                        "⚠️ Tanggal tidak valid. Gunakan format *DD/MM/YYYY* "
+                        "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati."
+                    )
+                    fonnte_queue.add_to_queue(no_hp, reply)
+                    save_chat_to_json(no_hp, input_pesan, reply, source=source)
+                    save_to_supabase(no_hp, reply, direction="outbound", source=source)
+                    return ChatResponse(status="ok", source=source, reply=reply)
+
+                onboarding_data["tanggalLahir"] = tanggal_lahir
+                set_session_state(no_hp, "waiting_gender", data=onboarding_data)
+                reply = (
+                    "Terima kasih! ✅\n\n"
+                    "Terakhir, apa *jenis kelamin* kamu?\n"
+                    "Balas *Laki-laki* atau *Perempuan*, atau ketik *skip*."
+                )
+                print(f"[Onboarding] {no_hp} → DOB '{tanggal_lahir}' → tanya Gender")
+
+            fonnte_queue.add_to_queue(no_hp, reply)
+            save_chat_to_json(no_hp, input_pesan, reply, source=source)
+            save_to_supabase(no_hp, reply, direction="outbound", source=source)
+            return ChatResponse(status="ok", source=source, reply=reply)
+
+        # ── Handle waiting_gender → selesai onboarding, simpan ke DB ──
+        if session_state == "waiting_gender":
+            gender_input = input_pesan.strip().lower()
+            onboarding_data = get_onboarding_data(no_hp)
+
+            LAKI_KEYWORDS = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
+            PEREMPUAN_KEYWORDS = {"perempuan", "wanita", "cewek", "cewe", "p", "pr", "female"}
+
+            if gender_input in SKIP_KEYWORDS:
+                pass  # Lanjut simpan tanpa jenisKelamin
+            elif gender_input in LAKI_KEYWORDS:
+                onboarding_data["jenisKelamin"] = "LAKI_LAKI"
+            elif gender_input in PEREMPUAN_KEYWORDS:
+                onboarding_data["jenisKelamin"] = "PEREMPUAN"
+            else:
+                reply = (
+                    "⚠️ Mohon balas dengan *Laki-laki* atau *Perempuan*, "
+                    "atau ketik *skip* untuk melewati."
+                )
+                print(f"[Onboarding] {no_hp} → Gender invalid '{gender_input}'")
+                fonnte_queue.add_to_queue(no_hp, reply)
+                save_chat_to_json(no_hp, input_pesan, reply, source=source)
+                save_to_supabase(no_hp, reply, direction="outbound", source=source)
+                return ChatResponse(status="ok", source=source, reply=reply)
+
+            # Selesai onboarding → POST ke SmartClinic + simpan ke Supabase
+            upsert_patient(
+                no_hp,
+                namaLengkap=onboarding_data.get("namaLengkap"),
+                nik=onboarding_data.get("nik"),
+                tanggalLahir=onboarding_data.get("tanggalLahir"),
+                jenisKelamin=onboarding_data.get("jenisKelamin"),
+            )
+            set_session_state(no_hp, None)
+
+            nama = onboarding_data.get("namaLengkap")
+            if nama:
+                reply = (
+                    f"Terima kasih, *{nama}*! Data diri kamu sudah lengkap tersimpan! "
+                    "Ada yang bisa kami bantu hari ini? 😊"
+                )
+            else:
+                reply = (
+                    "Terima kasih! Data diri kamu sudah tersimpan. "
+                    "Ada yang bisa kami bantu hari ini? 😊"
+                )
+            print(f"[Onboarding] {no_hp} selesai → data: {onboarding_data}")
+
+            fonnte_queue.add_to_queue(no_hp, reply)
+            save_chat_to_json(no_hp, input_pesan, reply, source=source)
+            save_to_supabase(no_hp, reply, direction="outbound", source=source)
+            return ChatResponse(status="ok", source=source, reply=reply)
+
+        # ── Trigger onboarding untuk nomor baru ──
         if not is_patient_registered(no_hp):
             set_session_state(no_hp, "waiting_name")
             reply = (
                 "Halo! Selamat datang di SmartClinic 👋\n\n"
-                "Sebelum mulai, boleh kami tahu nama kamu? "
-                "Ketik nama kamu, atau ketik *skip* jika tidak ingin memberikan nama."
+                "Sebelum mulai, boleh kami tahu nama lengkap kamu sesuai KTP? "
+                "Ketik nama kamu, atau ketik *skip* jika ingin melewati."
             )
             print(f"[Onboarding] Nomor baru {no_hp} → tanya nama")
             fonnte_queue.add_to_queue(no_hp, reply)

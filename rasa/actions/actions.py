@@ -9,6 +9,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama)
 """
 
+import os
 import re
 import requests
 from datetime import datetime, timedelta
@@ -18,8 +19,7 @@ from rasa_sdk import Action, Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction
 
-from App.config import SMARTCLINIC_BASE_URL
-from App.smartclinic_auth import get_smartclinic_token_sync
+from .smartclinic_auth import SMARTCLINIC_BASE_URL, get_smartclinic_token_sync
 
 
 # ==============================================
