@@ -8,12 +8,11 @@
 
 from typing import Optional
 
-import httpx
-from fastapi import APIRouter, Body, HTTPException, Request, Response
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from App.config import SMARTCLINIC_BASE_URL, supabase
-from App.helpers import get_smartclinic_token, normalize_phone_number
+from App.helpers import normalize_phone_number, proxy_smartclinic
 
 
 router = APIRouter(prefix="/api/appointment", tags=["Appointments"])
@@ -28,29 +27,6 @@ class CreateAppointmentPayload(BaseModel):
     catatan: Optional[str] = Field(default=None, description="Catatan kunjungan")
     jenisKunjunganBpjs: Optional[str] = Field(default=None, description="Jenis kunjungan BPJS")
     noRujukanFktp: Optional[str] = Field(default=None, description="Nomor rujukan FKTP")
-
-
-async def _proxy_smartclinic(
-    method: str,
-    path: str,
-    *,
-    params: Optional[list[tuple[str, str]]] = None,
-    json: Optional[dict] = None,
-) -> Response:
-    token = await get_smartclinic_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
-        try:
-            upstream = await client.request(method, path, params=params, json=json, headers=headers)
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
-
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type"),
-    )
 
 
 @router.get(
@@ -82,7 +58,7 @@ async def get_queues(
         raise HTTPException(status_code=422, detail="tanggal wajib diisi")
 
     query_params = list(request.query_params.multi_items())
-    return await _proxy_smartclinic("GET", "/queues", params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=query_params)
 
 
 def _lookup_rme_patient_id(phone_number: str) -> str:
@@ -155,8 +131,9 @@ async def create_appointment(
         "noRujukanFktp": payload.noRujukanFktp,
     }
 
-    return await _proxy_smartclinic(
+    return await proxy_smartclinic(
         "POST",
+        SMARTCLINIC_BASE_URL,
         SMARTCLINIC_APPOINTMENTS_PATH,
         params=query_params,
         json=body,

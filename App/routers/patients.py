@@ -7,21 +7,20 @@
 # ======================================================
 
 import json
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
-import httpx
-from fastapi import APIRouter, Body, HTTPException, Path, Query, Request, Response
+from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
 try:
     from App.config import SMARTCLINIC_BASE_URL, supabase
-    from App.helpers import get_smartclinic_token, normalize_phone_number
+    from App.helpers import normalize_phone_number, proxy_smartclinic
 except ImportError:  # pragma: no cover - fallback only if helper is unavailable
     from App.config import SMARTCLINIC_BASE_URL, supabase
     from App.helpers import normalize_phone_number
 
-    async def get_smartclinic_token() -> str:
-        raise RuntimeError("get_smartclinic_token() is not available")
+    async def proxy_smartclinic(*args, **kwargs):
+        raise RuntimeError("proxy_smartclinic() is not available")
 
 
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
@@ -46,29 +45,6 @@ PATIENT_EXAMPLE = {
 }
 
 PATIENT_ERROR_EXAMPLE = {"detail": "Pasien tidak ditemukan"}
-
-
-async def _proxy_smartclinic(
-    method: str,
-    path: str,
-    *,
-    params: Optional[list[tuple[str, str]]] = None,
-    json: Optional[dict[str, Any]] = None,
-) -> Response:
-    token = await get_smartclinic_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
-        try:
-            upstream = await client.request(method, path, params=params, json=json, headers=headers)
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
-
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type"),
-    )
 
 
 def _sync_patient_to_supabase(payload: PatientPayload) -> None:
@@ -103,7 +79,7 @@ async def get_all_patients(request: Request):
     query_params = list(request.query_params.multi_items())
     if not query_params:
         query_params = [("page", "1"), ("limit", "100")]
-    return await _proxy_smartclinic("GET", SMARTCLINIC_PATIENTS_PATH, params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, params=query_params)
 
 
 @router.post(
@@ -137,7 +113,7 @@ async def create_patient(
         },
     )
 ):
-    response = await _proxy_smartclinic("POST", SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
+    response = await proxy_smartclinic("POST", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, json=payload.model_dump(exclude_none=True))
     if response.status_code < 400:
         if supabase is None:
             raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
@@ -231,7 +207,7 @@ def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasi
     },
 )
 async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")):
-    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
 
 
 @router.get(
@@ -253,7 +229,7 @@ async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")
     },
 )
 async def get_patient_by_id(id: str = Path(..., description="ID pasien")):
-    return await _proxy_smartclinic("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{id}")
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{id}")
 
 
 @router.put(
@@ -292,7 +268,7 @@ async def update_patient(
         },
     ),
 ):
-    response = await _proxy_smartclinic("PUT", f"{SMARTCLINIC_PATIENTS_PATH}/{id}", json=payload.model_dump(exclude_none=True))
+    response = await proxy_smartclinic("PUT", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{id}", json=payload.model_dump(exclude_none=True))
     if response.status_code < 400:
         try:
             _sync_patient_to_supabase(payload)
@@ -320,4 +296,4 @@ async def update_patient(
     },
 )
 async def delete_patient(id: str = Path(..., description="ID pasien")):
-    return await _proxy_smartclinic("DELETE", f"{SMARTCLINIC_PATIENTS_PATH}/{id}")
+    return await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{id}")
