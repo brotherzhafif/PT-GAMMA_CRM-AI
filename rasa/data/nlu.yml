@@ -1,3 +1,4 @@
+# Log Last Change: 26/05/2026
 version: "3.1"
 
 nlu:
@@ -33,9 +34,6 @@ nlu:
       - p min
       - permisi kak
       - prmisi
-      - woi
-      - wei
-      - weh
       - ass
       - assalamualaikum wr wb
       - asskum
@@ -46,65 +44,25 @@ nlu:
       - met siang
       - met sore
       - pagiii
-      - pagieee
       - haloo
-      - halooo
       - haiii
       - numpang tanya kak
       - mau nanya dong
-      - nunut nanya kak
       - permisi mau tanya sebentar
 
   - intent: goodbye
     examples: |
       - bye
       - dadah
+      - dadaah
       - sampai jumpa
-      - terima kasih
-      - makasih
-      - makasih ya
-      - makasih banyak ya kak
-      - ok terima kasih
-      - oke makasih
-      - cukup
-      - sudah cukup
+      - sampai ketemu lagi
+      - pamit dulu ya
+      - dadaa
       - bye bye
-      - selamat tinggal
-      - thanks
-      - oke terima kasih sudah cukup
-      - sudah terima kasih banyak
-      - ok bye
-      - dah
-      - oke deh makasih
-      - udah cukup terima kasih
-      - baik sekian dulu
-      - sudah terimakasih
-      - oke selesai deh
-      - mks
-      - mksh
-      - makasi
-      - tq
-      - tks
-      - thx
-      - ty
-      - ok deh
-      - oke deh
-      - oke sip
-      - udh cukup
-      - udah
-      - udh
-      - deh
-      - da
-      - ciao
-      - byee
-      - byebye
-      - sip dah
-      - siap dah
-      - ga usah lagi
-      - gausah lagi
-      - yaudah
-      - yowes
-      - yowis
+      - bubar
+      - thank you kak saya pamit
+      - makasih ya min assistnya, dadah
       - sekian trims
       - sekian thx
       - oke udah cukup makasih ya kak
@@ -156,7 +114,6 @@ nlu:
       - skrg ada dr ga
       - jadwal dokter hari ini dong
       - besok dokternya ada ga kak
-      - kapan ya dokternya ada
       - gmn jadwal dokternya
 
   - intent: ask_queue
@@ -187,11 +144,9 @@ nlu:
       - masih panjang ga antriannya
       - cek antri dong
       - antrian udh sampe mana
-      - kira2 brp mnt lagi
       - posisi antrian sy
       - antrian saya nomor brp ya
       - udah deket belum giliran saya
-      - masih banyak yang ngantri ga
 
   - intent: ask_services
     examples: |
@@ -224,7 +179,6 @@ nlu:
       - melayani anak ga
       - ada tes lab ga
       - ada poli apa aja kak
-      - ini klinik ada layanan apa aja
 
   - intent: ask_location
     examples: |
@@ -246,8 +200,6 @@ nlu:
       - lokasinya dong
       - gmaps nya dong
       - deket stasiun mana
-      - ada parkiran gak
-      - bs naik ojol kesana
       - share pin lokasi dong
       - kliniknya dimana ya kak
       - bisa share google maps ga
@@ -273,9 +225,7 @@ nlu:
       - bayarnya bisa qris ga
       - bs transfer ga
       - biaya gigi brp
-      - mahal ga periksa disini
       - harga cek darah brp
-      - gratis ga pake bpjs
       - biaya periksa umum brp ya
       - kalo pake bpjs gratis ga
       - bayarnya gimana bisa transfer ga
@@ -300,7 +250,6 @@ nlu:
       - pindahin ke cs dong
       - bisa minta orang beneran ga
       - sambungin ke admin ya
-      - minta operatornya
       - cs nya dong
       - mau ngobrol sama manusia beneran
       - tolong sambungkan ke resepsionis dong
@@ -324,7 +273,6 @@ nlu:
       - cepet tolong
       - emergency
       - urgent banget
-      - napas sesak bgt
       - sakit bgt ga bisa napas
       - butuh ambulan skrg
       - tolong cepet
@@ -335,71 +283,35 @@ nlu:
   - intent: affirm
     examples: |
       - ya
-      - y
-      - oke
-      - baik
-      - sip
-      - mengerti
-      - siap
-      - ok
-      - yups
       - iya
-      - betul
-      - benar
-      - yep
-      - yap
-      - iyaa
-      - iyaaa
+      - oke
+      - ok
+      - okay
+      - siap
+      - baik
+      - mengerti
+      - siap melaksanakan
+      - yup
+      - sip
       - bener
-      - bner
-      - setuju
-      - stuju
-      - lanjut
-      - lanjutin
-      - gitu deh
-      - gtu deh
-      - okedeh
-      - okesip
-      - yoii
-      - yoi
-      - nah iya
-      - nah bener
-      - iya betul kak
-      - udah bener
-      - bener banget
 
   - intent: deny
     examples: |
       - tidak
-      - gajadi
-      - yasudah
-      - batal
-      - skip
-      - ga usah
-      - engga
-      - gak
-      - ngak usah
-      - jangan
-      - tidak jadi
-      - gapapa
-      - ga papa
-      - gausah
-      - gabisa
-      - ga bisa
-      - gakk
-      - kagak
       - enggak
-      - engga
-      - ntar deh
-      - nanti aja
-      - skip aja
-      - gakjadi
-      - batal deh
-      - gakusah
-      - tak usah
-      - ga mau
-      - gak mau ah
+      - gak
+      - ngga
+      - nggk
+      - ogah
+      - ndak
+      - mboten
+      - jangan
+      - tidak usah
+      - gak perlu
       - tidak perlu
+      - gausah
+      - gaperlu
+      - rasah
 
   - intent: out_of_scope
     examples: |
@@ -424,29 +336,31 @@ nlu:
       - rekomendasi laptop gaming
       - cerita dong tentang sejarah indonesia
       - buatin cerpen dong
+      - cuaca hari ini gimana
+      - resep nasi goreng
+      - tukang bakso terdekat
+      - berapa harga saham hari ini
+      - main game yuk
 
   - intent: intent_diri_sendiri
     examples: |
+      - buat saya sendiri
+      - saya mau daftar buat diri saya
+      - untuk saya sendiri kak
       - buat saya
       - diri sendiri
-      - untuk saya
-      - saya sendiri
-      - buat diri saya sendiri
-      - iya diri sendiri
-      - sendiri
-      - untuk aku
-      - buat aku
+      - dftr buat sy
+      - akun saya sendiri
 
   - intent: intent_orang_lain
     examples: |
       - buat orang lain
-      - untuk orang lain
-      - untuk istri
-      - buat anak saya
-      - orang lain
-      - untuk suami
-      - buat saudara
-      - daftarkan orang lain
+      - mau daftarkan anak saya
+      - buat keluarga saya
+      - untuk orang lain kak
+      - daftarin suami saya
+      - buat teman saya
+      - bukan buat saya tapi orang lain
 
   - intent: intent_ingin_booking
     examples: |
@@ -478,35 +392,23 @@ nlu:
 
   - intent: intent_berikan_rating
     examples: |
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - nilai 1
-      - nilai 5
-      - bintang 5
-      - bintang 1
-      - satu
-      - dua
-      - tiga
-      - empat
-      - lima
-      - sangat puas
-      - tidak puas
-      - cukup puas
-      - lumayan
-      - puas banget
-      - kurang puas
-      - biasa aja
-      - oke sih
-      - bagus
-      - mantap
-      - jelek
-
-  #=================================================================
-  # Intent dan entitas untuk alur booking pasien baru dan lama
-  #=================================================================
+      - saya kasih nilai 1
+      - saya beri nilai 5
+      - kasih bintang 5 dong
+      - bintang 1 layanannya jelek
+      - saya pilih nilai dua
+      - penilaian saya empat
+      - nilai lima untuk hana
+      - sangat puas dengan layanannya
+      - tidak puas sama sekali
+      - cukup puas aja
+      - lumayan bagus kok
+      - puas banget mantap
+      - kurang puas tolong ditingkatkan
+      - biasa aja bos
+      - oke sih bantu banget
+      - bagus pelayanannya
+      - mantap pelayanannya mks
 
   - intent: booking_pasien_baru
     examples: |
@@ -525,7 +427,6 @@ nlu:
       - mau daftar sebagai pasien baru
       - yang baru
 
-  #
   - intent: booking_pasien_lama
     examples: |
       - lama
@@ -542,7 +443,6 @@ nlu:
       - sudah pernah kak
       - yang sudah pernah
 
-  #  Intent:  NIK
   - intent: booking_berikan_nik
     examples: |
       - NIK saya [1234567890123456](nik)
@@ -552,8 +452,10 @@ nlu:
       - ktp saya [3578121234560004](nik)
       - no ktp [3471231234560005](nik)
       - nik nya [1234123456780006](nik)
+      - nama saya [Budi Santoso](nama_lengkap)
+      - data atas nama [Ahmad Hidayat](nama_lengkap)
+      - [Siti Aminah](nama_lengkap)
 
-  # Intent:  Tanggal Lahir
   - intent: booking_berikan_tgl_lahir
     examples: |
       - tanggal lahir saya [01/01/1990](tanggal_lahir)
@@ -564,7 +466,6 @@ nlu:
       - saya lahir tanggal [25/06/1985](tanggal_lahir)
       - ttl [01/01/2001](tanggal_lahir)
 
-  # Intent:  Keluhan
   - intent: booking_berikan_keluhan
     examples: |
       - saya sakit kepala
@@ -587,67 +488,74 @@ nlu:
       - mau periksa mata
       - mau konsultasi gizi
 
-  # Intent: Berikan Tanggal Kunjungan
   - intent: booking_berikan_tgl_kunjungan
     examples: |
-      - saya mau datang [besok](tanggal_kunjungan)
-      - rencananya [Senin](tanggal_kunjungan)
-      - tanggal kunjungan [25/05/2026](tanggal_kunjungan)
-      - mau ke klinik [hari ini](tanggal_kunjungan)
-      - [Rabu](tanggal_kunjungan) depan
-      - rencana datang [Jumat](tanggal_kunjungan)
-      - [26/05/2026](tanggal_kunjungan)
-      - mau datang tanggal [28 Mei 2026](tanggal_kunjungan)
-      - enaknya [Sabtu](tanggal_kunjungan) deh
-      - [lusa](tanggal_kunjungan)
+      - besok
+      - hari senin
+      - hari selasa
+      - hari rabu
+      - hari kamis
+      - hari jumat
+      - hari sabtu
+      - besok lusa
+      - senin depan
+      - kamis 4 juni 2026
+      - tanggal [25/05/2026](tanggal_kunjungan)
+      - rencana datang besok pagi
+      - mau berkunjung hari jumat ini
+      - [12/12/2026](tanggal_kunjungan)
+      - Lusa 
+      - minggu depan
+      - hari ini
+      - hari rabu depan
 
-  #  Intent: Konfirmasi Booking
   - intent: booking_konfirmasi
     examples: |
-      - ya benar
-      - betul kak
-      - iya konfirmasi
-      - sudah benar datanya
-      - ya lanjut
-      - konfirmasi
-      - benar semua
-      - iya itu benar
-      - lanjutkan saja
-      - ya silakan proses
-      - fix kak
-      - iya sudah sesuai
-      - oke lanjut
+      - ya semua sudah benar
+      - data sudah sesuai proses aja
+      - sudah benar kok datanya
+      - fix data pendaftaran ini
+      - lanjut proses bookingnya
+      - konfirmasi pendaftaran saya
+      - data tersebut sudah valid
+      - ya konfirmasi saja
+      - setuju dengan data di atas
 
-  # Intent: Ubah Data Booking
   - intent: booking_ubah_data
     examples: |
-      - ada yang salah
-      - mau ubah datanya
-      - salah kak tolong perbaiki
-      - ada yang perlu dikoreksi
-      - mau ganti tanggal
-      - ubah tanggal 
-      - ganti dokternya
-      - salah nama
-      - keluhan mau diganti
-      - koreksi dulu
-      - mau edit data
+      - ada yang salah di data tadi
+      - mau koreksi nama
+      - salah input data min
+      - ganti data yang tadi dong
+      - ada data yang keliru mau saya ubah
+      - edit data booking saya yang barusan
+      - data yang tadi salah mau saya ubah
 
-  #  Intent: Batalkan Booking
   - intent: booking_batalkan
     examples: |
+      - batal booking
+      - tolong cancel booking saya
+      - saya tidak jadi daftar
       - batalkan booking saya
       - saya mau cancel janji
-      - batal saja kak
       - cancel booking
-      - saya tidak jadi ke klinik
       - tidak jadi daftar
       - hapus janji temu saya
-      - batalin dong
       - cancel deh
       - saya mau membatalkan pendaftaran
+      - batal deh
+      - gajadi
+      - ga jadi
+      - tidak jadi booking
+      - gajadi pendaftaran
+      - batal pendaftaran
+      - cancel aja min
+      - batalkan pendaftaran saya
+      - saya mau batalkan janji temu
+      - batal
+      - batalkan saja proses ini
+      - gajadi daftar booking
 
-  #  Intent: Reschedule
   - intent: booking_reschedule
     examples: |
       - mau ganti jadwal
@@ -659,8 +567,16 @@ nlu:
       - jadwalnya dipindah dulu
       - reschedule ke hari lain
       - bisa geser jadwalnya
+      - sudah booking tapi mau geser hari
+      - pindah jadwal minggu depan dong
+      - ganti tanggal kunjungan janji temu saya
+      - reschedule jadwal dokter saya
+      - mau mundurin hari pemeriksaan
+      - jadwal booking saya yang kemarin mau diubah harinya
 
-  # Daftar Poli dan Hari untuk memudahkan RASA mengenali layanan Klinik dan nama hari.
+  # =============================================================
+  # LOOKUP — Daftar entitas kamus kaku
+  # =============================================================
   - lookup: poli
     examples: |
       - poli umum
@@ -688,11 +604,8 @@ nlu:
       - Minggu
 
   # =============================================================
-  # SYNONYM — Memetakan variasi kata informal ke kata standar
-  # sehingga NLU bisa mengenali lebih banyak ekspresi tanpa
-  # perlu menambahkan contoh satu per satu di setiap intent.
+  # SYNONYM — Versi Pembersihan Tanpa Mengganggu Tokenizer Form
   # =============================================================
-
   - synonym: tidak
     examples: |
       - ga
@@ -771,16 +684,6 @@ nlu:
       - no antrian
       - nomer antrian
 
-  - synonym: booking
-    examples: |
-      - bking
-      - boking
-      - book
-      - reservasi
-      - daftar
-      - janji
-      - pendaftaran
-
   - synonym: bisa
     examples: |
       - bs
@@ -837,9 +740,7 @@ nlu:
       - yoi
       - yoii
       - iyaa
-      - iyaaa
-      - yowes
-      - yowis
+      - iyaaaa
       - nah iya
 
   - synonym: darurat
@@ -851,30 +752,9 @@ nlu:
       - kritis
       - parah banget
 
-  - synonym: konfirmasi
-    examples: |
-      - iya
-      - ya
-      - benar
-      - betul
-      - fix
-      - oke
-      - lanjut
-      - setuju
-
-  - synonym: batal
-    examples: |
-      - cancel
-      - batalkan
-      - tidak jadi
-      - hapus
-      - gak jadi
-
   # =============================================================
-  # REGEX — Pola ekspresi reguler untuk menangkap variasi
-  # format angka, singkatan, dan pola teks yang berulang.
+  # REGEX — Pola ekspresi reguler
   # =============================================================
-
   - regex: nomor_antrian
     examples: |
       - \b(nomor|no\.?|nomer|no)\s*(antrian|antri|urut)\b
@@ -932,14 +812,7 @@ nlu:
     examples: |
       - \b\d{16}\b
 
-  # ── Regex Entity: Tanggal ─────────────────────────────────────
-  - regex: tanggal_lahir
+  - regex: format_tanggal_indonesia
     examples: |
       - \b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b
       - \b\d{1,2}\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4}\b
-
-  - regex: tanggal_kunjungan
-    examples: |
-      - \b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b
-      - \b(besok|lusa|hari ini)\b
-      - \b(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu)\b

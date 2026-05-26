@@ -1,3 +1,4 @@
+# Log Last Change: 26 Mei 2026
 version: "3.1"
 
 stories:
@@ -126,6 +127,7 @@ stories:
       - active_loop: booking_form_baru
       - intent: booking_batalkan
       - action: action_booking_cancel
+      - active_loop: null
 
   # ── Alur 7: Reschedule setelah booking selesai ───────────────
   - story: reschedule booking

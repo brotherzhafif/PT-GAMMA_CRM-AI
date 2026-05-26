@@ -1,3 +1,4 @@
+# Log Last Change: 26 Mei 2026
 version: "3.1"
 
 intents:
@@ -36,6 +37,7 @@ entities:
   - keluhan
   - poli
 
+# Slot adalah memory sementara untuk info booking
 slots:
   konteks_percakapan:
     type: text
@@ -48,7 +50,7 @@ slots:
         intent: goodbye
         value: survey
 
-  # Tipe pasien
+  # Tipe pasien (Baru / Lama)
   booking_tipe_pasien:
     type: categorical
     values:
@@ -62,7 +64,7 @@ slots:
         intent: booking_pasien_lama
         value: lama
 
-  # Data identitas
+  # Data pendaftaran untuk siapa
   booking_untuk_siapa:
     type: categorical
     values:
@@ -76,21 +78,10 @@ slots:
         intent: intent_orang_lain
         value: orang lain
 
-  booking_nik:
-    type: text
-    mappings:
-      - type: from_entity
-        entity: nik
-      - type: from_text
-        intent: booking_berikan_nik
-        conditions:
-          - active_loop: booking_form_baru
-            requested_slot: booking_nik
-          - active_loop: booking_form_lama
-            requested_slot: booking_nik
-
+  # SLOT PASIEN BARU
   booking_nama:
     type: text
+    influence_conversation: false
     mappings:
       - type: from_entity
         entity: nama_lengkap
@@ -99,23 +90,55 @@ slots:
           - active_loop: booking_form_baru
             requested_slot: booking_nama
 
+  booking_nik:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: from_entity
+        entity: nik
+        intent: booking_berikan_nik
+      - type: from_text
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_nik
+
   booking_tgl_lahir:
     type: text
+    influence_conversation: false
     mappings:
       - type: from_entity
         entity: tanggal_lahir
-      - type: from_text
         intent: booking_berikan_tgl_lahir
+      - type: from_text
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_lahir
 
-  # Data kunjungan
+  # SLOT PASIEN LAMA
+  booking_nik_lama:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: from_entity
+        entity: nik
+        intent: booking_berikan_nik
+      - type: from_entity
+        entity: nama_lengkap
+        intent: booking_berikan_nik
+      - type: from_text
+        intent: booking_berikan_nik
+        conditions:
+          - active_loop: booking_form_lama
+            requested_slot: booking_nik_lama
+
+  # SLOT GLOBAL (DIGUNAKAN KEDUA FORM)
   booking_keluhan:
     type: text
+    influence_conversation: false
     mappings:
       - type: from_entity
         entity: keluhan
+        intent: booking_berikan_keluhan
       - type: from_text
         intent: booking_berikan_keluhan
         conditions:
@@ -126,9 +149,18 @@ slots:
 
   booking_tgl_kunjungan:
     type: text
+    influence_conversation: false
     mappings:
       - type: from_entity
         entity: tanggal_kunjungan
+        intent: booking_berikan_tgl_kunjungan
+        conditions:
+          - active_loop: booking_form_baru
+      - type: from_entity
+        entity: tanggal_kunjungan
+        intent: booking_berikan_tgl_kunjungan
+        conditions:
+          - active_loop: booking_form_lama
       - type: from_text
         intent: booking_berikan_tgl_kunjungan
         conditions:
@@ -137,7 +169,7 @@ slots:
           - active_loop: booking_form_lama
             requested_slot: booking_tgl_kunjungan
 
-  # Status flow
+  # Status Flow & Administrasi
   booking_step:
     type: categorical
     values:
@@ -168,7 +200,7 @@ forms:
   # Form Pasien Lama
   booking_form_lama:
     required_slots:
-      - booking_nik
+      - booking_nik_lama
       - booking_keluhan
       - booking_tgl_kunjungan
 
