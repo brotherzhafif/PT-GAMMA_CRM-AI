@@ -328,6 +328,18 @@ def webhook(
         chat_history = get_chat_history_json(no_hp)
         rasa_result = query_rasa(no_hp, input_pesan)
         
+        rasa_intent     = rasa_result["intent"]     if rasa_result else "N/A"
+        rasa_confidence = rasa_result["confidence"] if rasa_result else 0.0
+        rasa_form       = rasa_result["is_form_active"] if rasa_result else False
+        rasa_trusted    = rasa_intent in RASA_TRUSTED_INTENTS
+        print(
+            f"[DEBUG][RASA] intent={rasa_intent} | "
+            f"confidence={rasa_confidence:.4f} | "
+            f"threshold={RASA_CONFIDENCE_THRESHOLD} | "
+            f"trusted={rasa_trusted} | "
+            f"form_active={rasa_form}"
+        )
+
         if (
             rasa_result 
             and (
@@ -338,7 +350,7 @@ def webhook(
             reply = rasa_result["reply"]
             source = "rasa"
             reset_fallback(no_hp)
-            print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_result['intent']})")
+            print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_intent} | confidence={rasa_confidence:.4f})")
             
             # Rasa mendeteksi intent 'emergency' ATAU keyword terpicu
             if rasa_result["intent"] == "emergency" or is_emergency_keyword:
@@ -365,7 +377,7 @@ def webhook(
                 role = "default"
                 reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
                 source = "groq"
-                print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: {role})")
+                print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: {role} | rasa_intent={rasa_intent} | confidence={rasa_confidence:.4f} | trusted={rasa_trusted})")
 
         # Logika Auto Handoff tetap berjalan jika source adalah "groq" (Triage maupun Default)
         if source == "groq" and not is_emergency_keyword:

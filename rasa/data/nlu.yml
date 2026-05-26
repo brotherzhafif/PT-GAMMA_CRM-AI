@@ -445,16 +445,26 @@ nlu:
 
   - intent: booking_berikan_nik
     examples: |
+      - [1234567890123456](nik)
+      - [3471234567890001](nik)
+      - [3578901234560002](nik)
+      - [3578121234560004](nik)
+      - [3471231234560005](nik)
+      - [3201056789012345](nik)
+      - [3578019876543210](nik)
+      - [1271051234560001](nik)
+      - [3273041234560002](nik)
+      - [3175031234560003](nik)
       - NIK saya [1234567890123456](nik)
-      - nik [3471234567890001](nik)
-      - nomor KTP [3578901234560002](nik)
-      - [3471011234560003](nik)
+      - nik nya [3471234567890001](nik)
+      - nomor induk kependudukan [3578901234560002](nik)
       - ktp saya [3578121234560004](nik)
       - no ktp [3471231234560005](nik)
-      - nik nya [1234123456780006](nik)
-      - nama saya [Budi Santoso](nama_lengkap)
-      - data atas nama [Ahmad Hidayat](nama_lengkap)
-      - [Siti Aminah](nama_lengkap)
+      - ini nik saya [3201056789012345](nik)
+      - berikut nik saya [3578019876543210](nik)
+      - [1271051234560001](nik) itu nik saya
+      - nomor ktp [3273041234560002](nik)
+      - nik ku [3175031234560003](nik)
 
   - intent: booking_berikan_tgl_lahir
     examples: |
