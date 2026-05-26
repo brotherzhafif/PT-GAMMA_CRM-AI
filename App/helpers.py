@@ -283,7 +283,19 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
     Return dict {reply, confidence, intent, is_form_active} atau None jika Rasa error.
     """
     try:
-        # 1. Cek tracker status untuk melihat apakah form sedang aktif SEBELUM pesan diproses
+        # 1. Kirim pesan ke Rasa terlebih dahulu (Proses pesan masuk)
+        resp = requests.post(
+            f"{RASA_URL}/webhooks/rest/webhook",
+            json={"sender": sender, "message": message},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        # 2. Ambil reply teks dari Rasa
+        bot_reply = "\n\n".join(item.get("text", "") for item in data if "text" in item) if data else ""
+
+        # 3. Cek tracker status SELESAI pesan diproses untuk melihat status form terbaru
         tracker_resp = requests.get(
             f"{RASA_URL}/conversations/{sender}/tracker",
             timeout=5,
@@ -293,19 +305,7 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
             tracker_data = tracker_resp.json()
             is_form_active = tracker_data.get("active_loop", {}).get("name") is not None
 
-        # 2. Kirim pesan ke Rasa
-        resp = requests.post(
-            f"{RASA_URL}/webhooks/rest/webhook",
-            json={"sender": sender, "message": message},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        # 3. Tetap lanjutkan jika data kosong (karena form mungkin sedang diam menyerap input)
-        bot_reply = "\n\n".join(item.get("text", "") for item in data if "text" in item) if data else ""
-
-        # 4. Parse NLU untuk logging
+        # 4. Parse NLU untuk  logging / routing di webhook.py
         parse_resp = requests.post(
             f"{RASA_URL}/model/parse",
             json={"text": message},
@@ -314,13 +314,11 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
         parse_resp.raise_for_status()
         parse_data = parse_resp.json()
 
-        # Jika form sedang aktif, Rasa mungkin membalas dengan pertanyaan berikutnya (reply tidak kosong)
-        # Atau jika form aktif, kita paksa kembalikan agar router tahu ini dari Rasa
         return {
             "reply": bot_reply,
             "confidence": parse_data.get("intent", {}).get("confidence", 0.0),
             "intent": parse_data.get("intent", {}).get("name", ""),
-            "is_form_active": is_form_active,
+            "is_form_active": is_form_active, # mengembalikan status form paling baru
         }
     except Exception as e:
         print(f"[Rasa Error] {e}")
