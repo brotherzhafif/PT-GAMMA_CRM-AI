@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/webhook.py
 # Endpoint: GET / dan POST /webhook
 #
-# Last Change   :   16 May 2026
+# Last Change   :   26 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -34,6 +34,13 @@ from LLM.groq_service import GroqService
 router = APIRouter()
 groq = GroqService()
 
+# ======================================================
+#   KONSTANTA
+# ======================================================
+
+SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
+
+ONBOARDING_STATES = {"waiting_name", "waiting_nik", "waiting_dob", "waiting_gender"}
 
 WEBHOOK_REQUEST_EXAMPLE = {
     "sender": "6281234567890",
@@ -48,9 +55,34 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 
 
 # ======================================================
-#
-#                   SYSTEM ENDPOINT
-#
+#   HELPER — kirim balasan & simpan ke semua storage
+# ======================================================
+
+def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
+    """Kirim reply ke queue Fonnte, simpan ke JSON dan Supabase, lalu return ChatResponse."""
+    fonnte_queue.add_to_queue(no_hp, reply)
+    save_chat_to_json(no_hp, input_pesan, reply, source=source)
+    save_to_supabase(no_hp, reply, direction="outbound", source=source)
+    return ChatResponse(status="ok", source=source, reply=reply)
+
+
+def _finish_onboarding_skip(no_hp: str, input_pesan: str) -> ChatResponse:
+    """
+    Dipanggil ketika user ketik skip di langkah mana pun.
+    Simpan pasien ke DB tanpa data, reset state, lalu balas.
+    """
+    upsert_patient(no_hp)          # kirim kosong — semua field None/default
+    set_session_state(no_hp, None)
+    reply = (
+        "Oke, tidak apa-apa! Pendaftaran dilewati.\n\n"
+        "Ada yang bisa kami bantu hari ini? 😊"
+    )
+    print(f"[Onboarding] {no_hp} skip → onboarding selesai tanpa data")
+    return _send_reply(no_hp, input_pesan, reply, source="system")
+
+
+# ======================================================
+#   SYSTEM ENDPOINT
 # ======================================================
 
 @router.get(
@@ -60,7 +92,11 @@ WEBHOOK_RESPONSE_EXAMPLE = {
     responses={
         200: {
             "description": "Service aktif",
-            "content": {"application/json": {"example": {"status": "ok", "message": "SmartClinic CRM AI is running!", "docs": "/docs"}}},
+            "content": {"application/json": {"example": {
+                "status": "ok",
+                "message": "SmartClinic CRM AI is running!",
+                "docs": "/docs",
+            }}},
         },
     },
 )
@@ -85,8 +121,14 @@ def home():
         200: {
             "description": "Pesan berhasil diproses",
             "content": {"application/json": {"examples": {
-                "normalReply": {"summary": "Contoh respons normal", "value": WEBHOOK_RESPONSE_EXAMPLE},
-                "handoffReply": {"summary": "Contoh saat handoff aktif", "value": {"status": "handoff", "source": "handoff", "reply": None}},
+                "normalReply": {
+                    "summary": "Contoh respons normal",
+                    "value": WEBHOOK_RESPONSE_EXAMPLE,
+                },
+                "handoffReply": {
+                    "summary": "Contoh saat handoff aktif",
+                    "value": {"status": "handoff", "source": "handoff", "reply": None},
+                },
             }}},
         },
         500: {
@@ -114,69 +156,157 @@ def webhook(
         print(f"\n[{waktu}] [INCOMING] Dari: {no_hp} | Pesan: {input_pesan}")
         save_to_supabase(no_hp, input_pesan, direction="inbound", source="fonnte")
 
-        #  Step 0: Cek mode handoff 
-        # Jika sedang handoff, bot diam — admin yang balas dari dashboard.
+        # ── Step 0: Cek mode handoff 
+        # Bot diam selama handoff aktif — admin yang balas dari dashboard.
         if is_in_handoff(no_hp):
             print(f"[Handoff] {no_hp} dalam mode handoff — bot diam")
             return ChatResponse(status="handoff", source="handoff", reply=None)
 
-    
-        #  Step 1: Alur Registrasi & Onboarding (Nomor Baru)
+        # ── Step 1: Onboarding 
+        # Ambil session_state SEKALI di sini — tidak diambil ulang di bawah.
         session_state = get_session_state(no_hp)
-        reply = ""
-        source = "system"
+        is_registered = is_patient_registered(no_hp)
 
-        # KONDISI A: Pasien benar-benar baru (Belum terdaftar & belum masuk state menunggu nama)
-        if not is_patient_registered(no_hp) and session_state != "waiting_name":
+        # Nomor baru yang belum masuk alur onboarding sama sekali
+        if not is_registered and session_state not in ONBOARDING_STATES:
             set_session_state(no_hp, "waiting_name")
             reply = (
                 "Halo! Selamat datang di SmartClinic 👋\n\n"
-                "Sebelum mulai, boleh kami tahu nama lengkap kamu sesuai KTP? "
-                "Ketik nama kamu, atau ketik *skip* jika ingin melewati."
+                "Sebelum mulai, boleh kami tahu *nama lengkap* kamu sesuai KTP?\n"
+                "Ketik nama kamu, atau ketik *skip* untuk melewati pendaftaran."
             )
             print(f"[Onboarding] Nomor baru {no_hp} → tanya nama")
-            fonnte_queue.add_to_queue(no_hp, reply)
-            save_chat_to_json(no_hp, input_pesan, reply, source=source)
-            save_to_supabase(no_hp, reply, direction="outbound", source=source)
-            return ChatResponse(status="ok", source=source, reply=reply)
+            return _send_reply(no_hp, input_pesan, reply, source="system")
 
-        # KONDISI B: Pasien sedang berada di dalam proses memasukkan nama
-        elif session_state == "waiting_name":
+        # ── Langkah 1: Nama 
+        if session_state == "waiting_name":
+            # Skip di langkah pertama → selesai seluruh onboarding
+            if input_pesan.lower() in SKIP_KEYWORDS:
+                return _finish_onboarding_skip(no_hp, input_pesan)
+
             nama = input_pesan.strip()
-            SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
+            if len(nama) < 2:
+                reply = "⚠️ Nama terlalu pendek. Silakan masukkan nama lengkap, atau ketik *skip*."
+                return _send_reply(no_hp, input_pesan, reply, source="system")
 
-            if len(nama) < 2 or nama.lower() in SKIP_KEYWORDS:
-                # USER SKIP ONBOARDING
-                upsert_patient(no_hp, name=None)
-                set_session_state(no_hp, None)
-                
+            # Simpan nama sementara di state, lanjut ke NIK
+            set_session_state(no_hp, "waiting_nik", data={"namaLengkap": nama})
+            reply = (
+                f"Terima kasih, *{nama}*! ✅\n\n"
+                "Selanjutnya, ketik *16 digit NIK* (Nomor Induk Kependudukan) kamu,\n"
+                "atau ketik *skip* untuk melewati pendaftaran."
+            )
+            print(f"[Onboarding] {no_hp} → nama '{nama}' → tanya NIK")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+
+        # ── Langkah 2: NIK 
+        if session_state == "waiting_nik":
+            # Skip di langkah kedua → selesai seluruh onboarding
+            if input_pesan.lower() in SKIP_KEYWORDS:
+                return _finish_onboarding_skip(no_hp, input_pesan)
+
+            nik_digits = re.sub(r"\D", "", input_pesan)
+            if len(nik_digits) != 16:
                 reply = (
-                    "Oke, tidak apa-apa! Data kamu sudah kami simpan tanpa nama. "
-                    "Ada keluhan atau hal medis apa yang bisa SmartClinic bantu hari ini? 😊"
+                    "⚠️ NIK harus terdiri dari *16 digit angka*.\n"
+                    "Silakan cek kembali dan kirim ulang, atau ketik *skip* untuk melewati pendaftaran."
                 )
-                print(f"[Onboarding] {no_hp} skip nama → disimpan tanpa nama.")
-                
-                # Selesaikan proses onboarding di sini secara bersih
-                fonnte_queue.add_to_queue(no_hp, reply)
-                save_chat_to_json(no_hp, input_pesan, reply, source=source)
-                save_to_supabase(no_hp, reply, direction="outbound", source=source)
-                return ChatResponse(status="ok", source=source, reply=reply)
-                
+                print(f"[Onboarding] {no_hp} → NIK invalid '{input_pesan}'")
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["nik"] = nik_digits
+            set_session_state(no_hp, "waiting_dob", data=onboarding_data)
+            reply = (
+                "NIK valid! ✅\n\n"
+                "Selanjutnya, masukkan *Tanggal Lahir* kamu dengan format *DD/MM/YYYY*\n"
+                "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+            )
+            print(f"[Onboarding] {no_hp} → NIK valid → tanya DOB")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+
+        # ── Langkah 3: Tanggal Lahir 
+        if session_state == "waiting_dob":
+            # Skip di langkah ketiga → selesai seluruh onboarding
+            if input_pesan.lower() in SKIP_KEYWORDS:
+                return _finish_onboarding_skip(no_hp, input_pesan)
+
+            match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", input_pesan)
+            if not match:
+                reply = (
+                    "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n"
+                    "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+                )
+                print(f"[Onboarding] {no_hp} → DOB invalid '{input_pesan}'")
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+
+            day, month, year = match.groups()
+            try:
+                dob_date = datetime(int(year), int(month), int(day))
+                tanggal_lahir = dob_date.strftime("%Y-%m-%d")
+            except ValueError:
+                reply = (
+                    "⚠️ Tanggal tidak valid. Gunakan format *DD/MM/YYYY*\n"
+                    "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["tanggalLahir"] = tanggal_lahir
+            set_session_state(no_hp, "waiting_gender", data=onboarding_data)
+            reply = (
+                "Terima kasih! ✅\n\n"
+                "Terakhir, apa *jenis kelamin* kamu?\n"
+                "Balas *Laki-laki* atau *Perempuan*, atau ketik *skip* untuk melewati pendaftaran."
+            )
+            print(f"[Onboarding] {no_hp} → DOB '{tanggal_lahir}' → tanya Gender")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+
+        # ── Langkah 4: Gender → selesai onboarding 
+        if session_state == "waiting_gender":
+            # Skip di langkah keempat → selesai seluruh onboarding
+            if input_pesan.lower() in SKIP_KEYWORDS:
+                return _finish_onboarding_skip(no_hp, input_pesan)
+
+            gender_input = input_pesan.strip().lower()
+            LAKI_KEYWORDS    = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
+            PEREMPUAN_KEYWORDS = {"perempuan", "wanita", "cewek", "cewe", "p", "pr", "female"}
+
+            if gender_input in LAKI_KEYWORDS:
+                jenis_kelamin = "LAKI_LAKI"
+            elif gender_input in PEREMPUAN_KEYWORDS:
+                jenis_kelamin = "PEREMPUAN"
             else:
-                # USER MENGINPUT NAMA DENGAN BENAR
-                upsert_patient(no_hp, name=nama)
-                set_session_state(no_hp, None)
                 reply = (
-                    f"Terima kasih, *{nama}*! Data kamu sudah kami simpan. "
-                    f"Ada yang bisa kami bantu hari ini? 😊"
+                    "⚠️ Mohon balas dengan *Laki-laki* atau *Perempuan*,\n"
+                    "atau ketik *skip* untuk melewati pendaftaran."
                 )
-                print(f"[Onboarding] {no_hp} → nama '{nama}' disimpan")
-                fonnte_queue.add_to_queue(no_hp, reply)
-                save_chat_to_json(no_hp, input_pesan, reply, source=source)
-                save_to_supabase(no_hp, reply, direction="outbound", source=source)
-                return ChatResponse(status="ok", source=source, reply=reply)
+                print(f"[Onboarding] {no_hp} → Gender invalid '{gender_input}'")
+                return _send_reply(no_hp, input_pesan, reply, source="system")
 
-        #  Step 2: Cek keyword handoff 
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["jenisKelamin"] = jenis_kelamin
+
+            # Semua langkah selesai → simpan ke DB
+            upsert_patient(
+                no_hp,
+                namaLengkap=onboarding_data.get("namaLengkap"),
+                nik=onboarding_data.get("nik"),
+                tanggalLahir=onboarding_data.get("tanggalLahir"),
+                jenisKelamin=onboarding_data.get("jenisKelamin"),
+            )
+            set_session_state(no_hp, None)
+
+            nama = onboarding_data.get("namaLengkap", "")
+            reply = (
+                f"Terima kasih{', *' + nama + '*' if nama else ''}! "
+                "Data kamu sudah lengkap tersimpan. "
+                "Ada yang bisa kami bantu hari ini? 😊"
+            )
+            print(f"[Onboarding] {no_hp} selesai lengkap → data: {onboarding_data}")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+
+        # ── Step 2: Cek keyword handoff ───────────────────────────────────────
         if is_handoff_keyword(input_pesan):
             start_handoff(no_hp)
             reset_fallback(no_hp)
@@ -185,26 +315,25 @@ def webhook(
                 "Mohon tunggu sebentar ya 🙏\n\n"
                 "_Bot sementara tidak aktif. Admin akan segera membalas._"
             )
-            source = "system"
             print(f"[Handoff] {no_hp} minta handoff via keyword")
-            fonnte_queue.add_to_queue(no_hp, reply)
-            save_chat_to_json(no_hp, input_pesan, reply, source=source)
-            save_to_supabase(no_hp, reply, direction="outbound", source=source)
-            return ChatResponse(status="ok", source=source, reply=reply)
+            return _send_reply(no_hp, input_pesan, reply, source="system")
 
-        #  Step 3: Routing normal Rasa → Groq 
+        # ── Step 3: Routing normal Rasa → Groq ───────────────────────────────
         chat_history = get_chat_history_json(no_hp, limit=5)
 
         rasa_result = query_rasa(input_pesan, no_hp)
         if rasa_result:
-            print(f"[DEBUG] Rasa → intent: '{rasa_result['intent']}', confidence: {rasa_result['confidence']:.4f}, form_active: {rasa_result.get('is_form_active')}")
+            print(
+                f"[DEBUG] Rasa → intent: '{rasa_result['intent']}', "
+                f"confidence: {rasa_result['confidence']:.4f}, "
+                f"form_active: {rasa_result.get('is_form_active')}"
+            )
 
         is_form_active = rasa_result and rasa_result.get("is_form_active")
 
-        # Prioritaskan Rasa jika form sedang aktif, ATAU jika intent sangat dipercaya
         if rasa_result and (
-            (is_form_active and rasa_result["reply"]) or 
-            (
+            (is_form_active and rasa_result["reply"])
+            or (
                 rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD
                 and rasa_result["intent"] in RASA_TRUSTED_INTENTS
                 and rasa_result["reply"]
@@ -215,7 +344,7 @@ def webhook(
             reset_fallback(no_hp)
             print("[DEBUG] → Answered by: RASA ✅")
         else:
-            #  Step 3b: Groq LLM 
+            # Step 3b: Groq LLM
             role = "triage" if any(k in input_pesan.lower() for k in TRIAGE_KEYWORDS) else "default"
             reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
             source = "groq"

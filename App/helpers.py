@@ -111,13 +111,15 @@ def upsert_patient(
     normalized_phone = normalize_phone_number(no_hp)
 
     # Susun req body sesuai format endpoint /patients (persis sama dengan format di API)
-    patient_body = {
-        "nik": nik or "",
-        "namaLengkap": namaLengkap or "",
-        "tanggalLahir": tanggalLahir or "",
-        "jenisKelamin": jenisKelamin or "LAKI_LAKI",
-        "telepon": normalized_phone,
-    }
+    patient_body: dict = {"telepon": normalized_phone}
+    if namaLengkap:
+        patient_body["namaLengkap"] = namaLengkap
+    if nik:
+        patient_body["nik"] = nik
+    if tanggalLahir:
+        patient_body["tanggalLahir"] = tanggalLahir
+    if jenisKelamin:
+        patient_body["jenisKelamin"] = jenisKelamin
     
     # Dapatkan token secara sinkron
     token = get_smartclinic_token_sync()
@@ -141,9 +143,10 @@ def upsert_patient(
             print(f"[Patient] SmartClinic registered: {rme_patient_id}")
         elif resp.status_code == 409:
             # Pasien sudah ada — ambil ID via GET by NIK
+            lookup_param = {"nik": nik} if nik else {"telepon": normalized_phone}
             get_resp = requests.get(
                 f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
-                params={"nik": nik},
+                params=lookup_param,
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=15,
             )
