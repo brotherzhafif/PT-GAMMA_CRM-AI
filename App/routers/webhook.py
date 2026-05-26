@@ -324,6 +324,10 @@ def webhook(
         is_emergency_keyword = any(k in input_pesan.lower() for k in TRIAGE_KEYWORDS)
 
         # kondisi penentuan Router
+        # Ambil history lokal untuk Groq & panggil server Rasa
+        chat_history = get_chat_history_json(no_hp)
+        rasa_result = query_rasa(no_hp, input_pesan)
+        
         if (
             rasa_result 
             and (
