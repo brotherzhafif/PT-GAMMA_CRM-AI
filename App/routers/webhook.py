@@ -326,7 +326,7 @@ def webhook(
         # kondisi penentuan Router
         # Ambil history lokal untuk Groq & panggil server Rasa
         chat_history = get_chat_history_json(no_hp)
-        rasa_result = query_rasa(no_hp, input_pesan)
+        rasa_result = query_rasa(input_pesan, no_hp)
         
         rasa_intent     = rasa_result["intent"]     if rasa_result else "N/A"
         rasa_confidence = rasa_result["confidence"] if rasa_result else 0.0
