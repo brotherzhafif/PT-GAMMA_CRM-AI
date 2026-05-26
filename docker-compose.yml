@@ -30,7 +30,7 @@ services:
       - "5005:5005"
     volumes:
       - ./rasa:/app
-    command: run --enable-api --cors "*" --model models
+    command: run --enable-api --cors "*" --model models --response-timeout 60
     networks:
       - hana-network
     depends_on:

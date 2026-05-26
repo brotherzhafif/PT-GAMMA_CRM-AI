@@ -38,6 +38,7 @@ entities:
   - poli
 
 # Slot adalah memory sementara untuk info booking
+# Slot adalah memory sementara untuk info booking
 slots:
   konteks_percakapan:
     type: text
@@ -98,6 +99,7 @@ slots:
         entity: nik
         intent: booking_berikan_nik
       - type: from_text
+        intent: booking_berikan_nik
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_nik
@@ -110,6 +112,7 @@ slots:
         entity: tanggal_lahir
         intent: booking_berikan_tgl_lahir
       - type: from_text
+        intent: booking_berikan_tgl_lahir
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_lahir
