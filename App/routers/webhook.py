@@ -317,40 +317,54 @@ def webhook(
             )
             print(f"[Handoff] {no_hp} minta handoff via keyword")
             return _send_reply(no_hp, input_pesan, reply, source="system")
+        
 
         # ── Step 3: Routing normal Rasa → Groq ───────────────────────────────
-        chat_history = get_chat_history_json(no_hp, limit=5)
+        # Cek apakah pesan mengandung keyword darurat
+        is_emergency_keyword = any(k in input_pesan.lower() for k in TRIAGE_KEYWORDS)
 
-        rasa_result = query_rasa(input_pesan, no_hp)
-        if rasa_result:
-            print(
-                f"[DEBUG] Rasa → intent: '{rasa_result['intent']}', "
-                f"confidence: {rasa_result['confidence']:.4f}, "
-                f"form_active: {rasa_result.get('is_form_active')}"
-            )
-
-        is_form_active = rasa_result and rasa_result.get("is_form_active")
-
-        if rasa_result and (
-            (is_form_active and rasa_result["reply"])
-            or (
-                rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD
-                and rasa_result["intent"] in RASA_TRUSTED_INTENTS
-                and rasa_result["reply"]
+        # kondisi penentuan Router
+        if (
+            rasa_result 
+            and (
+                (rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD and rasa_result["intent"] in RASA_TRUSTED_INTENTS) 
+                or rasa_result["is_form_active"]
             )
         ):
             reply = rasa_result["reply"]
             source = "rasa"
             reset_fallback(no_hp)
-            print("[DEBUG] → Answered by: RASA ✅")
+            print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_result['intent']})")
+            
+            # Rasa mendeteksi intent 'emergency' ATAU keyword terpicu
+            if rasa_result["intent"] == "emergency" or is_emergency_keyword:
+                print(f"[EMERGENCY] → Kondisi kritis terdeteksi via Rasa/Keyword! Mengaktifkan Auto-Handoff...")
+                start_handoff(no_hp)
+                reset_fallback(no_hp)
+                # Sisipkan pesan tambahan di akhir agar pasien tau di takeover admin
+                reply += (
+                    "\n\n🚨 *Pemberitahuan Sistem:* Kondisi darurat terdeteksi. "
+                    "Bot telah dinonaktifkan dan admin medis kami telah dihubungi untuk langsung mengambil alih percakapan ini. Mohon tunggu."
+                )
+            
         else:
-            # Step 3b: Groq LLM
-            role = "triage" if any(k in input_pesan.lower() for k in TRIAGE_KEYWORDS) else "default"
-            reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
-            source = "groq"
-            print(f"[DEBUG] → Answered by: GROQ LLM ✨ (role: {role})")
+            # Jika skenario emergency lolos dan bukan merupakan intent terdaftar, masuk ke Groq
+            if is_emergency_keyword:
+                role = "triage"
+                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                source = "groq"
+                start_handoff(no_hp)
+                reset_fallback(no_hp)
+                reply += "\n\n🚨 *Sistem mendeteksi kondisi darurat.* Sesi dialihkan ke admin medis."
+                print(f"[EMERGENCY] → Keyword triage lolos dari Rasa. Ditangani oleh Groq Triage + Auto-Handoff.")
+            else:
+                role = "default"
+                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                source = "groq"
+                print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: {role})")
 
-            # Auto handoff jika Groq fallback terlalu sering
+        # Logika Auto Handoff tetap berjalan jika source adalah "groq" (Triage maupun Default)
+        if source == "groq" and not is_emergency_keyword:
             fallback_count = increment_fallback(no_hp)
             if fallback_count >= MAX_FALLBACK_BEFORE_HANDOFF:
                 start_handoff(no_hp)
@@ -361,6 +375,7 @@ def webhook(
                 )
                 print(f"[Handoff] {no_hp} auto-handoff setelah {fallback_count}x fallback")
 
+        # Kirim pesan ke antrean Fonnte dan simpan ke DB
         fonnte_queue.add_to_queue(no_hp, reply)
         save_chat_to_json(no_hp, input_pesan, reply, source=source)
         save_to_supabase(no_hp, reply, direction="outbound", source=source)
