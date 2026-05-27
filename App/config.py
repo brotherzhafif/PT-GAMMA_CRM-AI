@@ -48,11 +48,18 @@ RASA_TRUSTED_INTENTS = {
     "booking_batalkan", "booking_reschedule",
 }
 
-#  Groq / LLM 
+# Gejala umum — Groq triage tanpa handoff
 TRIAGE_KEYWORDS = [
     "sakit", "pusing", "nyeri", "gejala", "demam", "batuk",
     "gatel", "gatal", "mual", "muntah", "sesak", "lemas",
     "pilek", "flu", "diare", "panas", "bengkak", "luka",
+]
+
+# Darurat/Emergency — langsung handoff ke admin
+EMERGENCY_KEYWORDS = [
+    "tidak sadarkan diri", "pingsan", "kejang", "sesak napas berat",
+    "serangan jantung", "stroke", "pendarahan hebat", "kecelakaan",
+    "overdosis", "bunuh diri", "darurat",
 ]
 
 #  Handoff 

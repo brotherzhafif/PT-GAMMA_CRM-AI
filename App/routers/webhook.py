@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/webhook.py
 # Endpoint: GET / dan POST /webhook
 #
-# Last Change   :   26 May 2026
+# Last Change   :   27 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
-from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, MAX_FALLBACK_BEFORE_HANDOFF
+from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, MAX_FALLBACK_BEFORE_HANDOFF
 from App.models import WebhookPayload, ChatResponse
 from App.helpers import (
     save_to_supabase,
@@ -320,8 +320,10 @@ def webhook(
         
 
         # ── Step 3: Routing normal Rasa → Groq ───────────────────────────────
-        # Cek apakah pesan mengandung keyword darurat
-        is_emergency_keyword = any(k in input_pesan.lower() for k in TRIAGE_KEYWORDS)
+        # Cek  keyword dipisah antara emergency vs gejala umum
+        pesan_lower = input_pesan.lower()
+        is_emergency_keyword = any(k in pesan_lower for k in EMERGENCY_KEYWORDS)
+        is_triage_keyword    = any(k in pesan_lower for k in TRIAGE_KEYWORDS)
 
         # kondisi penentuan Router
         # Ambil history lokal untuk Groq & panggil server Rasa
@@ -353,7 +355,7 @@ def webhook(
             print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_intent} | confidence={rasa_confidence:.4f})")
             
             # Rasa mendeteksi intent 'emergency' ATAU keyword terpicu
-            if rasa_result["intent"] == "emergency" or is_emergency_keyword:
+            if rasa_result["intent"] == "emergency" or (is_emergency_keyword and not rasa_form):
                 print(f"[EMERGENCY] → Kondisi kritis terdeteksi via Rasa/Keyword! Mengaktifkan Auto-Handoff...")
                 start_handoff(no_hp)
                 reset_fallback(no_hp)
@@ -364,7 +366,7 @@ def webhook(
                 )
             
         else:
-            # Jika skenario emergency lolos dan bukan merupakan intent terdaftar, masuk ke Groq
+            # Di luar form: keyword Emergency → handoff, keyword gejala → triage Groq tanpa handoff
             if is_emergency_keyword:
                 role = "triage"
                 reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
@@ -372,15 +374,20 @@ def webhook(
                 start_handoff(no_hp)
                 reset_fallback(no_hp)
                 reply += "\n\n🚨 *Sistem mendeteksi kondisi darurat.* Sesi dialihkan ke admin medis."
-                print(f"[EMERGENCY] → Keyword triage lolos dari Rasa. Ditangani oleh Groq Triage + Auto-Handoff.")
+                print(f"[EMERGENCY] → Keyword darurat lolos dari Rasa. Ditangani oleh Groq Triage + Auto-Handoff.")
+            elif is_triage_keyword:
+                role = "triage"
+                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                source = "groq"
+                print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: triage | rasa_intent={rasa_intent} | confidence={rasa_confidence:.4f})")
             else:
                 role = "default"
                 reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
                 source = "groq"
                 print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: {role} | rasa_intent={rasa_intent} | confidence={rasa_confidence:.4f} | trusted={rasa_trusted})")
 
-        # Logika Auto Handoff tetap berjalan jika source adalah "groq" (Triage maupun Default)
-        if source == "groq" and not is_emergency_keyword:
+        # Logika Auto Handoff jika source adalah "groq" (bukan triage/emergency)
+        if source == "groq" and not is_emergency_keyword and not is_triage_keyword:
             fallback_count = increment_fallback(no_hp)
             if fallback_count >= MAX_FALLBACK_BEFORE_HANDOFF:
                 start_handoff(no_hp)
