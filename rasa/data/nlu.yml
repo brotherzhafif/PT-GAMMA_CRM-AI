@@ -475,6 +475,9 @@ nlu:
       - lahirnya [10/07/1992](tanggal_lahir)
       - saya lahir tanggal [25/06/1985](tanggal_lahir)
       - ttl [01/01/2001](tanggal_lahir)
+      - [15/08/1995](tanggal_lahir)
+      - [01/01/2000](tanggal_lahir)
+      - [20/03/1988](tanggal_lahir)
 
   - intent: booking_berikan_keluhan
     examples: |
@@ -510,14 +513,25 @@ nlu:
       - besok lusa
       - senin depan
       - kamis 4 juni 2026
-      - tanggal [25/05/2026](tanggal_kunjungan)
-      - rencana datang besok pagi
-      - mau berkunjung hari jumat ini
-      - [12/12/2026](tanggal_kunjungan)
       - Lusa 
       - minggu depan
       - hari ini
       - hari rabu depan
+      - [27/05/2026](tanggal_kunjungan)
+      - [28/05/2026](tanggal_kunjungan)
+      - [30/05/2026](tanggal_kunjungan)
+      - [01/06/2026](tanggal_kunjungan)
+      - [05/06/2026](tanggal_kunjungan)
+      - [10/06/2026](tanggal_kunjungan)
+      - [15/06/2026](tanggal_kunjungan)
+      - [20/06/2026](tanggal_kunjungan)
+      - [25/06/2026](tanggal_kunjungan)
+      - [01/07/2026](tanggal_kunjungan)
+      - tanggal [05/06/2026](tanggal_kunjungan)
+      - kunjungan [10/06/2026](tanggal_kunjungan)
+      - rencana [15/06/2026](tanggal_kunjungan)
+      - mau datang [20/06/2026](tanggal_kunjungan)
+      - rencananya [25/06/2026](tanggal_kunjungan)
 
   - intent: booking_konfirmasi
     examples: |
@@ -540,6 +554,24 @@ nlu:
       - ada data yang keliru mau saya ubah
       - edit data booking saya yang barusan
       - data yang tadi salah mau saya ubah
+      - ubah data
+      - ganti data
+      - edit data
+      - koreksi data
+      - data salah
+      - salah data
+      - mau ubah
+      - ubah saja
+      - ada yang salah
+      - perbaiki data
+      - revisi data
+      - data keliru
+      - mau ganti data
+      - ubah informasi
+      - data nya salah
+      - salah nih datanya
+      - benerin data dong
+      - ralat data
 
   - intent: booking_batalkan
     examples: |

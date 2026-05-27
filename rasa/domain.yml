@@ -110,9 +110,7 @@ slots:
     mappings:
       - type: from_entity
         entity: tanggal_lahir
-        intent: booking_berikan_tgl_lahir
       - type: from_text
-        intent: booking_berikan_tgl_lahir
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_lahir
@@ -141,9 +139,7 @@ slots:
     mappings:
       - type: from_entity
         entity: keluhan
-        intent: booking_berikan_keluhan
       - type: from_text
-        intent: booking_berikan_keluhan
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_keluhan
@@ -156,16 +152,7 @@ slots:
     mappings:
       - type: from_entity
         entity: tanggal_kunjungan
-        intent: booking_berikan_tgl_kunjungan
-        conditions:
-          - active_loop: booking_form_baru
-      - type: from_entity
-        entity: tanggal_kunjungan
-        intent: booking_berikan_tgl_kunjungan
-        conditions:
-          - active_loop: booking_form_lama
       - type: from_text
-        intent: booking_berikan_tgl_kunjungan
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_kunjungan
