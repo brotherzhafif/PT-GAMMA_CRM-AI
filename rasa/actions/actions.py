@@ -1,15 +1,13 @@
-
-
 """
 Rasa Custom Actions — SmartClinic API Integration
 ==================================================
 Handles:
-  - Fetch Doctor Schedule
-  - Fetch Queue Status
-  - Booking Flow (Pasien Baru & Lama)
+  - Fetch Doctor Schedule (Fixed with Day Filtering)
+  - Fetch Queue Status (Fixed with Date Params & Swagger Schema)
+  - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   27 May 2026
+# Last Change   :   28 Mei 2026
 # ======================================================
 
 import os
@@ -65,82 +63,6 @@ def get_patient_by_phone(phone_number: str) -> dict:
     return {}
 
 # ======================================================
-#  JADWAL & ANTREAN ACTIONS
-# ======================================================
-
-class ActionFetchSchedule(Action):
-    def name(self) -> Text:
-        return "action_fetch_schedule"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        # Tembak GET /api/schedules
-        result = api_get("/api/schedules")
-
-        if result is None:
-            dispatcher.utter_message(
-                text="Mohon maaf, saya sedang tidak bisa mengakses data jadwal dokter saat ini. "
-                     "Silakan coba beberapa saat lagi atau hubungi admin klinik. 🙏"
-            )
-            return []
-
-        schedules = result if isinstance(result, list) else result.get("data", [])
-
-        if not schedules:
-            dispatcher.utter_message(text="Saat ini belum ada jadwal dokter yang tersedia di sistem RME. 🙏")
-            return []
-
-        msg = "📅 *Jadwal Dokter Klinik SmartClinic*\n\n"
-        for i, sched in enumerate(schedules[:6], 1):
-            dokter_name = sched.get("dokter_nama") or sched.get("nama_dokter") or sched.get("dokter", {}).get("namaLengkap", "Dokter")
-            spesialis = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "Umum")
-            hari = sched.get("hari_nama") or sched.get("hari") or "Senin - Jumat"
-            jam = sched.get("jam") or f"{sched.get('jamMulai', '08:00')} - {sched.get('jamSelesai', '14:00')}"
-            
-            msg += f"{i}. 🩺 *{dokter_name}* ({spesialis})\n"
-            msg += f"   📆 Hari: {hari}\n"
-            msg += f"   🕐 Jam: {jam}\n\n"
-
-        msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
-        dispatcher.utter_message(text=msg)
-        return []
-
-
-class ActionFetchQueue(Action):
-    def name(self) -> Text:
-        return "action_fetch_queue"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        # Tembak GET /api/appointment (Ambil daftar antrian hari ini)
-        result = api_get("/api/appointment")
-
-        if result is None:
-            dispatcher.utter_message(text="Mohon maaf, saya gagal memuat status antrean saat ini. Silakan coba lagi nanti.")
-            return []
-
-        queues = result if isinstance(result, list) else result.get("data", [])
-        total_antrean = len(queues)
-
-        msg = f"🔢 *Status Antrian Hari Ini*\n\n📊 Total antrian terdaftar: *{total_antrean}* pasien\n"
-        
-        if total_antrean > 0:
-            # Hitung ringkasan status antrean jika ada datanya
-            status_count = {}
-            for q in queues:
-                st = q.get("status", "MENUNGGU").upper()
-                status_count[st] = status_count.get(st, 0) + 1
-            
-            status_emoji = {"MENUNGGU": "⏳", "DIPANGGIL": "📢", "DIPERIKSA": "🩺", "SELESAI": "✅"}
-            for status, count in status_count.items():
-                emoji = status_emoji.get(status, "•")
-                msg += f"{emoji} {status}: {count} orang\n"
-        else:
-            msg += "📋 Belum ada antrean berjalan untuk hari ini."
-
-        msg += "\nApakah ada hal lain yang bisa saya bantu? 😊"
-        dispatcher.utter_message(text=msg)
-        return []
-
-# ======================================================
 # FORMAT & VALIDASI TANGGAL + NIK
 # ======================================================
 
@@ -148,11 +70,11 @@ def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
     teks = teks.strip().lower()
     today = datetime.now()
 
-    if teks in ("hari ini", "sekarang"):
+    if "hari ini" in teks or "sekarang" in teks:
         return today.strftime("%Y-%m-%d")
-    if teks in ("besok", "bsk"):
+    if "besok" in teks or "bsk" in teks:
         return (today + timedelta(days=1)).strftime("%Y-%m-%d")
-    if teks == "lusa":
+    if "lusa" in teks:
         return (today + timedelta(days=2)).strftime("%Y-%m-%d")
 
     nama_hari_map = {"senin": 0, "selasa": 1, "rabu": 2, "kamis": 3, "jumat": 4, "sabtu": 5, "minggu": 6}
@@ -163,6 +85,7 @@ def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
                 days_ahead = 7
             return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
 
+    # Mendukung format DD/MM/YYYY atau DD-MM-YYYY
     match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", teks)
     if match:
         day, month, year = match.groups()
@@ -173,6 +96,16 @@ def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
             return dt.strftime("%Y-%m-%d")
         except ValueError:
             return None
+            
+    # Mendukung format ISO YYYY-MM-DD langsung dari entitas/sistem advanced
+    match_iso = re.search(r"(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})", teks)
+    if match_iso:
+        year, month, day = match_iso.groups()
+        try:
+            return datetime(int(year), int(month), int(day)).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+            
     return None
 
 def parse_tanggal_lahir(teks: str) -> Optional[str]:
@@ -198,7 +131,117 @@ def format_tgl_indonesia(tgl_str: str) -> str:
         return tgl_str
 
 # ======================================================
-# APPOINTMENT BOOKING 
+#  JADWAL & ANTREAN ACTIONS
+# ======================================================
+
+class ActionFetchSchedule(Action):
+    def name(self) -> Text:
+        return "action_fetch_schedule"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        tgl_text = next(tracker.get_latest_entity_values("tanggal_kunjungan"), None) or tracker.get_slot("booking_tgl_kunjungan")
+        target_day = None
+        
+        if tgl_text:
+            tgl_text_lower = str(tgl_text).lower()
+            for hari_nama in ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]:
+                if hari_nama in tgl_text_lower:
+                    target_day = hari_nama
+                    break
+            
+            parsed_date = parse_tanggal_kunjungan(tgl_text_lower)
+            if parsed_date and not target_day:
+                dt = datetime.strptime(parsed_date, "%Y-%m-%d")
+                days_map = {"Monday": "senin", "Tuesday": "selasa", "Wednesday": "rabu", "Thursday": "kamis", "Friday": "jumat", "Saturday": "sabtu", "Sunday": "minggu"}
+                target_day = days_map.get(dt.strftime("%A"))
+
+        result = api_get("/api/schedules")
+
+        if result is None:
+            dispatcher.utter_message(
+                text="Mohon maaf, saya sedang tidak bisa mengakses data jadwal dokter saat ini. Silakan coba beberapa saat lagi. 🙏"
+            )
+            return []
+
+        schedules = result if isinstance(result, list) else result.get("data", [])
+
+        if not schedules:
+            dispatcher.utter_message(text="Saat ini belum ada jadwal dokter yang tersedia di sistem RME. 🙏")
+            return []
+
+        # Filter jadwal di memori berdasarkan hari yang diminta user
+        filtered_schedules = []
+        for sched in schedules:
+            hari_sched = str(sched.get("hari_nama") or sched.get("hari") or "").lower()
+            if target_day and target_day not in hari_sched:
+                continue
+            filtered_schedules.append(sched)
+
+        if not filtered_schedules and target_day:
+            dispatcher.utter_message(text=f"Mohon maaf, tampaknya belum ada jadwal dokter yang tersedia khusus untuk hari *{target_day.title()}*. 🙏")
+            return []
+
+        display_schedules = filtered_schedules if target_day else schedules[:6]
+        msg = f"📅 *Jadwal Dokter Klinik SmartClinic {'(' + target_day.title() + ')' if target_day else ''}*\n\n"
+        
+        for i, sched in enumerate(display_schedules, 1):
+            dokter_name = sched.get("dokter_nama") or sched.get("nama_dokter") or sched.get("dokter", {}).get("namaLengkap", "Dokter")
+            spesialis = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "Umum")
+            hari = sched.get("hari_nama") or sched.get("hari") or "Senin - Jumat"
+            jam = sched.get("jam") or f"{sched.get('jamMulai', '08:00')} - {sched.get('jamSelesai', '14:00')}"
+            
+            msg += f"{i}. 🩺 *{dokter_name}* ({spesialis})\n"
+            msg += f"   📆 Hari: {hari}\n"
+            msg += f"   🕐 Jam: {jam}\n\n"
+
+        msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
+        dispatcher.utter_message(text=msg)
+        return []
+
+
+class ActionFetchQueue(Action):
+    def name(self) -> Text:
+        return "action_fetch_queue"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        tgl_text = next(tracker.get_latest_entity_values("tanggal_kunjungan"), None) or tracker.get_slot("booking_tgl_kunjungan")
+        target_date = parse_tanggal_kunjungan(str(tgl_text)) if tgl_text else datetime.now().strftime("%Y-%m-%d")
+        
+        if not target_date:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+
+        result = api_get("/api/appointment", params={"tanggal": target_date})
+
+        if result is None:
+            dispatcher.utter_message(text="Mohon maaf, saya gagal memuat status antrean saat ini. Silakan coba lagi nanti.")
+            return []
+
+        data_obj = result.get("data", {})
+        
+        if isinstance(data_obj, list):
+            total_antrean = len(data_obj)
+            menunggu = sum(1 for q in data_obj if q.get("status", "MENUNGGU").upper() == "MENUNGGU")
+            hadir = sum(1 for q in data_obj if q.get("status", "").upper() in ("HADIR", "DIPANGGIL", "DIPERIKSA"))
+        else:
+            total_antrean = data_obj.get("total", 0)
+            menunggu = data_obj.get("menunggu", 0)
+            hadir = data_obj.get("hadir", 0)
+
+        tgl_display = format_tgl_indonesia(target_date)
+        msg = f"🔢 *Status Antrian Klinik*\n📅 Waktu: {tgl_display}\n\n📊 Total antrian terdaftar: *{total_antrean}* pasien\n"
+        
+        if total_antrean > 0:
+            msg += f"⏳ MENUNGGU : {menunggu} orang\n"
+            msg += f"📢 TERLAYANI: {hadir} orang\n"
+        else:
+            msg += "📋 Belum ada antrean berjalan untuk tanggal ini."
+
+        msg += "\nApakah ada hal lain yang bisa saya bantu? 😊"
+        dispatcher.utter_message(text=msg)
+        return []
+
+# ======================================================
+# APPOINTMENT BOOKING START
 # ======================================================
 
 class ActionStartBooking(Action):
@@ -207,7 +250,6 @@ class ActionStartBooking(Action):
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         sender_id = tracker.sender_id
-        # Lookup pasien via API FastAPI
         patient_data = get_patient_by_phone(sender_id)
         
         nik = patient_data.get("nik")
@@ -216,7 +258,7 @@ class ActionStartBooking(Action):
         if nik and dob:
             dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=nik)
             return [
-                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
                 SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
                 SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("booking_step", "tanya_untuk_siapa"), SlotSet("booking_untuk_siapa", None)
@@ -224,7 +266,7 @@ class ActionStartBooking(Action):
         else:
             dispatcher.utter_message(response="utter_booking_tanya_tipe")
             return [
-                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
                 SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
                 SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("booking_step", "tanya_tipe")
@@ -257,7 +299,6 @@ class ActionHandleUntukSiapa(Action):
                 SlotSet("booking_tipe_pasien", "baru"), SlotSet("booking_step", "form_baru"),
                 ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
             ]
-
 
 # ======================================================
 #  FORM VALIDATION ACTIONS
@@ -307,15 +348,16 @@ class ValidateBookingFormLama(FormValidationAction):
     def name(self) -> Text:
         return "validate_booking_form_lama"
 
-    def validate_booking_nik(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
+    
+    def validate_booking_nik_lama(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         nilai = str(slot_value).strip()
         digit_only = re.sub(r"\D", "", nilai)
         if len(digit_only) == 16:
-            return {"booking_nik": digit_only}
+            return {"booking_nik_lama": digit_only}
         if not nilai.isdigit() and len(nilai) >= 2:
-            return {"booking_nik": nilai}
+            return {"booking_nik_lama": nilai}
         dispatcher.utter_message(response="utter_booking_nik_invalid")
-        return {"booking_nik": None}
+        return {"booking_nik_lama": None}
 
     def validate_booking_keluhan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         keluhan = str(slot_value).strip()
@@ -330,7 +372,6 @@ class ValidateBookingFormLama(FormValidationAction):
             dispatcher.utter_message(response="utter_booking_tgl_kunjungan_invalid")
             return {"booking_tgl_kunjungan": None}
         return {"booking_tgl_kunjungan": parsed}
-
 
 # ======================================================
 # SUBMIT & REVIEW ACTIONS
@@ -349,11 +390,11 @@ class ActionBookingFormLamaSubmit(Action):
         return "action_booking_form_lama_submit"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        identifier = tracker.get_slot("booking_nik") or ""
+        identifier = tracker.get_slot("booking_nik_lama") or ""
         events = [SlotSet("booking_step", "review")]
         digit_only = re.sub(r"\D", "", identifier)
 
-        #  Tembak GET /api/patients (Melakukan pencarian pasien didasarkan NIK atau nama untuk pasien lama)
+        # Tembak GET /api/patients sesuai format payload array Swagger
         if len(digit_only) == 16:
             result = api_get("/api/patients", params={"nik": digit_only})
         else:
@@ -372,9 +413,9 @@ class ActionBookingFormLamaSubmit(Action):
                 dispatcher.utter_message(text=f"✅ Data Anda ditemukan. Halo kembali, *{nama}*! 😊")
                 events += [SlotSet("booking_nama", nama), SlotSet("booking_nik", nik), SlotSet("booking_tgl_lahir", tgl_lahir)]
             else:
-                dispatcher.utter_message(text="⚠️ Data rekam medis Anda belum ditemukan. Kami bantu daftarkan via data form ya.")
+                dispatcher.utter_message(text="⚠️ Data rekam medis Anda belum terdaftar secara instan. Kami bantu kroscek via review data ya.")
         else:
-            dispatcher.utter_message(text="⚠️ Layanan data pasien sedang sibuk. Kita lanjutkan konfirmasi jadwal Anda dahulu.")
+            dispatcher.utter_message(text="⚠️ Layanan sinkronisasi data sedang sibuk. Kita lanjutkan konfirmasi jadwal Anda dahulu.")
 
         return events
 
@@ -385,7 +426,8 @@ class ActionBookingReview(Action):
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         nama = tracker.get_slot("booking_nama") or "-"
-        nik = tracker.get_slot("booking_nik") or "-"
+
+        nik = tracker.get_slot("booking_nik") or tracker.get_slot("booking_nik_lama") or "-"
         tgl_lahir = tracker.get_slot("booking_tgl_lahir") or "-"
         keluhan = tracker.get_slot("booking_keluhan") or "-"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or "-"
@@ -396,7 +438,7 @@ class ActionBookingReview(Action):
 
         if tipe == "baru":
             msg = (
-                "📋 *Ringkasan Data Pendaftaran*\n\n"
+                "📋 *Ringkasan Data Pendaftaran (Pasien Baru)*\n\n"
                 f"👤 Nama        : *{nama}*\n"
                 f"🪪 NIK         : `{nik_display}`\n"
                 f"🎂 Tgl Lahir  : {tgl_lahir}\n"
@@ -407,9 +449,11 @@ class ActionBookingReview(Action):
                 "Balas *ubah* untuk memperbaiki"
             )
         else:
+            # Tampilkan Nama Asli jika berhasil ditarik dari API di langkah submit sebelumnya
+            nama_display = f" ({nama})" if nama != "-" else ""
             msg = (
-                "📋 *Ringkasan Data Pendaftaran*\n\n"
-                f"🪪 NIK/Nama   : *{nik_display}*\n"
+                "📋 *Ringkasan Data Pendaftaran (Pasien Lama)*\n\n"
+                f"🪪 Identitas   : *{nik_display}*{nama_display}\n"
                 f"🩺 Keluhan    : {keluhan}\n"
                 f"📅 Kunjungan : {tgl_display}\n\n"
                 "Apakah data di atas sudah benar?\n"
@@ -426,14 +470,13 @@ class ActionBookingConfirm(Action):
         return "action_booking_confirm"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        nama = tracker.get_slot("booking_nama") or "Pasien"
+        nama = tracker.get_slot("booking_nama") or tracker.get_slot("booking_nik_lama") or "Pasien"
         keluhan = tracker.get_slot("booking_keluhan") or "Pendaftaran via Bot"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or ""
         no_hp = tracker.sender_id
 
         dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
 
-        # Struktur PAYLOAD booking
         payload = {
             "phone_number": no_hp,
             "jadwalId": "JDW-AUTO-DEFAULT",  
@@ -443,10 +486,9 @@ class ActionBookingConfirm(Action):
             "noRujukanFktp": ""
         }
 
-        # Tembak POST /api/appointment/appointments (Membuat booking baru)
         result = api_post("/api/appointment/appointments", payload)
 
-        if result and (result.get("status") == "ok" or "status" in result):
+        if result and (result.get("success") is True or result.get("status") in ("ok", "success", True)):
             nomor_antrian = result.get("nomorAntrian") or result.get("queue_number") or "Akan diberikan di klinik"
             booking_id = result.get("appointmentId") or result.get("id") or f"SC-{datetime.now().strftime('%m%d%H%M')}"
             
@@ -468,7 +510,6 @@ class ActionBookingConfirm(Action):
             dispatcher.utter_message(text=tiket)
             booking_id_final = str(booking_id)
         else:
-            # fallback manual jika API gagal merespons dengan benar
             print(f"[Booking Warning] POST /api/appointment/appointments gagal. Memicu fallback manual.")
             dispatcher.utter_message(
                 text="⚠️ *Sistem Sedang Padat*\n"
@@ -478,7 +519,7 @@ class ActionBookingConfirm(Action):
             booking_id_final = f"FALLBACK-{datetime.now().strftime('%H%M%S')}"
 
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("booking_step", "selesai"), SlotSet("booking_id_konfirmasi", booking_id_final),
@@ -493,7 +534,7 @@ class ActionBookingCancel(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(response="utter_booking_batalkan")
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("booking_step", None), ActiveLoop(None)
@@ -507,8 +548,16 @@ class ActionSlotResetBooking(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan isi data Anda kembali. 😊")
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("booking_step", "tanya_tipe"), ActiveLoop(None)
         ]
+    
+class ActionBookingReschedule(Action):
+    def name(self) -> Text:
+        return "action_booking_reschedule"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        dispatcher.utter_message(response="utter_booking_reschedule_info")
+        return []

@@ -1,4 +1,4 @@
-# Log Last Change: 26 Mei 2026
+# Log Last Change: 28 Mei 2026
 version: "3.1"
 
 rules:
@@ -49,65 +49,24 @@ rules:
       - action: utter_emergency
       - active_loop: null
 
-  - rule: Answer affirm
+  - rule: Mengubah data booking tengah jalan
     steps:
-      - intent: affirm
-      - action: utter_affirm
+      - intent: booking_ubah_data
+      - action: action_slot_reset_booking
+      - action: utter_booking_tanya_tipe
 
-  - rule: Answer deny
+  - rule: Batalkan booking kapan saja
     steps:
-      - intent: deny
-      - action: utter_deny
+      - intent: booking_batalkan
+      - action: action_booking_cancel
+      - active_loop: null
 
-  - rule: Fallback
+  - rule: Reschedule booking
     steps:
-      - intent: nlu_fallback
-      - action: utter_default
+      - intent: booking_reschedule
+      - action: action_booking_reschedule
 
-  - rule: Handle rating survey
-    steps:
-      - intent: intent_berikan_rating
-      - action: utter_terima_kasih_rating
-
-  # Trigger awal booking
-  - rule: Mulai alur booking
-    steps:
-      - intent: intent_ingin_booking
-      - action: action_start_booking
-
-  - rule: Handle booking untuk siapa diri sendiri
-    steps:
-      - intent: intent_diri_sendiri
-      - action: action_handle_untuk_siapa
-
-  - rule: Handle booking untuk siapa orang lain
-    steps:
-      - intent: intent_orang_lain
-      - action: action_handle_untuk_siapa
-
-  #  Aktivasi form berdasarkan tipe pasien
-  - rule: Aktifkan form pasien baru
-    condition:
-      - slot_was_set:
-          - booking_tipe_pasien: baru
-    steps:
-      - intent: booking_pasien_baru
-      - action: utter_booking_intro_baru
-      - action: booking_form_baru
-      - active_loop: booking_form_baru
-
-  - rule: Aktifkan form pasien lama
-    condition:
-      - slot_was_set:
-          - booking_tipe_pasien: lama
-    steps:
-      - intent: booking_pasien_lama
-      - action: utter_booking_intro_lama
-      - action: booking_form_lama
-      - active_loop: booking_form_lama
-
-  #  Submit form
-  - rule: Submit form pasien baru
+  - rule: Submit booking_form_baru selesai
     condition:
       - active_loop: booking_form_baru
     steps:
@@ -118,7 +77,7 @@ rules:
       - action: action_booking_form_baru_submit
       - action: action_booking_review
 
-  - rule: Submit form pasien lama
+  - rule: Submit booking_form_lama selesai
     condition:
       - active_loop: booking_form_lama
     steps:
@@ -128,66 +87,3 @@ rules:
           - requested_slot: null
       - action: action_booking_form_lama_submit
       - action: action_booking_review
-
-  #  Konfirmasi
-  - rule: Konfirmasi booking
-    steps:
-      - intent: booking_konfirmasi
-      - action: action_booking_confirm
-
-  # Ubah data booking
-  - rule: Ubah data booking
-    steps:
-      - intent: booking_ubah_data
-      - action: action_slot_reset_booking
-      - action: utter_booking_tanya_tipe
-
-  # Batal
-  # Batal
-  - rule: Batalkan booking kapan saja
-    steps:
-      - intent: booking_batalkan
-      - action: action_booking_cancel
-      - active_loop: null
-
-  # Reschedule
-  - rule: Reschedule booking
-    steps:
-      - intent: booking_reschedule
-      - action: utter_booking_reschedule_info
-
-  # INTERUPSI: Pembatalan di Tengah Form Pasien Baru
-  - rule: Interupsi Batal - Form Pasien Baru
-    condition:
-      - active_loop: booking_form_baru
-    steps:
-      - intent: booking_batalkan
-      - action: action_booking_cancel
-      - active_loop: null
-
-  # INTERUPSI: Batal di Tengah Form Pasien Lama
-  - rule: Interupsi Batal - Form Pasien Lama
-    condition:
-      - active_loop: booking_form_lama
-    steps:
-      - intent: booking_batalkan
-      - action: action_booking_cancel
-      - active_loop: null
-
-  # INTERUPSI: Emergency di Tengah Form Pasien Baru
-  - rule: Interupsi Darurat - Form Pasien Baru
-    condition:
-      - active_loop: booking_form_baru
-    steps:
-      - intent: emergency
-      - action: utter_emergency
-      - active_loop: null
-
-  # INTERUPSI: Emergency di Tengah Form Pasien Lama
-  - rule: Interupsi Darurat - Form Pasien Lama
-    condition:
-      - active_loop: booking_form_lama
-    steps:
-      - intent: emergency
-      - action: utter_emergency
-      - active_loop: null

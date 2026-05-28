@@ -130,10 +130,10 @@ stories:
       - active_loop: null
 
   # ── Alur 7: Reschedule setelah booking selesai ───────────────
-  - story: reschedule booking
+  - story: Reschedule booking
     steps:
       - intent: booking_reschedule
-      - action: utter_booking_reschedule_info
+      - action: action_booking_reschedule
 
   # ── Alur 8: Booking lalu minta admin ─────────────────────────
   - story: booking pasien baru lalu minta admin
