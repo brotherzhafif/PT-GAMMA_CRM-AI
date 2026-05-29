@@ -335,6 +335,7 @@ def webhook(
         rasa_form       = rasa_result["is_form_active"] if rasa_result else False
         rasa_trusted    = rasa_intent in RASA_TRUSTED_INTENTS
         rasa_requested_slot  = rasa_result.get("requested_slot") if rasa_result else None
+        rasa_was_form_active = rasa_form  # simpan snapshot untuk handle timeout
 
         print(
             f"[DEBUG][RASA] intent={rasa_intent} | "
@@ -367,6 +368,18 @@ def webhook(
                     "\n\n🚨 *Pemberitahuan Sistem:* Kondisi darurat terdeteksi. "
                     "Bot telah dinonaktifkan dan admin medis kami telah dihubungi untuk langsung mengambil alih percakapan ini. Mohon tunggu."
                 )
+            
+        elif rasa_result is None and rasa_was_form_active:
+            # ── Graceful timeout: Rasa timeout tapi form booking sedang aktif ──
+            # Kemungkinan besar action booking_confirm sedang diproses (POST ke SmartClinic)
+            # Jangan fallback ke Groq — tampilkan pesan tunggu agar user tidak bingung
+            print(f"[TIMEOUT] Rasa timeout saat form aktif — kemungkinan action booking sedang diproses. Skip Groq fallback.")
+            reply = (
+                "⏳ Sistem sedang memproses permintaan Anda, mohon tunggu sebentar...\n\n"
+                "Jika tidak ada konfirmasi dalam 1 menit, silakan ketik *status booking* atau hubungi admin klinik. 🙏"
+            )
+            source = "system"
+            reset_fallback(no_hp)
             
         else:
             # Di luar form: keyword Emergency → handoff, keyword gejala → triage Groq tanpa handoff

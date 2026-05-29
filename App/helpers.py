@@ -312,10 +312,11 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
             print(f"[Rasa] Tracker pre-check gagal (non-fatal): {tracker_err}")
 
         # Kirim pesan ke Rasa untuk diproses
+        # Timeout 30 detik karena action booking memanggil 2x external API
         resp = requests.post(
             f"{RASA_URL}/webhooks/rest/webhook",
             json={"sender": sender, "message": message},
-            timeout=10,
+            timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -327,7 +328,7 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
         parse_resp = requests.post(
             f"{RASA_URL}/model/parse",
             json={"text": message},
-            timeout=10,
+            timeout=15,
         )
         parse_resp.raise_for_status()
         parse_data = parse_resp.json()

@@ -318,20 +318,29 @@ class ValidateBookingFormBaru(FormValidationAction):
     def validate_booking_nik(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         nik = re.sub(r"\D", "", str(slot_value))
         if len(nik) != 16:
-            dispatcher.utter_message(response="utter_booking_nik_invalid")
+            dispatcher.utter_message(text=(
+                "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang.\n\n"
+                "🪪 *NIK* (16 digit):\nSilakan ketik NIK Anda yang tertera di KTP."
+            ))
             return {"booking_nik": None}
         return {"booking_nik": nik}
 
     def validate_booking_tgl_lahir(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         parsed = parse_tanggal_lahir(str(slot_value))
         if not parsed:
-            dispatcher.utter_message(response="utter_booking_tgl_invalid")
+            dispatcher.utter_message(text=(
+                "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n_(Contoh: 15/08/1995)_\n\n"
+                "🎂 *Tanggal Lahir*:\nSilakan ketik ulang dalam format DD/MM/YYYY."
+            ))
             return {"booking_tgl_lahir": None}
         # Tolak jika tahun >= tahun sekarang (pasti bukan tanggal lahir)
         try:
             tahun = int(parsed.split("-")[0])
             if tahun >= datetime.now().year:
-                dispatcher.utter_message(text="⚠️ Tanggal lahir tidak valid. Pastikan tahun lahir sudah benar ya.\n_(Contoh: 15/08/1995)_")
+                dispatcher.utter_message(text=(
+                    "⚠️ Tanggal lahir tidak valid. Pastikan tahun lahir sudah benar ya.\n\n"
+                    "🎂 *Tanggal Lahir*:\nSilakan ketik ulang dalam format DD/MM/YYYY.\n_(Contoh: 15/08/1995)_"
+                ))
                 return {"booking_tgl_lahir": None}
         except Exception:
             pass
@@ -347,7 +356,10 @@ class ValidateBookingFormBaru(FormValidationAction):
     def validate_booking_tgl_kunjungan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         parsed = parse_tanggal_kunjungan(str(slot_value))
         if not parsed:
-            dispatcher.utter_message(response="utter_booking_tgl_kunjungan_invalid")
+            dispatcher.utter_message(text=(
+                "⚠️ Tanggal kunjungan tidak valid. Gunakan format *DD/MM/YYYY*\n_(Contoh: 25/05/2026)_\n\n"
+                "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?"
+            ))
             return {"booking_tgl_kunjungan": None}
 
         try:
@@ -388,8 +400,8 @@ class ValidateBookingFormBaru(FormValidationAction):
                 }
             else:
                 dispatcher.utter_message(text=(
-                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n"
-                    "Silakan pilih hari lain _(Senin–Jumat)_."
+                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n\n"
+                    "📅 *Rencana Tanggal Kunjungan*:\nSilakan pilih hari lain _(Senin–Jumat)_."
                 ))
                 return {"booking_tgl_kunjungan": None}
         except Exception as e:
@@ -408,7 +420,10 @@ class ValidateBookingFormLama(FormValidationAction):
             return {"booking_nik_lama": digit_only}
         if not nilai.isdigit() and len(nilai) >= 2:
             return {"booking_nik_lama": nilai}
-        dispatcher.utter_message(response="utter_booking_nik_invalid")
+        dispatcher.utter_message(text=(
+            "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang.\n\n"
+            "🪪 *NIK atau Nama Lengkap*:\nSilakan ketik NIK (16 digit) atau nama lengkap yang terdaftar."
+        ))
         return {"booking_nik_lama": None}
 
     def validate_booking_keluhan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
@@ -421,7 +436,10 @@ class ValidateBookingFormLama(FormValidationAction):
     def validate_booking_tgl_kunjungan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         parsed = parse_tanggal_kunjungan(str(slot_value))
         if not parsed:
-            dispatcher.utter_message(response="utter_booking_tgl_kunjungan_invalid")
+            dispatcher.utter_message(text=(
+                "⚠️ Tanggal kunjungan tidak valid. Gunakan format *DD/MM/YYYY*\n_(Contoh: 25/05/2026)_\n\n"
+                "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?"
+            ))
             return {"booking_tgl_kunjungan": None}
 
         try:
@@ -462,8 +480,8 @@ class ValidateBookingFormLama(FormValidationAction):
                 }
             else:
                 dispatcher.utter_message(text=(
-                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n"
-                    "Silakan pilih hari lain _(Senin–Jumat)_."
+                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n\n"
+                    "📅 *Rencana Tanggal Kunjungan*:\nSilakan pilih hari lain _(Senin–Jumat)_."
                 ))
                 return {"booking_tgl_kunjungan": None}
         except Exception as e:
