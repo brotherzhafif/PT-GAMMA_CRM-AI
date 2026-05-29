@@ -7,7 +7,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   28 Mei 2026
+# Last Change   :   29 Mei 2026
 # ======================================================
 
 import os
@@ -327,8 +327,16 @@ class ValidateBookingFormBaru(FormValidationAction):
         if not parsed:
             dispatcher.utter_message(response="utter_booking_tgl_invalid")
             return {"booking_tgl_lahir": None}
+        # Tolak jika tahun >= tahun sekarang (pasti bukan tanggal lahir)
+        try:
+            tahun = int(parsed.split("-")[0])
+            if tahun >= datetime.now().year:
+                dispatcher.utter_message(text="⚠️ Tanggal lahir tidak valid. Pastikan tahun lahir sudah benar ya.\n_(Contoh: 15/08/1995)_")
+                return {"booking_tgl_lahir": None}
+        except Exception:
+            pass
         return {"booking_tgl_lahir": parsed}
-
+    
     def validate_booking_keluhan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         keluhan = str(slot_value).strip()
         if len(keluhan) < 3:
@@ -341,14 +349,58 @@ class ValidateBookingFormBaru(FormValidationAction):
         if not parsed:
             dispatcher.utter_message(response="utter_booking_tgl_kunjungan_invalid")
             return {"booking_tgl_kunjungan": None}
-        return {"booking_tgl_kunjungan": parsed}
+
+        try:
+            dt = datetime.strptime(parsed, "%Y-%m-%d")
+            hari_kunjungan = dt.isoweekday()
+
+            result = api_get("/api/schedules")
+            
+            # Mendukung format jika langsung array (List) atau bungkusan objek data (Dict)
+            if isinstance(result, list):
+                schedules = result
+            elif isinstance(result, dict):
+                schedules = result.get("data", result.get("schedules", []))
+            else:
+                schedules = []
+
+            jadwal_id_ditemukan = None
+            for sched in schedules:
+                hari_sched = sched.get("hari")
+                if hari_sched is not None:
+                    hari_sched = int(hari_sched)
+
+                # Jika property 'isAktif' absen dari database, fallback ke True agar tetap valid
+                is_aktif = sched.get("isAktif", True)
+                tanggal_libur = sched.get("tanggalLibur", [])
+
+                if (hari_sched == hari_kunjungan
+                        and is_aktif is True
+                        and parsed not in tanggal_libur):
+                    jadwal_id_ditemukan = sched.get("id")
+                    break
+
+            if jadwal_id_ditemukan:
+                print(f"[DEBUG Form Baru] jadwalId={jadwal_id_ditemukan} (hari={hari_kunjungan})")
+                return {
+                    "booking_tgl_kunjungan": parsed,
+                    "jadwalId": str(jadwal_id_ditemukan)
+                }
+            else:
+                dispatcher.utter_message(text=(
+                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n"
+                    "Silakan pilih hari lain _(Senin–Jumat)_."
+                ))
+                return {"booking_tgl_kunjungan": None}
+        except Exception as e:
+            print(f"[Exception Form Baru tgl_kunjungan]: {e}")
+            return {"booking_tgl_kunjungan": parsed}
 
 
 class ValidateBookingFormLama(FormValidationAction):
     def name(self) -> Text:
         return "validate_booking_form_lama"
 
-    
     def validate_booking_nik_lama(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         nilai = str(slot_value).strip()
         digit_only = re.sub(r"\D", "", nilai)
@@ -371,7 +423,52 @@ class ValidateBookingFormLama(FormValidationAction):
         if not parsed:
             dispatcher.utter_message(response="utter_booking_tgl_kunjungan_invalid")
             return {"booking_tgl_kunjungan": None}
-        return {"booking_tgl_kunjungan": parsed}
+
+        try:
+            dt = datetime.strptime(parsed, "%Y-%m-%d")
+            hari_kunjungan = dt.isoweekday()
+
+            result = api_get("/api/schedules")
+            
+            # Mendukung format jika langsung array (List) atau bungkusan objek data (Dict)
+            if isinstance(result, list):
+                schedules = result
+            elif isinstance(result, dict):
+                schedules = result.get("data", result.get("schedules", []))
+            else:
+                schedules = []
+
+            jadwal_id_ditemukan = None
+            for sched in schedules:
+                hari_sched = sched.get("hari")
+                if hari_sched is not None:
+                    hari_sched = int(hari_sched)
+
+                # Jika property 'isAktif' absen dari database, fallback ke True agar tetap valid
+                is_aktif = sched.get("isAktif", True)
+                tanggal_libur = sched.get("tanggalLibur", [])
+
+                if (hari_sched == hari_kunjungan
+                        and is_aktif is True
+                        and parsed not in tanggal_libur):
+                    jadwal_id_ditemukan = sched.get("id")
+                    break
+
+            if jadwal_id_ditemukan:
+                print(f"[DEBUG Form Lama] jadwalId={jadwal_id_ditemukan} (hari={hari_kunjungan})")
+                return {
+                    "booking_tgl_kunjungan": parsed,
+                    "jadwalId": str(jadwal_id_ditemukan)
+                }
+            else:
+                dispatcher.utter_message(text=(
+                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n"
+                    "Silakan pilih hari lain _(Senin–Jumat)_."
+                ))
+                return {"booking_tgl_kunjungan": None}
+        except Exception as e:
+            print(f"[Exception Form Lama tgl_kunjungan]: {e}")
+            return {"booking_tgl_kunjungan": parsed}
 
 # ======================================================
 # SUBMIT & REVIEW ACTIONS
@@ -426,7 +523,6 @@ class ActionBookingReview(Action):
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         nama = tracker.get_slot("booking_nama") or "-"
-
         nik = tracker.get_slot("booking_nik") or tracker.get_slot("booking_nik_lama") or "-"
         tgl_lahir = tracker.get_slot("booking_tgl_lahir") or "-"
         keluhan = tracker.get_slot("booking_keluhan") or "-"
@@ -449,7 +545,6 @@ class ActionBookingReview(Action):
                 "Balas *ubah* untuk memperbaiki"
             )
         else:
-            # Tampilkan Nama Asli jika berhasil ditarik dari API di langkah submit sebelumnya
             nama_display = f" ({nama})" if nama != "-" else ""
             msg = (
                 "📋 *Ringkasan Data Pendaftaran (Pasien Lama)*\n\n"
@@ -464,7 +559,6 @@ class ActionBookingReview(Action):
         dispatcher.utter_message(text=msg)
         return [SlotSet("booking_step", "review")]
 
-
 class ActionBookingConfirm(Action):
     def name(self) -> Text:
         return "action_booking_confirm"
@@ -477,21 +571,59 @@ class ActionBookingConfirm(Action):
 
         dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
 
+        # Auto-assign jadwalId dari hari kunjungan
+        jadwal_id = None
+        try:
+            dt = datetime.strptime(tgl_kunjungan, "%Y-%m-%d")
+            hari_kunjungan = dt.isoweekday()
+
+            schedules_result = api_get("/api/schedules")
+            if schedules_result:
+                if isinstance(schedules_result, list):
+                    jadwal_list = schedules_result
+                else:
+                    jadwal_list = schedules_result.get("data", [])
+
+                # Filter jadwal aktif di hari yang sama, tidak libur
+                tersedia = [
+                    j for j in jadwal_list
+                    if (j.get("hari") is not None and int(j.get("hari")) == hari_kunjungan)
+                    and j.get("isAktif", True) is True
+                    and tgl_kunjungan not in j.get("tanggalLibur", [])
+                ]
+                if tersedia:
+                    pagi = [j for j in tersedia if j.get("sesi") == "PAGI"]
+                    jadwal_id = (pagi[0] if pagi else tersedia[0]).get("id")
+                    print(f"[Booking] Auto-assign jadwalId={jadwal_id} (hari={hari_kunjungan})")
+        except Exception as e:
+            print(f"[Booking] Gagal auto-assign jadwal: {e}")
+
+        if not jadwal_id:
+            dispatcher.utter_message(text=(
+                "⚠️ Maaf, tidak ada jadwal dokter yang tersedia pada tanggal tersebut.\n\n"
+                "Silakan pilih hari lain (Senin–Jumat) atau ketik *admin* untuk bantuan langsung. 🙏"
+            ))
+            return [
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("booking_step", "review"),
+            ]
+
         payload = {
             "phone_number": no_hp,
-            "jadwalId": "JDW-AUTO-DEFAULT",  
-            "tanggalKunjungan": tgl_kunjungan,  
+            "jadwalId": jadwal_id,
+            "tanggalKunjungan": tgl_kunjungan,
             "catatan": f"Nama: {nama}. Keluhan: {keluhan}",
-            "jenisKunjunganBpjs": "non-bpjs",
+            "jenisKunjunganBpjs": "NORMAL",
             "noRujukanFktp": ""
         }
 
+        print(f"[DEBUG] Payload Booking: {payload}")
         result = api_post("/api/appointment/appointments", payload)
+        print(f"[DEBUG] Respon API: {result}")
 
-        if result and (result.get("success") is True or result.get("status") in ("ok", "success", True)):
+        if result and result.get("status") in ("ok", "success", True):
             nomor_antrian = result.get("nomorAntrian") or result.get("queue_number") or "Akan diberikan di klinik"
             booking_id = result.get("appointmentId") or result.get("id") or f"SC-{datetime.now().strftime('%m%d%H%M')}"
-            
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
             tiket = (
                 "✅ *Pendaftaran Berhasil!* 🎉\n\n"
@@ -510,22 +642,29 @@ class ActionBookingConfirm(Action):
             dispatcher.utter_message(text=tiket)
             booking_id_final = str(booking_id)
         else:
-            print(f"[Booking Warning] POST /api/appointment/appointments gagal. Memicu fallback manual.")
-            dispatcher.utter_message(
-                text="⚠️ *Sistem Sedang Padat*\n"
-                     "Data pendaftaran Anda sudah aman tersimpan dalam sistem antrean chatbot kami. "
-                     "Tim admin kami akan memvalidasi slot Anda secara manual dan mengirimkan nomor antrean resmi sesaat lagi. Terima kasih! 🙏"
-            )
+            print(f"[Booking Warning] API gagal, masuk fallback. Result: {result}")
+            tgl_display = format_tgl_indonesia(tgl_kunjungan)
+            dispatcher.utter_message(text=(
+                "✅ *Pendaftaran Disimpan* 🎉\n\n"
+                "🎫 *Tiket Antrean Bot*\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 Nama Pasien  : *{nama}*\n"
+                f"📅 Waktu           : {tgl_display}\n"
+                f"🔢 No. Antrian   : *S-01 (Konfirmasi Manual)*\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "⚠️ Data Anda telah disimpan. Admin akan segera memverifikasi via WhatsApp. Terima kasih! 🙏"
+            ))
             booking_id_final = f"FALLBACK-{datetime.now().strftime('%H%M%S')}"
 
         return [
             SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("jadwalId", None),
             SlotSet("booking_step", "selesai"), SlotSet("booking_id_konfirmasi", booking_id_final),
+            SlotSet("requested_slot", None),
             ActiveLoop(None)
         ]
-
 
 class ActionBookingCancel(Action):
     def name(self) -> Text:
@@ -534,10 +673,17 @@ class ActionBookingCancel(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(response="utter_booking_batalkan")
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
-            SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-            SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
-            SlotSet("booking_step", None), ActiveLoop(None)
+            SlotSet("booking_tipe_pasien", None),
+            SlotSet("booking_nik", None),
+            SlotSet("booking_nik_lama", None),
+            SlotSet("booking_nama", None),
+            SlotSet("booking_tgl_lahir", None),
+            SlotSet("booking_keluhan", None),
+            SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("jadwalId", None),
+            SlotSet("booking_step", None),
+            SlotSet("requested_slot", None),
+            ActiveLoop(None)
         ]
 
 
@@ -548,10 +694,16 @@ class ActionSlotResetBooking(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan isi data Anda kembali. 😊")
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
-            SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-            SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
-            SlotSet("booking_step", "tanya_tipe"), ActiveLoop(None)
+           SlotSet("booking_tipe_pasien", None),
+            SlotSet("booking_nik", None),
+            SlotSet("booking_nik_lama", None),
+            SlotSet("booking_nama", None),
+            SlotSet("booking_tgl_lahir", None),
+            SlotSet("booking_keluhan", None),
+            SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("jadwalId", None),
+            SlotSet("booking_step", "tanya_tipe"),
+            ActiveLoop(None)
         ]
     
 class ActionBookingReschedule(Action):

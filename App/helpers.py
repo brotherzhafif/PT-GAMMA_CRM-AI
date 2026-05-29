@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — helpers.py
 # Fungsi-fungsi pembantu yang dipakai lintas router
 #
-# Last Change   :   16 May 2026
+# Last Change   :   29 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -279,14 +279,39 @@ def get_onboarding_data(no_hp: str) -> dict:
 
 
 # Rasa 
-
 def query_rasa(message: str, sender: str) -> Optional[dict]:
     """
     Kirim pesan ke Rasa dan parse hasilnya.
-    Return dict {reply, confidence, intent, is_form_active} atau None jika Rasa error.
+    Return dict {reply, confidence, intent, is_form_active, requested_slot}
+    atau None jika Rasa error.
+
+    PENTING — urutan eksekusi ini disengaja:
+      1. Snapshot tracker SEBELUM pesan dikirim ke Rasa.
+         Ini mencegah false-negative is_form_active=False pada slot terakhir form
+         (misal booking_tgl_kunjungan), di mana Rasa menutup active_loop tepat
+         setelah slot diisi — sehingga jika dicek SESUDAH, form sudah null.
+      2. Baru kirim pesan ke Rasa.
+      3. Parse NLU untuk keperluan logging & routing di webhook.py.
     """
     try:
-        # 1. Kirim pesan ke Rasa terlebih dahulu (Proses pesan masuk)
+        # Snapshot tracker SEBELUM pesan diproses
+        is_form_active = False
+        requested_slot = None
+        try:
+            tracker_pre = requests.get(
+                f"{RASA_URL}/conversations/{sender}/tracker",
+                timeout=5,
+            )
+            if tracker_pre.status_code == 200:
+                tracker_data = tracker_pre.json()
+                active_loop = tracker_data.get("active_loop") or {}
+                is_form_active = active_loop.get("name") is not None
+                # requested_slot disimpan untuk keperluan debug log di webhook.py
+                requested_slot = (tracker_data.get("slots") or {}).get("requested_slot")
+        except Exception as tracker_err:
+            print(f"[Rasa] Tracker pre-check gagal (non-fatal): {tracker_err}")
+
+        # Kirim pesan ke Rasa untuk diproses
         resp = requests.post(
             f"{RASA_URL}/webhooks/rest/webhook",
             json={"sender": sender, "message": message},
@@ -295,20 +320,10 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
         resp.raise_for_status()
         data = resp.json()
 
-        # 2. Ambil reply teks dari Rasa
+        # Ambil reply teks dari Rasa
         bot_reply = "\n\n".join(item.get("text", "") for item in data if "text" in item) if data else ""
 
-        # 3. Cek tracker status SELESAI pesan diproses untuk melihat status form terbaru
-        tracker_resp = requests.get(
-            f"{RASA_URL}/conversations/{sender}/tracker",
-            timeout=5,
-        )
-        is_form_active = False
-        if tracker_resp.status_code == 200:
-            tracker_data = tracker_resp.json()
-            is_form_active = tracker_data.get("active_loop", {}).get("name") is not None
-
-        # 4. Parse NLU untuk  logging / routing di webhook.py
+        # Parse NLU untuk logging & routing di webhook.py
         parse_resp = requests.post(
             f"{RASA_URL}/model/parse",
             json={"text": message},
@@ -317,11 +332,19 @@ def query_rasa(message: str, sender: str) -> Optional[dict]:
         parse_resp.raise_for_status()
         parse_data = parse_resp.json()
 
+        intent = parse_data.get("intent", {}).get("name", "")
+        confidence = parse_data.get("intent", {}).get("confidence", 0.0)
+
+        # Safe override — hanya aktif kalau Rasa sendiri yang set requested_slot booking_*
+        if requested_slot and requested_slot.startswith("booking_"):
+            is_form_active = True
+
         return {
             "reply": bot_reply,
-            "confidence": parse_data.get("intent", {}).get("confidence", 0.0),
-            "intent": parse_data.get("intent", {}).get("name", ""),
-            "is_form_active": is_form_active, # mengembalikan status form paling baru
+            "confidence": confidence,
+            "intent": intent,
+            "is_form_active": is_form_active,   # snapshot PRE-message + safe override
+            "requested_slot": requested_slot,   # untuk debug log di webhook.py
         }
     except Exception as e:
         print(f"[Rasa Error] {e}")

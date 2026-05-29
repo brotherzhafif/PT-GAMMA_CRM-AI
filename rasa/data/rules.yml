@@ -1,4 +1,4 @@
-# Log Last Change: 28 Mei 2026
+# Log Last Change: 29 Mei 2026
 version: "3.1"
 
 rules:
@@ -49,23 +49,7 @@ rules:
       - action: utter_emergency
       - active_loop: null
 
-  - rule: Mengubah data booking tengah jalan
-    steps:
-      - intent: booking_ubah_data
-      - action: action_slot_reset_booking
-      - action: utter_booking_tanya_tipe
-
-  - rule: Batalkan booking kapan saja
-    steps:
-      - intent: booking_batalkan
-      - action: action_booking_cancel
-      - active_loop: null
-
-  - rule: Reschedule booking
-    steps:
-      - intent: booking_reschedule
-      - action: action_booking_reschedule
-
+  # ── JANGKAR SUBMIT FORM (Hanya untuk mematikan form) ──
   - rule: Submit booking_form_baru selesai
     condition:
       - active_loop: booking_form_baru
@@ -87,3 +71,28 @@ rules:
           - requested_slot: null
       - action: action_booking_form_lama_submit
       - action: action_booking_review
+
+  - rule: Konfirmasi booking setelah review
+    condition:
+      - slot_was_set:
+          - booking_step: review
+    steps:
+      - intent: booking_konfirmasi
+      - action: action_booking_confirm
+
+  - rule: Ubah data setelah review
+    condition:
+      - slot_was_set:
+          - booking_step: review
+    steps:
+      - intent: booking_ubah_data
+      - action: action_slot_reset_booking
+      - action: utter_booking_tanya_tipe
+
+  - rule: Batalkan booking setelah review
+    condition:
+      - slot_was_set:
+          - booking_step: review
+    steps:
+      - intent: booking_batalkan
+      - action: action_booking_cancel

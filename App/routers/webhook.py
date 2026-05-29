@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/webhook.py
 # Endpoint: GET / dan POST /webhook
 #
-# Last Change   :   27 May 2026
+# Last Change   :   29 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -334,12 +334,15 @@ def webhook(
         rasa_confidence = rasa_result["confidence"] if rasa_result else 0.0
         rasa_form       = rasa_result["is_form_active"] if rasa_result else False
         rasa_trusted    = rasa_intent in RASA_TRUSTED_INTENTS
+        rasa_requested_slot  = rasa_result.get("requested_slot") if rasa_result else None
+
         print(
             f"[DEBUG][RASA] intent={rasa_intent} | "
             f"confidence={rasa_confidence:.4f} | "
             f"threshold={RASA_CONFIDENCE_THRESHOLD} | "
             f"trusted={rasa_trusted} | "
-            f"form_active={rasa_form}"
+            f"form_active={rasa_form} | "
+            f"requested_slot={rasa_requested_slot}"
         )
 
         if (

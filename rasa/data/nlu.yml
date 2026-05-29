@@ -282,18 +282,20 @@ nlu:
 
   - intent: affirm
     examples: |
-      - ya
-      - iya
-      - oke
-      - ok
-      - okay
-      - siap
-      - baik
-      - mengerti
-      - siap melaksanakan
-      - yup
-      - sip
+      - betul
       - bener
+      - bener banget
+      - tepat
+      - tepat sekali
+      - memang benar
+      - sudah tepat
+      - itu benar
+      - yoi
+      - yoii
+      - nah iya
+      - emang iya
+      - iya sih
+      - bener sih
 
   - intent: deny
     examples: |
@@ -468,16 +470,56 @@ nlu:
 
   - intent: booking_berikan_tgl_lahir
     examples: |
+      - [01/01/1990](tanggal_lahir)
+      - [15/08/1995](tanggal_lahir)
+      - [20/03/2000](tanggal_lahir)
+      - [05/12/1988](tanggal_lahir)
+      - [10/07/1992](tanggal_lahir)
+      - [25/06/1985](tanggal_lahir)
+      - [01/01/2001](tanggal_lahir)
+      - [01/01/2000](tanggal_lahir)
+      - [20/03/1988](tanggal_lahir)
+      - [16/03/2004](tanggal_lahir)
+      - [22/11/1999](tanggal_lahir)
+      - [07/04/1980](tanggal_lahir)
+      - [30/09/1975](tanggal_lahir)
+      - [14/02/1993](tanggal_lahir)
+      - [11/11/2003](tanggal_lahir)
+      - [03/08/1997](tanggal_lahir)
+      - [28/12/1990](tanggal_lahir)
+      - [17/08/1945](tanggal_lahir)
+      - [10/03/1985](tanggal_lahir)
+      - [05/05/1998](tanggal_lahir)
       - tanggal lahir saya [01/01/1990](tanggal_lahir)
       - lahir [15/08/1995](tanggal_lahir)
       - tgl lahir [20/03/2000](tanggal_lahir)
-      - [05/12/1988](tanggal_lahir)
       - lahirnya [10/07/1992](tanggal_lahir)
       - saya lahir tanggal [25/06/1985](tanggal_lahir)
       - ttl [01/01/2001](tanggal_lahir)
-      - [15/08/1995](tanggal_lahir)
-      - [01/01/2000](tanggal_lahir)
-      - [20/03/1988](tanggal_lahir)
+      - tgl lahirnya [03/08/1997](tanggal_lahir)
+      - tanggal lahir [28/12/1990](tanggal_lahir)
+      - lahir pada [17/08/1945](tanggal_lahir)
+      - DOB saya [10/03/1985](tanggal_lahir)
+      - ulang tahun [05/05/1998](tanggal_lahir)
+      - saya lahir [16/03/2004](tanggal_lahir)
+      - lahir tanggal [22/11/1999](tanggal_lahir)
+      - tgl lahir saya [07/04/1980](tanggal_lahir)
+      - [12/03/2010](tanggal_lahir)
+      - [05/07/2011](tanggal_lahir)
+      - [20/01/2012](tanggal_lahir)
+      - [18/09/2013](tanggal_lahir)
+      - [30/04/2014](tanggal_lahir)
+      - [11/06/2015](tanggal_lahir)
+      - [25/08/2016](tanggal_lahir)
+      - [14/02/2017](tanggal_lahir)
+      - [07/11/2018](tanggal_lahir)
+      - [01/05/2019](tanggal_lahir)
+      - [22/10/2020](tanggal_lahir)
+      - lahir [12/03/2010](tanggal_lahir)
+      - tanggal lahir anak saya [05/07/2011](tanggal_lahir)
+      - tgl lahir [20/01/2012](tanggal_lahir)
+      - lahirnya [18/09/2013](tanggal_lahir)
+      - anak saya lahir [30/04/2014](tanggal_lahir)
 
   - intent: booking_berikan_keluhan
     examples: |
@@ -535,6 +577,22 @@ nlu:
 
   - intent: booking_konfirmasi
     examples: |
+      - ya
+      - iya
+      - oke
+      - ok
+      - okay
+      - yap
+      - yep
+      - yups
+      - siap
+      - setuju
+      - benar
+      - ya benar
+      - sudah benar
+      - data sudah benar
+      - konfirmasi
+      - ya sudah sesuai
       - ya semua sudah benar
       - data sudah sesuai proses aja
       - sudah benar kok datanya
@@ -544,6 +602,21 @@ nlu:
       - data tersebut sudah valid
       - ya konfirmasi saja
       - setuju dengan data di atas
+      - konfirmasi jadwal saya
+      - ya proses saja
+      - lanjut aja
+      - proses
+      - daftar aja
+      - udah bener daftar aja
+      - langsung proses
+      - iya lanjut
+      - iya proses
+      - lanjutkan
+      - gas
+      - gas lanjut
+      - jalan
+      - fix
+      - mantap lanjut
 
   - intent: booking_ubah_data
     examples: |

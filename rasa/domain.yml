@@ -75,6 +75,12 @@ slots:
         intent: intent_orang_lain
         value: orang lain
 
+  jadwalId:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+
   booking_nama:
     type: text
     influence_conversation: false
@@ -302,7 +308,7 @@ responses:
     - text: "🩺 *Keluhan yang dirasakan*:\nCeritakan keluhan utama Anda saat ini."
 
   utter_ask_booking_tgl_kunjungan:
-    - text: "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?\n_(Contoh: besok, Senin, atau 25/05/2026)_"
+    - text: "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?\n_(Contoh: 25/05/2026)_"
 
   utter_booking_intro_lama:
     - text: |
@@ -320,7 +326,7 @@ responses:
     - text: "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n_(Contoh: 15/08/1995)_"
 
   utter_booking_tgl_kunjungan_invalid:
-    - text: "⚠️ Tanggal kunjungan tidak valid. Pilih *besok*, nama *hari*, atau tanggal format *DD/MM/YYYY*."
+    - text: "⚠️ Tanggal kunjungan tidak valid. Gunakan format *DD/MM/YYYY*\n_(Contoh: 25/05/2026)_"
 
   utter_booking_batalkan:
     - text: |
