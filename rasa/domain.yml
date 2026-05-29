@@ -191,6 +191,7 @@ slots:
     type: categorical
     values:
       - tanya_tipe
+      - tanya_untuk_siapa
       - form_baru
       - form_lama
       - review

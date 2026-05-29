@@ -76,6 +76,7 @@ rules:
     condition:
       - slot_was_set:
           - booking_step: review
+      - active_loop: null
     steps:
       - intent: booking_konfirmasi
       - action: action_booking_confirm
@@ -84,6 +85,7 @@ rules:
     condition:
       - slot_was_set:
           - booking_step: review
+      - active_loop: null
     steps:
       - intent: booking_ubah_data
       - action: action_slot_reset_booking
@@ -93,6 +95,26 @@ rules:
     condition:
       - slot_was_set:
           - booking_step: review
+      - active_loop: null
     steps:
       - intent: booking_batalkan
       - action: action_booking_cancel
+
+  # ── BREAK-OUT: User minta booking baru saat form sedang aktif ──
+  - rule: Booking baru saat form_baru aktif
+    condition:
+      - active_loop: booking_form_baru
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_booking_cancel
+      - active_loop: null
+      - action: action_start_booking
+
+  - rule: Booking baru saat form_lama aktif
+    condition:
+      - active_loop: booking_form_lama
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_booking_cancel
+      - active_loop: null
+      - action: action_start_booking

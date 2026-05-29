@@ -675,13 +675,15 @@ class ActionBookingConfirm(Action):
             booking_id_final = f"FALLBACK-{datetime.now().strftime('%H%M%S')}"
 
         return [
+            ActiveLoop(None),
+            SlotSet("requested_slot", None),
+            SlotSet("booking_step", "selesai"),
+            SlotSet("booking_id_konfirmasi", booking_id_final),
             SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("jadwalId", None),
-            SlotSet("booking_step", "selesai"), SlotSet("booking_id_konfirmasi", booking_id_final),
-            SlotSet("requested_slot", None),
-            ActiveLoop(None)
+            FollowupAction("action_listen"),
         ]
 
 class ActionBookingCancel(Action):
