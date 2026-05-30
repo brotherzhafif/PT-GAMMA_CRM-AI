@@ -9,6 +9,8 @@
 #                   Wahyu Hardiyantara
 # ======================================================
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,6 +19,7 @@ from App.routers.activity import router as activity_router
 from App.routers.users import router as users_router
 from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback
 from App.campaign_scheduler import start_campaign_scheduler
+from seed_super_admin import seed_super_admin_from_env
 
 app = FastAPI(
     title="SmartClinic CRM AI",
@@ -50,9 +53,18 @@ app.include_router(users_router)
 app.include_router(activity_router)
 
 
+def _should_auto_seed_super_admin() -> bool:
+    return os.getenv("AUTO_SEED_SUPER_ADMIN", "false").lower() in {"1", "true", "yes", "on"}
+
+
 @app.on_event("startup")
 def _start_background_workers():
     start_campaign_scheduler()
+    if _should_auto_seed_super_admin():
+        try:
+            seed_super_admin_from_env()
+        except Exception as exc:
+            print(f"[Seeder] Auto seed skipped or failed: {exc}")
 
 
 # ======================================================
