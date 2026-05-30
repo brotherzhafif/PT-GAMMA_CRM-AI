@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — smartclinic_auth.py
 # Shared SmartClinic login/token cache for the whole project
 #
-# Last Change   :   25 May 2026
+# Last Change   :   31 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 

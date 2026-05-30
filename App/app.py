@@ -3,7 +3,7 @@
 # FastAPI entry point — hanya inisialisasi app dan register router.
 # Logic masing-masing endpoint ada di App/routers/.
 #
-# Last Change   :   22 May 2026
+# Last Change   :   31 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 #                   MHD. Rafy Firdaus
 #                   Wahyu Hardiyantara

@@ -3,7 +3,7 @@
 # Endpoint: /api/feedback
 #
 # Last Change   :   30 May 2026
-# Developer     :   GitHub Copilot
+# Developer     :   Raja Zhafif Raditya Harahp
 # ======================================================
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/appointments.py
 # Endpoint: /api/appointments
 #
-# Last Change   :   25 May 2026
+# Last Change   :   31 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
