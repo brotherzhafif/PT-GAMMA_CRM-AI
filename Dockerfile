@@ -1,7 +1,7 @@
 # ==========================================
 # STAGE 1: Builder
 # ==========================================
-FROM python:3.9-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.t
 # ==========================================
 # STAGE 2: Production (Final Image)
 # ==========================================
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
