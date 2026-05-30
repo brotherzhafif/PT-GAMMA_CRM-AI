@@ -143,3 +143,26 @@ class UpdateChatbotSettingsPayload(BaseModel):
     handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100, description="Ambang handoff 0-100")
     handoff_message: Optional[str] = Field(default=None, description="Pesan handoff")
     ai_badge_enabled: Optional[bool] = Field(default=None, description="Tampilkan badge AI")
+
+
+# Feedback
+
+class FeedbackPayload(BaseModel):
+    no_hp: str = Field(..., description="Nomor WhatsApp pasien", examples=["6281234567890"])
+    rating: int = Field(..., ge=1, le=5, description="Rating 1-5")
+    ulasan: str = Field(default="", description="Ulasan pasien")
+
+
+class FeedbackRecord(BaseModel):
+    nama: Optional[str] = Field(default=None)
+    no_hp: str
+    rating: int
+    ulasan: str
+
+
+class FeedbackDashboardRecord(BaseModel):
+    total_feedback: int
+    rata_rating: Optional[float]
+    total_survey_terkirim: int
+    total_ngisi: int
+    total_gak_ngisi: int

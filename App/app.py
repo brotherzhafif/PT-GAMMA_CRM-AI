@@ -12,7 +12,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings
+from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback
 from App.campaign_scheduler import start_campaign_scheduler
 
 app = FastAPI(
@@ -41,6 +41,7 @@ app.include_router(schedules.router)
 app.include_router(patients.router)
 app.include_router(appointments.router)
 app.include_router(chatbot_settings.router)
+app.include_router(feedback.router)
 
 
 @app.on_event("startup")
