@@ -39,7 +39,7 @@ WhatsApp (Patient)
 Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 - **FastAPI router (entrypoint)**
-  - File: `App/app.py` - inisialisasi FastAPI, daftarkan semua router, start campaign scheduler, dan seed bootstrap user bila diaktifkan via env.
+  - File: `App/app.py` - inisialisasi FastAPI, daftarkan semua router, dan start campaign scheduler.
   - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan.
 
 - **Routers** (lokasi: `App/routers/`)
@@ -85,6 +85,7 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 - **Persistence & helpers**
   - Supabase client/config di `App/config.py`, helper functions di `App/helpers.py`.
   - Local state: `chat_history/`, `chat_state/`, `handoff_state/`.
+  - Bootstrap user awal disimpan langsung di `seed_bootstrap_users.py`.
 
 ---
 
@@ -175,7 +176,7 @@ smartclinic/
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
-├── seed_bootstrap_users.py
+├── seed_bootstrap_users.py        # Bootstrap user awal: 4 role, hardcoded
 └── .env
 ```
 
@@ -199,8 +200,7 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_JWT_SECRET=your_supabase_jwt_secret
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_secret
 
-# Bootstrap user seeding (opsional)
-AUTO_SEED_BOOTSTRAP_USERS=false
+# Bootstrap user awal tidak pakai env. Datanya ada di seed_bootstrap_users.py.
 
 # SmartClinic RME API
 SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis.onrender.com/api/v1
@@ -237,6 +237,8 @@ Services yang berjalan:
 - `rasa_action_server` — Rasa action server di port 5055
 - `wa_service` — WhatsApp gateway di localhost port 3001
 - `dozzle_log_viewer` — log viewer di port 8080
+
+Bootstrap user awal bisa di-seed manual lewat `seed_bootstrap_users.py`. Role dan kredensial awalnya ada langsung di file itu.
 
 ---
 

@@ -10,15 +10,32 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 
-DEFAULT_ROLES = ["super_admin", "admin", "manager", "mkt_staff"]
-
-
-def _get_env_value(*names: str) -> str | None:
-    for name in names:
-        value = os.getenv(name)
-        if value:
-            return value
-    return None
+BOOTSTRAP_USERS: list[dict[str, str]] = [
+    {
+        "role": "super_admin",
+        "name": "Super Admin",
+        "email": "superadmin@smartclinic.local",
+        "password": "Admin@12345!",
+    },
+    {
+        "role": "admin",
+        "name": "Admin",
+        "email": "admin@smartclinic.local",
+        "password": "Admin@12345!",
+    },
+    {
+        "role": "manager",
+        "name": "Manager",
+        "email": "manager@smartclinic.local",
+        "password": "Admin@12345!",
+    },
+    {
+        "role": "mkt_staff",
+        "name": "Marketing Staff",
+        "email": "marketing@smartclinic.local",
+        "password": "Admin@12345!",
+    },
+]
 
 
 def _require_value(value: str | None, label: str) -> str:
@@ -140,7 +157,7 @@ def _normalize_seed_item(item: dict[str, Any]) -> dict[str, str]:
     password = str(item.get("password") or "").strip()
 
     if not role or not name or not email or not password:
-        raise SystemExit("Each bootstrap user must have name, email, password, and role")
+        raise SystemExit("Each bootstrap user must have role, name, email, and password")
 
     return {
         "role": role,
@@ -150,46 +167,15 @@ def _normalize_seed_item(item: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _bootstrap_users_from_env() -> list[dict[str, str]]:
-    json_payload = _get_env_value("BOOTSTRAP_USERS_JSON", "SEED_USERS_JSON")
-    if json_payload:
-        parsed = json.loads(json_payload)
-        if not isinstance(parsed, list):
-            raise SystemExit("BOOTSTRAP_USERS_JSON must be a JSON array")
-        return [_normalize_seed_item(item) for item in parsed]
-
-    seeds: list[dict[str, str]] = []
-    for role in DEFAULT_ROLES:
-        prefix = role.upper()
-        name = _get_env_value(f"BOOTSTRAP_{prefix}_NAME", f"SEED_{prefix}_NAME")
-        email = _get_env_value(f"BOOTSTRAP_{prefix}_EMAIL", f"SEED_{prefix}_EMAIL")
-        password = _get_env_value(f"BOOTSTRAP_{prefix}_PASSWORD", f"SEED_{prefix}_PASSWORD")
-        if name and email and password:
-            seeds.append(
-                {
-                    "role": role,
-                    "name": name,
-                    "email": email,
-                    "password": password,
-                }
-            )
-
-    return seeds
-
-
-def seed_bootstrap_users_from_env() -> int:
+def seed_bootstrap_users() -> int:
     load_dotenv()
 
-    supabase_url = _require_value(_get_env_value("SUPABASE_URL"), "SUPABASE_URL")
+    supabase_url = _require_value(os.getenv("SUPABASE_URL"), "SUPABASE_URL")
     service_role_key = _require_value(
-        _get_env_value("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE"),
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE"),
         "SUPABASE_SERVICE_ROLE_KEY",
     )
-    seeds = _bootstrap_users_from_env()
-    if not seeds:
-        raise SystemExit(
-            "No bootstrap users configured. Provide BOOTSTRAP_USERS_JSON or BOOTSTRAP_<ROLE>_NAME/EMAIL/PASSWORD env vars."
-        )
+    seeds = [_normalize_seed_item(item) for item in BOOTSTRAP_USERS]
 
     client = create_client(supabase_url, service_role_key)
 
@@ -202,18 +188,10 @@ def seed_bootstrap_users_from_env() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed initial users into Supabase.")
-    parser.add_argument(
-        "--json",
-        default=_get_env_value("BOOTSTRAP_USERS_JSON", "SEED_USERS_JSON"),
-        help="JSON array of bootstrap users",
-    )
-    args = parser.parse_args()
-
-    if args.json:
-        os.environ["BOOTSTRAP_USERS_JSON"] = args.json
+    parser.parse_args()
 
     try:
-        seed_bootstrap_users_from_env()
+        seed_bootstrap_users()
     except Exception as exc:
         print(f"[Seeder] Failed: {exc}")
         return 1

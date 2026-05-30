@@ -18,7 +18,7 @@ from App.routers.activity import router as activity_router
 from App.routers.users import router as users_router
 from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback
 from App.campaign_scheduler import start_campaign_scheduler
-from .seed_bootstrap_users import seed_bootstrap_users_from_env
+from App.seed_bootstrap_users import seed_bootstrap_users
 
 app = FastAPI(
     title="SmartClinic CRM AI",
@@ -52,21 +52,19 @@ app.include_router(users_router)
 app.include_router(activity_router)
 
 
-def _should_auto_seed_bootstrap_users() -> bool:
-    import os
-
-    return os.getenv("AUTO_SEED_BOOTSTRAP_USERS", os.getenv("AUTO_SEED_SUPER_ADMIN", "false")).lower() in {"1", "true", "yes", "on"}
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # startup
+    # ================= STARTUP =================
+    print("[Lifespan] Running bootstrap user seeder...")
+    try:
+        seed_bootstrap_users() 
+        print("[Lifespan] Bootstrap user seeder finished successfully.")
+    except Exception as e:
+        print(f"[Lifespan] Bootstrap user seeder failed: {e}")
+        # Jika Anda ingin aplikasi tetap jalan walau seeder gagal, biarkan saja.
+        # Jika ingin aplikasi crash sengaja saat gagal, biarkan error-nya raise.
+        
     start_campaign_scheduler()
-    if _should_auto_seed_bootstrap_users():
-        try:
-            seed_bootstrap_users_from_env()
-        except Exception as exc:
-            print(f"[Seeder] Auto seed skipped or failed: {exc}")
     yield
     # shutdown (if any cleanup is needed, add here)
 
