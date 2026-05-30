@@ -19,6 +19,7 @@ load_dotenv()
 #  Supabase 
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 supabase: Optional[Client] = (
     create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
 )

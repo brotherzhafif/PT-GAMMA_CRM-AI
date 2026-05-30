@@ -3,6 +3,7 @@ uvicorn
 pydantic
 requests
 python-dotenv
+PyJWT
 groq
 supabase>=2.4.0
 sse-starlette
