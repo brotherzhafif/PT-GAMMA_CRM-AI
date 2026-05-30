@@ -8,7 +8,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
 from App.config import SMARTCLINIC_BASE_URL, supabase
@@ -59,6 +59,60 @@ async def get_queues(
 
     query_params = list(request.query_params.multi_items())
     return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=query_params)
+
+
+@router.get(
+    "/appointments/by-phone",
+    summary="Ambil janji temu berdasarkan nomor telepon",
+    responses={
+        200: {
+            "description": "Daftar janji temu berhasil diambil",
+            "content": {"application/json": {"example": {"data": []}}},
+        },
+        404: {
+            "description": "Pasien tidak ditemukan",
+            "content": {"application/json": {"example": {"detail": "Pasien tidak ditemukan"}}},
+        },
+        500: {
+            "description": "Gagal mengambil janji temu",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_appointments_by_phone(phone_number: str = Query(..., description="Nomor telepon pasien")):
+    rme_patient_id = _lookup_rme_patient_id(phone_number)
+    return await proxy_smartclinic(
+        "GET",
+        SMARTCLINIC_BASE_URL,
+        f"{SMARTCLINIC_APPOINTMENTS_PATH}/{rme_patient_id}",
+    )
+
+
+@router.delete(
+    "/appointments/{id}",
+    summary="Batalkan janji temu pasien",
+    description="Meneruskan permintaan pembatalan janji temu ke SmartClinic.",
+    responses={
+        200: {
+            "description": "Janji temu berhasil dibatalkan",
+            "content": {"application/json": {"example": {"status": "ok"}}},
+        },
+        400: {
+            "description": "Janji temu tidak bisa dibatalkan",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+        404: {
+            "description": "Janji temu tidak ditemukan",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+        500: {
+            "description": "Gagal membatalkan janji temu",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def cancel_appointment(id: str = Path(..., description="ID janji temu")):
+    return await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_APPOINTMENTS_PATH}/{id}/cancel")
 
 
 def _lookup_rme_patient_id(phone_number: str) -> str:
