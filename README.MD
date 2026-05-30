@@ -1,14 +1,12 @@
 # SmartClinic CRM AI (Hana)
 
-AI Chatbot backend for SmartClinic — hybrid routing between Rasa NLP (structured intents) and Groq LLM (contextual/complaint handling), delivered via WhatsApp through Fonnte.
-
+AI Chatbot backend for SmartClinic - hybrid routing between Rasa NLP (structured intents) and Groq LLM (contextual/complaint handling), delivered via WhatsApp through Fonnte and `wa-service`.
 > **Developer**:
 >
 > - Raja Zhafif Raditya Harahap
 > - MHD. Rafy Firdaus
 > - Wahyu Hardiyantara
 
----
 
 ## 🏗 Architecture
 
@@ -17,7 +15,7 @@ WhatsApp (Patient)
        │
        ▼
   Fonnte Gateway
-       │  POST /webhook
+    │  POST /webhook
        ▼
   FastAPI (Hybrid Router)
        │
@@ -41,22 +39,26 @@ WhatsApp (Patient)
 Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 - **FastAPI router (entrypoint)**
-  - File: `App/app.py` — inisialisasi FastAPI, daftarkan semua router, dan start background scheduler.
-  - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan: https://ai-crm.brotherzhafif.my.id/docs
+  - File: `App/app.py` - inisialisasi FastAPI, daftarkan semua router, start campaign scheduler, dan seed bootstrap user bila diaktifkan via env.
+  - OpenAPI / Swagger UI tersedia di `/docs` ketika server berjalan.
 
 - **Routers** (lokasi: `App/routers/`)
-  - `webhook.py` — `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte).
-  - `patients.py` — Proxy CRUD pasien ke SmartClinic RME API (`/api/v1/patients`). Setelah create pasien, otomatis insert mapping ke tabel Supabase `patients`. Includes endpoint `GET /api/v1/patients/by-phone` untuk AI agent lookup pasienId by nomor HP.
-  - `schedules.py` — Proxy jadwal dokter ke SmartClinic RME API (`/api/v1/schedules`, `/api/v1/schedules/weekly`, `/api/v1/schedules/slots`).
-  - `appointments.py` — Proxy janji temu & antrian ke SmartClinic RME API. Flow booking: lookup `rme_patient_id` by `phone_number` dari Supabase → hit `POST /api/v1/queues/appointments`. Includes `GET /api/v1/queues` untuk board antrian perawat/dokter.
-  - `chatbot_settings.py` — Konfigurasi AI chatbot (`GET /api/v1/chatbot-settings`, `PUT /api/v1/chatbot-settings`). Data disimpan di tabel Supabase `chatbot_settings`.
-  - `messages.py` — SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`), tampil di grup OpenAPI `Unified Chat`.
-  - `send.py` — kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`).
-  - `handoff.py` — manajemen sesi handoff/admin (`/api/handoff`), tampil di grup OpenAPI `Unified Chat`.
-  - `campaign.py` — marketing/campaigns (`/api/marketing/campaigns` prefix).
-  - `status.py` — helper endpoints menuju wa-service (status, qr-stream).
+  - `webhook.py` - `GET /` (health) dan `POST /webhook` (entrypoint inbound dari Fonnte).
+  - `patients.py` - Proxy CRUD pasien ke SmartClinic RME API (`/api/patients`). Setelah create pasien, aplikasi mengisi mapping ke tabel Supabase `patients`. Ada juga lookup `GET /api/patients/by-phone`.
+  - `schedules.py` - Proxy jadwal dokter ke SmartClinic RME API (`/api/schedules`, `/api/schedules/weekly`, `/api/schedules/slots`).
+  - `appointments.py` - Proxy janji temu dan antrian ke SmartClinic RME API. Flow booking: lookup `rme_patient_id` by `phone_number` dari Supabase lalu kirim ke endpoint appointment/queue.
+  - `chatbot_settings.py` - Konfigurasi AI chatbot (`GET /api/chatbot-settings`, `PUT /api/chatbot-settings`). Data disimpan di tabel Supabase `chatbot_settings` dan row default dibuat otomatis kalau tabel kosong.
+  - `messages.py` - SSE realtime untuk sidebar/chat (`/api/messages/latest`, `/api/messages/{phone_number}`).
+  - `send.py` - Kirim pesan manual dan broadcast (`/api/send`, `/api/send/broadcast`).
+  - `handoff.py` - Manajemen sesi handoff/admin (`/api/handoff`).
+  - `campaign.py` - Marketing/campaigns (`/api/marketing/campaigns`).
+  - `feedback.py` - Feedback pasien dan dashboard ringkasan (`/api/feedback`, `/api/feedback/dashboard`).
+  - `auth/router.py` - Login, logout, dan refresh token (`/api/auth/login`, `/api/auth/logout`, `/api/auth/refresh`).
+  - `users.py` - Manajemen user internal untuk admin (`/api/users`).
+  - `activity.py` - Audit log, notifications, dan login history (`/api/activity`, `/api/activity/notifications`, `/api/activity/audit`, `/api/activity/logins`).
+  - `status.py` - Helper endpoints menuju wa-service dan pengecekan status token SmartClinic.
 
-- **SmartClinic RME Integration** (lokasi: `App/smartclinic/`)
+- **SmartClinic RME Integration** (lokasi: `App/smartclinic_auth.py`)
   - Semua request ke SmartClinic RME menggunakan Bearer token dari `get_smartclinic_token()`.
   - Token di-fetch via login otomatis menggunakan kredensial di `.env` (`SMARTCLINIC_EMAIL`, `SMARTCLINIC_PASSWORD`).
   - Seluruh request dikirim sebagai role **ADMIN**.
@@ -92,10 +94,13 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 | Tabel | Keterangan |
 |-------|------------|
-| `patients` | Mapping pasien — `id` (auto), `rme_patient_id` (UUID dari SmartClinic), `phone_number`, `name`, `created_at`, `is_handoff` |
+| `patients` | Mapping pasien — `id`, `rme_patient_id`, `phone_number`, `name`, `created_at`, `is_handoff` |
 | `messages` | Semua pesan inbound/outbound |
 | `campaigns` | Data campaign marketing |
 | `chatbot_settings` | Konfigurasi AI chatbot (single row) — `ai_name`, `primary_language`, `conversation_tone`, `handoff_threshold`, `handoff_message`, `ai_badge_enabled` |
+| `feedback` | Feedback pasien — `id_user`, `rating`, `ulasan` |
+| `users` | Profil user internal yang dipasangkan ke Supabase Auth |
+| `activity_logs` | Audit log, notifikasi, dan histori login |
 
 
 ## 🛠 Tech Stack
@@ -105,14 +110,14 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 | Language         | Python 3.9+                      |
 | API Framework    | FastAPI + Uvicorn                |
 | NLP              | Rasa 3.6.15                      |
-| LLM              | Groq Cloud API (Llama 3)         |
+| LLM              | Groq Cloud API                   |
 | Database         | Supabase (PostgreSQL)            |
 | WhatsApp Gateway | Fonnte API                       |
 | RME Integration  | SmartClinic API                  |
+| Bot Runtime      | Node.js + Express + whatsapp-web.js |
 | Containerization | Docker + Docker Compose          |
-| Tunnel           | Cloudflare Tunnel                |
+| Logs             | Dozzle                           |
 | CI/CD            | GitHub Actions                   |
-| Hosting          | Oracle VPS (Ubuntu 20.04, ARM64) |
 
 ---
 
@@ -120,32 +125,37 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 ```
 smartclinic/
-├── app.py
 ├── App/
-│   ├── __init__.py
+│   ├── app.py
+│   ├── activity_logger.py
+│   ├── campaign_scheduler.py
 │   ├── config.py                   # Semua konstanta & env variables
-│   ├── models.py                   # Semua Pydantic request/response models
-│   ├── helpers.py                  # Helper functions (Supabase, JSON, Rasa, dll)
 │   ├── handoff_manager.py          # State handoff + auto timeout logic
+│   ├── helpers.py                  # Helper functions (Supabase, JSON, Rasa, dll)
+│   ├── models.py                   # Semua Pydantic request/response models
 │   ├── queue_manager.py            # Fonnte message queue dengan delay
-│   ├── smartclinic/
-│   │   ├── __init__.py
-│   │   └── auth.py                 # get_smartclinic_token() — auto login & token cache
+│   ├── smartclinic_auth.py         # get_smartclinic_token() — auto login & token cache
+│   ├── auth/
+│   │   ├── dependencies.py
+│   │   └── router.py               # /api/auth/login, /logout, /refresh
 │   └── routers/
 │       ├── __init__.py
-│       ├── webhook.py              # GET / + POST /webhook
-│       ├── patients.py             # /api/v1/patients + /api/v1/patients/by-phone
-│       ├── schedules.py            # /api/v1/schedules + /weekly + /slots
-│       ├── appointments.py         # /api/v1/queues/appointments + /api/v1/queues
-│       ├── chatbot_settings.py     # /api/v1/chatbot-settings
-│       ├── messages.py             # /api/messages
-│       ├── send.py                 # /api/send + /api/send/broadcast
-│       ├── handoff.py              # /api/handoff
+│       ├── activity.py             # /api/activity
+│       ├── appointments.py         # /api/appointment
 │       ├── campaign.py             # /api/marketing/campaigns
-│       └── wa.py                   # wa-service helpers
+│       ├── chatbot_settings.py     # /api/chatbot-settings
+│       ├── feedback.py             # /api/feedback
+│       ├── handoff.py              # /api/handoff
+│       ├── messages.py             # /api/messages
+│       ├── patients.py             # /api/patients
+│       ├── schedules.py            # /api/schedules
+│       ├── send.py                 # /api/send + /api/send/broadcast
+│       ├── status.py               # /api/status
+│       ├── users.py                # /api/users
+│       └── webhook.py              # GET / + POST /webhook
 ├── LLM/
 │   ├── groq_service.py
-│   └── requirements.txt
+│   └── guardrail.py
 ├── rasa/
 │   ├── actions/
 │   │   └── actions.py
@@ -155,13 +165,17 @@ smartclinic/
 ├── chat_history/
 ├── chat_state/
 ├── handoff_state/
+├── wa-service/
+│   ├── Dockerfile
+│   ├── index.js
+│   └── package.json
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml
-├── supabase_setup.sql
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
+├── seed_bootstrap_users.py
 └── .env
 ```
 
@@ -182,9 +196,13 @@ RASA_URL=http://rasa:5005
 # Supabase
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_JWT_SECRET=your_supabase_jwt_secret
 
 # Handoff timeout (opsional, default: 15 menit)
 HANDOFF_TIMEOUT_MINUTES=15
+
+# Bootstrap user seeding (opsional)
+AUTO_SEED_BOOTSTRAP_USERS=false
 
 # SmartClinic RME API
 SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis.onrender.com/api/v1
@@ -204,8 +222,7 @@ git clone https://github.com/USERNAME/REPO.git
 cd REPO
 
 # 2. Setup environment
-cp .env.example .env
-nano .env  # isi semua value
+notepad .env  # isi semua value dari bagian Environment Variables
 
 # 3. Build dan jalankan semua service
 docker compose up -d --build
@@ -220,6 +237,8 @@ Services yang berjalan:
 - `fastapi_chatbot` — FastAPI app di port 5000
 - `rasa_server` — Rasa di port 5005
 - `rasa_action_server` — Rasa action server di port 5055
+- `wa_service` — WhatsApp gateway di localhost port 3001
+- `dozzle_log_viewer` — log viewer di port 8080
 
 ---
 
