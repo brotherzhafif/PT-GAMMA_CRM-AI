@@ -68,8 +68,6 @@ HANDOFF_KEYWORDS = {
     "bicara dengan admin", "mau ketemu admin", "hubungi admin",
     "tolong admin", "butuh bantuan manusia",
 }
-MAX_FALLBACK_BEFORE_HANDOFF = 3
-HANDOFF_TIMEOUT_MINUTES = int(os.getenv("HANDOFF_TIMEOUT_MINUTES", "15"))
 
 #  Storage Dirs 
 HISTORY_DIR = "chat_history"

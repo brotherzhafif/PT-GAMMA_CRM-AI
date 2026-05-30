@@ -15,9 +15,9 @@ import os
 from datetime import datetime, timedelta
 from App.config import supabase
 from App.helpers import normalize_phone_number
+from App.routers.chatbot_settings import get_handoff_timeout_minutes
 
 HANDOFF_DIR = "handoff_state"
-HANDOFF_TIMEOUT_MINUTES = int(os.getenv("HANDOFF_TIMEOUT_MINUTES", "15"))
 
 if not os.path.exists(HANDOFF_DIR):
     os.makedirs(HANDOFF_DIR)
@@ -63,7 +63,8 @@ def is_in_handoff(no_hp: str) -> bool:
 
     # Cek timeout
     started_at = datetime.fromisoformat(data["started_at"])
-    if datetime.now() - started_at > timedelta(minutes=HANDOFF_TIMEOUT_MINUTES):
+    handoff_timeout_minutes = get_handoff_timeout_minutes()
+    if datetime.now() - started_at > timedelta(minutes=handoff_timeout_minutes):
         print(f"[Handoff] Timeout untuk {normalized_phone} — balik ke bot otomatis")
         end_handoff(normalized_phone)
         return False
@@ -124,7 +125,7 @@ def get_all_handoff_sessions() -> list:
                 "last_admin_reply_at": data.get("last_admin_reply_at"),
                 "timeout_at": (
                     datetime.fromisoformat(data["started_at"])
-                    + timedelta(minutes=HANDOFF_TIMEOUT_MINUTES)
+                    + timedelta(minutes=get_handoff_timeout_minutes())
                 ).isoformat(),
             })
 

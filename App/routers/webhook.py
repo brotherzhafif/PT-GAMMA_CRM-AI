@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
-from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, MAX_FALLBACK_BEFORE_HANDOFF
+from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS
 from App.models import WebhookPayload, ChatResponse
 from App.helpers import (
     save_to_supabase,
@@ -27,6 +27,7 @@ from App.helpers import (
     increment_fallback,
     reset_fallback,
 )
+from App.routers.chatbot_settings import get_max_fallback_before_handoff
 from App.handoff_manager import is_in_handoff, start_handoff
 from App.queue_manager import fonnte_queue
 from LLM.groq_service import GroqService
@@ -405,7 +406,7 @@ def webhook(
         # Logika Auto Handoff jika source adalah "groq" (bukan triage/emergency)
         if source == "groq" and not is_emergency_keyword and not is_triage_keyword:
             fallback_count = increment_fallback(no_hp)
-            if fallback_count >= MAX_FALLBACK_BEFORE_HANDOFF:
+            if fallback_count >= get_max_fallback_before_handoff():
                 start_handoff(no_hp)
                 reset_fallback(no_hp)
                 reply += (

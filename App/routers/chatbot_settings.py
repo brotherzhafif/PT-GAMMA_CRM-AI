@@ -12,6 +12,9 @@ from App.models import ChatbotSettingsRecord, UpdateChatbotSettingsPayload
 
 router = APIRouter(prefix="/api/chatbot-settings", tags=["System"])
 
+DEFAULT_HANDOFF_TIMEOUT_MINUTES = 15
+DEFAULT_MAX_FALLBACK_BEFORE_HANDOFF = 3
+
 
 CHATBOT_SETTINGS_EXAMPLE = {
     "id": "2f4d52c2-1111-4b5f-9b5d-1b2c3d4e5f67",
@@ -19,6 +22,7 @@ CHATBOT_SETTINGS_EXAMPLE = {
     "primary_language": "id",
     "conversation_tone": "friendly",
     "handoff_threshold": 70,
+    "handoff_timeout_minutes": 15,
     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
     "ai_badge_enabled": True,
     "created_at": "2026-05-25T10:00:00Z",
@@ -91,6 +95,14 @@ def _get_or_create_single_settings_row(initial_values: dict | None = None, allow
     if row is not None:
         return row
     return _create_chatbot_settings_row(initial_values, allow_fallback=allow_fallback)
+
+
+def get_handoff_timeout_minutes(default: int = DEFAULT_HANDOFF_TIMEOUT_MINUTES) -> int:
+    return default
+
+
+def get_max_fallback_before_handoff(default: int = DEFAULT_MAX_FALLBACK_BEFORE_HANDOFF) -> int:
+    return default
 
 
 @router.get(
