@@ -198,9 +198,6 @@ SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_JWT_SECRET=your_supabase_jwt_secret
 
-# Handoff timeout (opsional, default: 15 menit)
-HANDOFF_TIMEOUT_MINUTES=15
-
 # Bootstrap user seeding (opsional)
 AUTO_SEED_BOOTSTRAP_USERS=false
 
