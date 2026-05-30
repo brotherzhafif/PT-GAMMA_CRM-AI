@@ -9,6 +9,7 @@
 #                   Wahyu Hardiyantara
 # ======================================================
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -57,14 +58,21 @@ def _should_auto_seed_bootstrap_users() -> bool:
     return os.getenv("AUTO_SEED_BOOTSTRAP_USERS", os.getenv("AUTO_SEED_SUPER_ADMIN", "false")).lower() in {"1", "true", "yes", "on"}
 
 
-@app.on_event("startup")
-def _start_background_workers():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
     start_campaign_scheduler()
     if _should_auto_seed_bootstrap_users():
         try:
             seed_bootstrap_users_from_env()
         except Exception as exc:
             print(f"[Seeder] Auto seed skipped or failed: {exc}")
+    yield
+    # shutdown (if any cleanup is needed, add here)
+
+
+# register lifespan with app
+app.router.lifespan_context = lifespan
 
 
 # ======================================================
