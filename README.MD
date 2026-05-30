@@ -197,6 +197,7 @@ RASA_URL=http://rasa:5005
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_JWT_SECRET=your_supabase_jwt_secret
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_secret
 
 # Bootstrap user seeding (opsional)
 AUTO_SEED_BOOTSTRAP_USERS=false
