@@ -7,7 +7,6 @@
 # ======================================================
 
 import os
-import requests
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 
@@ -17,6 +16,7 @@ from App.helpers import save_to_supabase, _require_supabase, normalize_phone_num
 from App.queue_manager import fonnte_queue
 from App.wa_gateway import send_text_best_effort
 from App.wa_gateway import buat_menu_booking, buat_menu_layanan, buat_poll_feedback
+from App.wa_service_client import wa_service_request
 
 router = APIRouter(prefix="/api/send", tags=["Send"])
 
@@ -107,9 +107,9 @@ def send_message(
         target = normalize_phone_number(payload.target)
         if payload.attachment_url:
             # Kirim via whatsapp-web.js (attachment) 
-            WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
-            response = requests.post(
-                f"{WA_SERVICE_URL}/send-attachment",
+            response = wa_service_request(
+                "POST",
+                "/send-attachment",
                 json={
                     "target": target,
                     "message": payload.message,
@@ -161,11 +161,11 @@ def send_media(
 ):
     try:
         normalized_target = normalize_phone_number(target)
-        WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 
         file.file.seek(0)
-        response = requests.post(
-            f"{WA_SERVICE_URL}/send-media",
+        response = wa_service_request(
+            "POST",
+            "/send-media",
             data={
                 "target": normalized_target,
                 "message": message,
@@ -310,7 +310,6 @@ def broadcast_to_patients(
             detail="Tidak ada nomor pasien tersimpan.",
         )
 
-    WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
     recipients = []
 
     if file is not None:
@@ -322,8 +321,9 @@ def broadcast_to_patients(
             continue
 
         if file is not None:
-            requests.post(
-                f"{WA_SERVICE_URL}/send-media",
+            wa_service_request(
+                "POST",
+                "/send-media",
                 data={"target": number, "message": message},
                 files={
                     "file": (
@@ -336,8 +336,9 @@ def broadcast_to_patients(
             )
             source = "wa-service"
         elif attachment_url:
-            requests.post(
-                f"{WA_SERVICE_URL}/send-attachment",
+            wa_service_request(
+                "POST",
+                "/send-attachment",
                 json={
                     "target": number,
                     "message": message,

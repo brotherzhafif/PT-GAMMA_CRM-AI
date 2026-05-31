@@ -6,18 +6,15 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
-import os
 import json
-import requests
 import asyncio
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from App.smartclinic_auth import get_smartclinic_token_status
+from App.wa_service_client import wa_service_request
 
 router = APIRouter(prefix="/api/status", tags=["System"])
-
-WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
 
 WA_STATUS_EXAMPLE = {"status": "connected", "ready": True, "has_qr": False}
 WA_QR_STREAM_CONNECTED_EXAMPLE = "event: status\ndata: connected"
@@ -67,7 +64,7 @@ async def whatsapp_connection_stream(request: Request):
 
             try:
                 # Ambil data dari Node.js wa-service (yang me-return status + base64)
-                status_response = requests.get(f"{WA_SERVICE_URL}/status", timeout=3)
+                status_response = wa_service_request("GET", "/status", timeout=3)
                 if status_response.status_code == 200:
                     status_data = status_response.json()
                     if status_data != last_status:
@@ -82,7 +79,7 @@ async def whatsapp_connection_stream(request: Request):
                         "data": json.dumps({"status": "unreachable", "ready": False, "has_qr": False}),
                     }
 
-                response = requests.get(f"{WA_SERVICE_URL}/qr", timeout=3)
+                response = wa_service_request("GET", "/qr", timeout=3)
 
                 if response.status_code == 200:
                     data = response.json()

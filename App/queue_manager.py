@@ -5,14 +5,14 @@ import time
 import random
 import threading
 import queue
-import requests
 import os
+
+from App.wa_service_client import wa_service_request
 
 class MessageQueueManager:
     def __init__(self):
         self.msg_queue = queue.Queue()
         self.token = os.getenv('FONNTE_TOKEN', '').strip()
-        self.wa_service_url = os.getenv('WA_SERVICE_URL', 'http://wa-service:3000').rstrip('/')
         worker_thread = threading.Thread(target=self._worker, name="FonnteQueueWorker", daemon=True)
         worker_thread.start()
         print(f"[QUEUE] Worker thread '{worker_thread.name}' started. Token loaded: {'yes' if self.token else 'NO - cek .env!'}")
@@ -52,7 +52,7 @@ class MessageQueueManager:
 
     def _is_wa_connected(self):
         try:
-            response = requests.get(f"{self.wa_service_url}/status", timeout=4)
+            response = wa_service_request("GET", "/status", timeout=4)
             if response.status_code != 200:
                 return False
             data = response.json() or {}
@@ -63,8 +63,9 @@ class MessageQueueManager:
 
     def _send_via_wa_service(self, target, message):
         try:
-            response = requests.post(
-                f"{self.wa_service_url}/send-message",
+            response = wa_service_request(
+                "POST",
+                "/send-message",
                 json={"target": target, "message": message},
                 timeout=20,
             )

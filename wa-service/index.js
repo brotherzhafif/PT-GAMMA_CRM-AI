@@ -26,6 +26,7 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 3000
 const CHAT_FILES_DIR = '/app/chat_files'
+const WA_EXECUTABLE_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
 
 if (!fs.existsSync(CHAT_FILES_DIR)) {
     fs.mkdirSync(CHAT_FILES_DIR, { recursive: true })
@@ -57,6 +58,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        executablePath: WA_EXECUTABLE_PATH,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -68,6 +70,40 @@ const client = new Client({
         ],
     },
 })
+
+let bootstrapPromise = null
+
+async function bootstrapClient() {
+    if (bootstrapPromise) {
+        return bootstrapPromise
+    }
+
+    bootstrapPromise = (async () => {
+        let attempt = 0
+
+        while (true) {
+            attempt += 1
+
+            try {
+                isInitializing = true
+                await client.initialize()
+                return
+            } catch (error) {
+                isReady = false
+                qrCodeData = null
+                isInitializing = true
+                console.error(`[WA] Gagal inisialisasi client (percobaan ${attempt}):`, error)
+
+                const retryDelayMs = Math.min(30000, 5000 * attempt)
+                await delay(retryDelayMs)
+            }
+        }
+    })().finally(() => {
+        bootstrapPromise = null
+    })
+
+    return bootstrapPromise
+}
 
 // Events 
 
@@ -99,13 +135,14 @@ client.on('auth_failure', (msg) => {
 client.on('disconnected', (reason) => {
     isReady = false
     isInitializing = true
+    qrCodeData = null
     console.warn('[WA] Disconnected:', reason)
     // Auto reconnect
-    client.initialize()
+    void bootstrapClient()
 })
 
 // Mulai inisialisasi client
-client.initialize()
+void bootstrapClient()
 console.log('[WA] Initializing WhatsApp client...')
 
 

@@ -1,21 +1,16 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
-import requests
 from fastapi import HTTPException
 
 from App.helpers import normalize_phone_number
-
-
-def _wa_service_url() -> str:
-    return os.getenv("WA_SERVICE_URL", "http://wa-service:3000").rstrip("/")
+from App.wa_service_client import wa_service_request
 
 
 def _wa_service_ready() -> bool:
     try:
-        response = requests.get(f"{_wa_service_url()}/status", timeout=4)
+        response = wa_service_request("GET", "/status", timeout=4)
         if response.status_code != 200:
             return False
         data = response.json() or {}
@@ -29,8 +24,9 @@ def send_text_best_effort(target: str, message: str) -> dict[str, Any]:
 
     if _wa_service_ready():
         try:
-            response = requests.post(
-                f"{_wa_service_url()}/send-message",
+            response = wa_service_request(
+                "POST",
+                "/send-message",
                 json={"target": normalized_target, "message": message},
                 timeout=20,
             )
@@ -110,8 +106,9 @@ def send_interactive_message(target: str, payload: dict[str, Any]) -> dict[str, 
             detail="WhatsApp web belum terkoneksi. Interactive message hanya bisa dikirim saat wa-service ready.",
         )
 
-    response = requests.post(
-        f"{_wa_service_url()}/send-interactive",
+    response = wa_service_request(
+        "POST",
+        "/send-interactive",
         json={"target": normalized_target, **payload},
         timeout=30,
     )
