@@ -68,6 +68,7 @@ services:
     volumes:
       # Session WA disimpan persistent agar tidak perlu scan QR ulang setelah restart
       - wa_session:/app/.wwebjs_auth
+      - chat_files:/app/chat_files
     networks:
       - hana-network
     restart: unless-stopped
@@ -91,3 +92,4 @@ volumes:
   chat_state:
   handoff_state:
   wa_session: # Persistent WA session
+  chat_files:

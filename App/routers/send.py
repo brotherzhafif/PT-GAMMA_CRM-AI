@@ -9,7 +9,7 @@
 import os
 import requests
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult
@@ -35,6 +35,11 @@ BROADCAST_EXAMPLE = {
     "status": "ok",
     "total_sent": 2,
     "recipients": ["6281234567890", "6289876543210"],
+}
+
+SEND_MEDIA_EXAMPLE = {
+    "status": "ok",
+    "message": "Media untuk 6281234567890 masuk antrian",
 }
 
 
@@ -110,6 +115,67 @@ def send_message(
         save_to_supabase(target, payload.message, direction="outbound", source=source)
         print(f"[SEND] {source} → {target}: {payload.message[:60]}...")
         return {"status": "ok", "message": f"Pesan untuk {target} masuk antrian"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/media",
+    summary="Kirim media via upload langsung",
+    description=(
+        "Upload file langsung tanpa link. File disimpan lokal di chat_files pada wa-service, lalu dikirim sesuai tipe media: "
+        "image/video/audio/document."
+    ),
+    responses={
+        200: {
+            "description": "Media berhasil dimasukkan antrian",
+            "content": {"application/json": {"example": SEND_MEDIA_EXAMPLE}},
+        },
+        400: {
+            "description": "Request tidak valid",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+        500: {
+            "description": "Gagal mengirim media",
+            "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}},
+        },
+    },
+)
+def send_media(
+    target: str = Form(..., description="Nomor WhatsApp tujuan"),
+    message: str = Form(default="", description="Caption/pesan pendamping"),
+    file: UploadFile = File(..., description="File media yang akan dikirim"),
+):
+    try:
+        normalized_target = normalize_phone_number(target)
+        WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
+
+        file.file.seek(0)
+        response = requests.post(
+            f"{WA_SERVICE_URL}/send-media",
+            data={
+                "target": normalized_target,
+                "message": message,
+            },
+            files={
+                "file": (
+                    file.filename or "upload",
+                    file.file,
+                    file.content_type or "application/octet-stream",
+                )
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        save_to_supabase(normalized_target, message or file.filename or "media", direction="outbound", source="wa-service")
+        print(f"[SEND] wa-service/media → {normalized_target}: {file.filename or 'upload'}")
+        return {
+            "status": "ok",
+            "message": f"Media untuk {normalized_target} masuk antrian",
+            "wa_service_response": response.json(),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

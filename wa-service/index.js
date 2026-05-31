@@ -17,11 +17,31 @@ const express = require('express')
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
 const axios = require('axios')
+const multer = require('multer')
+const fs = require('fs')
+const path = require('path')
 
 const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
+const CHAT_FILES_DIR = '/app/chat_files'
+
+if (!fs.existsSync(CHAT_FILES_DIR)) {
+    fs.mkdirSync(CHAT_FILES_DIR, { recursive: true })
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, CHAT_FILES_DIR),
+    filename: (req, file, cb) => {
+        const safeOriginalName = (file.originalname || 'upload')
+            .replace(/[^a-zA-Z0-9._-]+/g, '_')
+            .replace(/_+/g, '_')
+        cb(null, `${Date.now()}-${safeOriginalName}`)
+    },
+})
+
+const upload = multer({ storage })
 
 // State 
 let qrCodeData = null      // QR code string untuk ditampilkan
@@ -121,6 +141,39 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function getMediaMethod(mimeType) {
+    if (!mimeType) return 'document'
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType.startsWith('video/')) return 'video'
+    if (mimeType.startsWith('audio/')) return 'audio'
+    return 'document'
+}
+
+async function sendMediaByType(chatId, media, mimeType, caption) {
+    const mediaType = getMediaMethod(mimeType)
+
+    if (mediaType === 'image') {
+        await client.sendMessage(chatId, media, { caption: caption || '' })
+        return 'image'
+    }
+
+    if (mediaType === 'video') {
+        await client.sendMessage(chatId, media, { caption: caption || '' })
+        return 'video'
+    }
+
+    if (mediaType === 'audio') {
+        await client.sendMessage(chatId, media, { sendAudioAsVoice: false })
+        return 'audio'
+    }
+
+    await client.sendMessage(chatId, media, {
+        caption: caption || '',
+        sendMediaAsDocument: true,
+    })
+    return 'document'
+}
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ENDPOINTS
@@ -156,6 +209,56 @@ app.get('/qr', async (req, res) => {
     const QRCode = require('qrcode')
     const qrBase64 = await QRCode.toDataURL(qrCodeData)
     res.json({ status: 'qr_ready', qr: qrBase64 })
+})
+
+
+/**
+ * POST /send-media
+ * Upload media file langsung, simpan lokal di chat_files, lalu kirim sesuai tipe file.
+ */
+app.post('/send-media', upload.single('file'), async (req, res) => {
+    const { target, message = '' } = req.body
+
+    if (!target || !req.file) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'target dan file wajib diisi',
+        })
+    }
+
+    if (!isReady) {
+        return res.status(503).json({
+            status: 'error',
+            message: 'WhatsApp belum terkoneksi. Scan QR dulu via GET /qr',
+            has_qr: !!qrCodeData,
+        })
+    }
+
+    const savedPath = req.file.path
+    const mimeType = req.file.mimetype || 'application/octet-stream'
+    const chatId = formatNumber(target)
+
+    try {
+        const media = MessageMedia.fromFilePath(savedPath)
+
+        const delayMs = Math.floor(Math.random() * 3000) + 2000
+        console.log(`[WA] Delay ${delayMs}ms sebelum kirim media ke ${target}...`)
+        await delay(delayMs)
+
+        const sentAs = await sendMediaByType(chatId, media, mimeType, message)
+
+        console.log(`[WA] Media terkirim ke ${target} sebagai ${sentAs} (${path.basename(savedPath)})`)
+        res.json({
+            status: 'ok',
+            message: `Media terkirim ke ${target}`,
+            stored_file: path.basename(savedPath),
+            mime_type: mimeType,
+            send_method: sentAs,
+        })
+    } catch (err) {
+        console.error(`[WA] Error kirim media ke ${target}:`, err.message)
+        res.status(500).json({ status: 'error', message: err.message })
+    }
 })
 
 
@@ -245,12 +348,10 @@ app.post('/send-attachment', async (req, res) => {
         await delay(delayMs)
 
         // Kirim file
-        await client.sendMessage(chatId, media, {
-            caption: message,
-        })
+        const sentAs = await sendMediaByType(chatId, media, media.mimetype, message)
 
-        console.log(`[WA] Attachment terkirim ke ${target} (${filename || 'file'})`)
-        res.json({ status: 'ok', message: `Attachment terkirim ke ${target}` })
+        console.log(`[WA] Attachment terkirim ke ${target} sebagai ${sentAs} (${filename || 'file'})`)
+        res.json({ status: 'ok', message: `Attachment terkirim ke ${target}`, send_method: sentAs })
 
     } catch (err) {
         console.error(`[WA] Error kirim ke ${target}:`, err.message)
@@ -262,5 +363,5 @@ app.post('/send-attachment', async (req, res) => {
 // Start Server 
 app.listen(PORT, () => {
     console.log(`[WA] Service berjalan di http://0.0.0.0:${PORT}`)
-    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-message | POST /send-attachment`)
+    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-message | POST /send-media | POST /send-attachment`)
 })

@@ -8,3 +8,4 @@ groq
 supabase>=2.4.0
 sse-starlette
 httpx
+python-multipart
