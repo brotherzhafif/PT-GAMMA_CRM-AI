@@ -14,7 +14,7 @@
 // ======================================================
 
 const express = require('express')
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
+const { Client, LocalAuth, MessageMedia, Buttons, List, Poll } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
 const axios = require('axios')
 const multer = require('multer')
@@ -172,6 +172,73 @@ async function sendMediaByType(chatId, media, mimeType, caption) {
         sendMediaAsDocument: true,
     })
     return 'document'
+}
+
+function normalizeButtons(buttons) {
+    return (buttons || []).map((button, index) => ({
+        id: button.id || button.buttonId || `btn_${index + 1}`,
+        body: button.body || button.text || button.title || `Pilihan ${index + 1}`,
+    }))
+}
+
+function normalizeSections(sections) {
+    return (sections || []).map((section, sectionIndex) => ({
+        title: section.title || `Bagian ${sectionIndex + 1}`,
+        rows: (section.rows || []).map((row, rowIndex) => ({
+            id: row.id || row.rowId || `row_${sectionIndex + 1}_${rowIndex + 1}`,
+            title: row.title || row.body || `Opsi ${rowIndex + 1}`,
+            description: row.description || '',
+        })),
+    }))
+}
+
+function normalizePollOptions(pollOptions) {
+    return (pollOptions || []).map((option, index) => {
+        if (typeof option === 'string') {
+            return { name: option, localId: index + 1 }
+        }
+
+        return {
+            name: option.name || option.body || `Opsi ${index + 1}`,
+            localId: option.localId || index + 1,
+        }
+    })
+}
+
+async function sendInteractiveMessage(chatId, payload) {
+    const type = (payload.type || '').toLowerCase()
+
+    if (type === 'buttons') {
+        const interactive = new Buttons(
+            payload.body || '',
+            normalizeButtons(payload.buttons),
+            payload.title || null,
+            payload.footer || null,
+        )
+        return client.sendMessage(chatId, interactive)
+    }
+
+    if (type === 'list') {
+        const interactive = new List(
+            payload.body || '',
+            payload.buttonText || 'Pilih',
+            normalizeSections(payload.sections),
+            payload.title || null,
+            payload.footer || null,
+        )
+        return client.sendMessage(chatId, interactive)
+    }
+
+    if (type === 'poll') {
+        const interactive = new Poll(
+            payload.pollName || 'Polling',
+            normalizePollOptions(payload.pollOptions),
+            payload.options || {},
+        )
+        return client.sendMessage(chatId, interactive)
+    }
+
+    throw new Error(`Tipe interactive tidak didukung: ${payload.type}`)
 }
 
 
@@ -360,8 +427,52 @@ app.post('/send-attachment', async (req, res) => {
 })
 
 
+/**
+ * POST /send-interactive
+ * Kirim pesan interaktif: buttons, list, atau poll.
+ */
+app.post('/send-interactive', async (req, res) => {
+    const { target, type } = req.body
+
+    if (!target || !type) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'target dan type wajib diisi',
+        })
+    }
+
+    if (!isReady) {
+        return res.status(503).json({
+            status: 'error',
+            message: 'WhatsApp belum terkoneksi. Scan QR dulu via GET /qr',
+            has_qr: !!qrCodeData,
+        })
+    }
+
+    try {
+        const chatId = formatNumber(target)
+
+        const delayMs = Math.floor(Math.random() * 3000) + 2000
+        console.log(`[WA] Delay ${delayMs}ms sebelum kirim interactive ke ${target}...`)
+        await delay(delayMs)
+
+        const sentMessage = await sendInteractiveMessage(chatId, req.body)
+
+        res.json({
+            status: 'ok',
+            message: `Interactive message terkirim ke ${target}`,
+            type,
+            message_id: sentMessage?.id?._serialized || sentMessage?.id || null,
+        })
+    } catch (err) {
+        console.error(`[WA] Error kirim interactive ke ${target}:`, err.message)
+        res.status(500).json({ status: 'error', message: err.message })
+    }
+})
+
+
 // Start Server 
 app.listen(PORT, () => {
     console.log(`[WA] Service berjalan di http://0.0.0.0:${PORT}`)
-    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-message | POST /send-media | POST /send-attachment`)
+    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-message | POST /send-media | POST /send-interactive | POST /send-attachment`)
 })

@@ -29,7 +29,7 @@ from App.helpers import (
 )
 from App.routers.chatbot_settings import get_max_fallback_before_handoff
 from App.handoff_manager import is_in_handoff, start_handoff
-from App.queue_manager import fonnte_queue
+from App.wa_gateway import send_text_best_effort
 from LLM.groq_service import GroqService
 
 router = APIRouter()
@@ -59,9 +59,9 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 
 def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
     """Kirim reply ke queue Fonnte, simpan ke JSON dan Supabase, lalu return ChatResponse."""
-    fonnte_queue.add_to_queue(no_hp, reply)
+    send_result = send_text_best_effort(no_hp, reply)
     save_chat_to_json(no_hp, input_pesan, reply, source=source)
-    save_to_supabase(no_hp, reply, direction="outbound", source=source)
+    save_to_supabase(no_hp, reply, direction="outbound", source=send_result.get("channel", source))
     return ChatResponse(status="ok", source=source, reply=reply)
 
 

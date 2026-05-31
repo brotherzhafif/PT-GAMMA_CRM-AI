@@ -15,6 +15,8 @@ from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult
 from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number
 from App.queue_manager import fonnte_queue
+from App.wa_gateway import send_text_best_effort
+from App.wa_gateway import buat_menu_booking, buat_menu_layanan, buat_poll_feedback
 
 router = APIRouter(prefix="/api/send", tags=["Send"])
 
@@ -40,6 +42,11 @@ BROADCAST_EXAMPLE = {
 SEND_MEDIA_EXAMPLE = {
     "status": "ok",
     "message": "Media untuk 6281234567890 masuk antrian",
+}
+
+SEND_INTERACTIVE_EXAMPLE = {
+    "status": "ok",
+    "message": "Interactive message untuk 6281234567890 masuk antrian",
 }
 
 
@@ -108,9 +115,8 @@ def send_message(
             response.raise_for_status()
             source = "wa-service"
         else:
-            # Kirim via Fonnte (teks biasa) 
-            fonnte_queue.add_to_queue(target, payload.message)
-            source = "manual"
+            send_result = send_text_best_effort(target, payload.message)
+            source = send_result.get("channel", "manual")
 
         save_to_supabase(target, payload.message, direction="outbound", source=source)
         print(f"[SEND] {source} → {target}: {payload.message[:60]}...")
@@ -177,6 +183,72 @@ def send_media(
             "wa_service_response": response.json(),
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/interactive/booking",
+    summary="Kirim menu booking ke nomor tertentu",
+    description="Mengirim menu booking interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+    responses={
+        200: {"description": "Menu booking berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+        500: {"description": "Gagal mengirim menu booking", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+    },
+)
+def send_interactive_booking(target: str = Form(..., description="Nomor WhatsApp tujuan")):
+    try:
+        result = buat_menu_booking(target)
+        save_to_supabase(target, "[interactive] booking menu", direction="outbound", source=result.get("channel", "interactive"))
+        return {
+            "status": "ok",
+            "message": f"Menu booking untuk {normalize_phone_number(target)} masuk antrian",
+            "result": result,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/interactive/services",
+    summary="Kirim menu layanan ke nomor tertentu",
+    description="Mengirim menu layanan interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+    responses={
+        200: {"description": "Menu layanan berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+        500: {"description": "Gagal mengirim menu layanan", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+    },
+)
+def send_interactive_services(target: str = Form(..., description="Nomor WhatsApp tujuan")):
+    try:
+        result = buat_menu_layanan(target)
+        save_to_supabase(target, "[interactive] layanan menu", direction="outbound", source=result.get("channel", "interactive"))
+        return {
+            "status": "ok",
+            "message": f"Menu layanan untuk {normalize_phone_number(target)} masuk antrian",
+            "result": result,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/interactive/poll-feedback",
+    summary="Kirim polling feedback ke nomor tertentu",
+    description="Mengirim poll interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+    responses={
+        200: {"description": "Polling berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+        500: {"description": "Gagal mengirim polling", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+    },
+)
+def send_interactive_poll(target: str = Form(..., description="Nomor WhatsApp tujuan")):
+    try:
+        result = buat_poll_feedback(target)
+        save_to_supabase(target, "[interactive] poll feedback", direction="outbound", source=result.get("channel", "interactive"))
+        return {
+            "status": "ok",
+            "message": f"Polling feedback untuk {normalize_phone_number(target)} masuk antrian",
+            "result": result,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -253,9 +325,8 @@ def broadcast_message(
                 )
                 source = "wa-service"
             else:
-                # Kirim via Fonnte 
-                fonnte_queue.add_to_queue(number, payload.message)
-                source = "broadcast"
+                send_result = send_text_best_effort(number, payload.message)
+                source = send_result.get("channel", "broadcast")
 
             save_to_supabase(number, payload.message, direction="outbound", source=source)
             recipients.append(number)
