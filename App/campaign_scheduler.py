@@ -14,8 +14,7 @@ from fastapi import HTTPException
 
 from App.config import supabase
 from App.helpers import _require_supabase
-from App.models import BroadcastPayload
-from App.routers.send import broadcast_message
+from App.routers.send import broadcast_to_patients
 
 _scheduler_started = False
 _scheduler_lock = threading.Lock()
@@ -53,12 +52,11 @@ def _process_campaign(campaign: dict):
 
         _mark_campaign_status(campaign_id, "processing")
 
-        payload = BroadcastPayload(
-            message=campaign.get("campaign_message", ""),
+        broadcast_to_patients(
+            campaign.get("campaign_message", ""),
             attachment_url=campaign.get("attachment_url"),
             filename=campaign.get("filename"),
         )
-        broadcast_message(payload)
 
         _mark_campaign_status(campaign_id, "sent")
         print(f"[CampaignScheduler] Campaign '{campaign.get('campaign_name')}' sudah dibroadcast")
