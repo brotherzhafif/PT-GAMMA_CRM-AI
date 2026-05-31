@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from App.auth.router import router as auth_router
 from App.routers.activity import router as activity_router
+from App.routers.analytics import router as analytics_router
 from App.routers.users import router as users_router
 from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback
 from App.campaign_scheduler import start_campaign_scheduler
@@ -50,6 +51,7 @@ app.include_router(feedback.router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(activity_router)
+app.include_router(analytics_router)
 
 
 @asynccontextmanager
