@@ -61,17 +61,6 @@ rules:
       - action: action_booking_form_baru_submit
       - action: action_booking_review
 
-  - rule: Submit booking_form_lama selesai
-    condition:
-      - active_loop: booking_form_lama
-    steps:
-      - action: booking_form_lama
-      - active_loop: null
-      - slot_was_set:
-          - requested_slot: null
-      - action: action_booking_form_lama_submit
-      - action: action_booking_review
-
   - rule: Konfirmasi booking setelah review
     condition:
       - slot_was_set:
@@ -89,7 +78,7 @@ rules:
     steps:
       - intent: booking_ubah_data
       - action: action_slot_reset_booking
-      - action: utter_booking_tanya_tipe
+      - action: action_start_booking
 
   - rule: Batalkan booking setelah review
     condition:
@@ -104,15 +93,6 @@ rules:
   - rule: Booking baru saat form_baru aktif
     condition:
       - active_loop: booking_form_baru
-    steps:
-      - intent: intent_ingin_booking
-      - action: action_booking_cancel
-      - active_loop: null
-      - action: action_start_booking
-
-  - rule: Booking baru saat form_lama aktif
-    condition:
-      - active_loop: booking_form_lama
     steps:
       - intent: intent_ingin_booking
       - action: action_booking_cancel

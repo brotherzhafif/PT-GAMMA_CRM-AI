@@ -39,8 +39,6 @@ groq = GroqService()
 #   KONSTANTA
 # ======================================================
 
-SKIP_KEYWORDS = {"tidak", "ga", "gak", "nggak", "skip", "lewati", "batal", "-", "no", "tidak mau"}
-
 ONBOARDING_STATES = {"waiting_name", "waiting_nik", "waiting_dob", "waiting_gender"}
 
 WEBHOOK_REQUEST_EXAMPLE = {
@@ -65,21 +63,6 @@ def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatRe
     save_chat_to_json(no_hp, input_pesan, reply, source=source)
     save_to_supabase(no_hp, reply, direction="outbound", source=source)
     return ChatResponse(status="ok", source=source, reply=reply)
-
-
-def _finish_onboarding_skip(no_hp: str, input_pesan: str) -> ChatResponse:
-    """
-    Dipanggil ketika user ketik skip di langkah mana pun.
-    Simpan pasien ke DB tanpa data, reset state, lalu balas.
-    """
-    upsert_patient(no_hp)          # kirim kosong — semua field None/default
-    set_session_state(no_hp, None)
-    reply = (
-        "Oke, tidak apa-apa! Pendaftaran dilewati.\n\n"
-        "Ada yang bisa kami bantu hari ini? 😊"
-    )
-    print(f"[Onboarding] {no_hp} skip → onboarding selesai tanpa data")
-    return _send_reply(no_hp, input_pesan, reply, source="system")
 
 
 # ======================================================
@@ -174,43 +157,34 @@ def webhook(
             reply = (
                 "Halo! Selamat datang di SmartClinic 👋\n\n"
                 "Sebelum mulai, boleh kami tahu *nama lengkap* kamu sesuai KTP?\n"
-                "Ketik nama kamu, atau ketik *skip* untuk melewati pendaftaran."
+                "Ketik nama kamu untuk melanjutkan pendaftaran."
             )
             print(f"[Onboarding] Nomor baru {no_hp} → tanya nama")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
         # ── Langkah 1: Nama 
         if session_state == "waiting_name":
-            # Skip di langkah pertama → selesai seluruh onboarding
-            if input_pesan.lower() in SKIP_KEYWORDS:
-                return _finish_onboarding_skip(no_hp, input_pesan)
-
             nama = input_pesan.strip()
             if len(nama) < 2:
-                reply = "⚠️ Nama terlalu pendek. Silakan masukkan nama lengkap, atau ketik *skip*."
+                reply = "⚠️ Nama terlalu pendek. Silakan masukkan nama lengkap Anda."
                 return _send_reply(no_hp, input_pesan, reply, source="system")
 
             # Simpan nama sementara di state, lanjut ke NIK
             set_session_state(no_hp, "waiting_nik", data={"namaLengkap": nama})
             reply = (
                 f"Terima kasih, *{nama}*! ✅\n\n"
-                "Selanjutnya, ketik *16 digit NIK* (Nomor Induk Kependudukan) kamu,\n"
-                "atau ketik *skip* untuk melewati pendaftaran."
+                "Selanjutnya, ketik *16 digit NIK* (Nomor Induk Kependudukan) kamu untuk melanjutkan pendaftaran."
             )
             print(f"[Onboarding] {no_hp} → nama '{nama}' → tanya NIK")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
         # ── Langkah 2: NIK 
         if session_state == "waiting_nik":
-            # Skip di langkah kedua → selesai seluruh onboarding
-            if input_pesan.lower() in SKIP_KEYWORDS:
-                return _finish_onboarding_skip(no_hp, input_pesan)
-
             nik_digits = re.sub(r"\D", "", input_pesan)
             if len(nik_digits) != 16:
                 reply = (
                     "⚠️ NIK harus terdiri dari *16 digit angka*.\n"
-                    "Silakan cek kembali dan kirim ulang, atau ketik *skip* untuk melewati pendaftaran."
+                    "Silakan cek kembali dan kirim ulang."
                 )
                 print(f"[Onboarding] {no_hp} → NIK invalid '{input_pesan}'")
                 return _send_reply(no_hp, input_pesan, reply, source="system")
@@ -221,22 +195,18 @@ def webhook(
             reply = (
                 "NIK valid! ✅\n\n"
                 "Selanjutnya, masukkan *Tanggal Lahir* kamu dengan format *DD/MM/YYYY*\n"
-                "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+                "(Contoh: 15/08/1995)."
             )
             print(f"[Onboarding] {no_hp} → NIK valid → tanya DOB")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
         # ── Langkah 3: Tanggal Lahir 
         if session_state == "waiting_dob":
-            # Skip di langkah ketiga → selesai seluruh onboarding
-            if input_pesan.lower() in SKIP_KEYWORDS:
-                return _finish_onboarding_skip(no_hp, input_pesan)
-
             match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", input_pesan)
             if not match:
                 reply = (
                     "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n"
-                    "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+                    "(Contoh: 15/08/1995)."
                 )
                 print(f"[Onboarding] {no_hp} → DOB invalid '{input_pesan}'")
                 return _send_reply(no_hp, input_pesan, reply, source="system")
@@ -248,7 +218,7 @@ def webhook(
             except ValueError:
                 reply = (
                     "⚠️ Tanggal tidak valid. Gunakan format *DD/MM/YYYY*\n"
-                    "(Contoh: 15/08/1995), atau ketik *skip* untuk melewati pendaftaran."
+                    "(Contoh: 15/08/1995)."
                 )
                 return _send_reply(no_hp, input_pesan, reply, source="system")
 
@@ -258,17 +228,13 @@ def webhook(
             reply = (
                 "Terima kasih! ✅\n\n"
                 "Terakhir, apa *jenis kelamin* kamu?\n"
-                "Balas *Laki-laki* atau *Perempuan*, atau ketik *skip* untuk melewati pendaftaran."
+                "Balas *Laki-laki* atau *Perempuan*."
             )
             print(f"[Onboarding] {no_hp} → DOB '{tanggal_lahir}' → tanya Gender")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
         # ── Langkah 4: Gender → selesai onboarding 
         if session_state == "waiting_gender":
-            # Skip di langkah keempat → selesai seluruh onboarding
-            if input_pesan.lower() in SKIP_KEYWORDS:
-                return _finish_onboarding_skip(no_hp, input_pesan)
-
             gender_input = input_pesan.strip().lower()
             LAKI_KEYWORDS    = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
             PEREMPUAN_KEYWORDS = {"perempuan", "wanita", "cewek", "cewe", "p", "pr", "female"}
@@ -279,8 +245,7 @@ def webhook(
                 jenis_kelamin = "PEREMPUAN"
             else:
                 reply = (
-                    "⚠️ Mohon balas dengan *Laki-laki* atau *Perempuan*,\n"
-                    "atau ketik *skip* untuk melewati pendaftaran."
+                    "⚠️ Mohon balas dengan *Laki-laki* atau *Perempuan*."
                 )
                 print(f"[Onboarding] {no_hp} → Gender invalid '{gender_input}'")
                 return _send_reply(no_hp, input_pesan, reply, source="system")

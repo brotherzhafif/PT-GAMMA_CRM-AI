@@ -44,7 +44,7 @@ RASA_TRUSTED_INTENTS = {
     "ask_services", "ask_location", "ask_cost",
     "request_human_agent", "emergency",
     "affirm", "deny", "intent_ingin_booking",
-    "intent_berikan_rating", "booking_pasien_baru", "booking_pasien_lama",
+    "intent_berikan_rating", "intent_diri_sendiri", "intent_orang_lain",
     "booking_konfirmasi", "booking_ubah_data",
     "booking_batalkan", "booking_reschedule",
 }

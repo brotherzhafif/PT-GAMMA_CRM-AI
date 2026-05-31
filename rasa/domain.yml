@@ -18,8 +18,6 @@ intents:
   - intent_diri_sendiri
   - intent_orang_lain
   - intent_berikan_rating
-  - booking_pasien_baru
-  - booking_pasien_lama
   - booking_berikan_nik
   - booking_berikan_tgl_lahir
   - booking_berikan_keluhan
@@ -48,19 +46,6 @@ slots:
       - type: from_intent
         intent: goodbye
         value: survey
-
-  booking_tipe_pasien:
-    type: categorical
-    values:
-      - baru
-      - lama
-    mappings:
-      - type: from_intent
-        intent: booking_pasien_baru
-        value: baru
-      - type: from_intent
-        intent: booking_pasien_lama
-        value: lama
 
   booking_untuk_siapa:
     type: categorical
@@ -127,28 +112,6 @@ slots:
             requested_slot: booking_tgl_lahir
         not_intent: booking_batalkan
 
-  booking_nik_lama:
-    type: text
-    influence_conversation: false
-    mappings:
-      - type: from_entity
-        entity: nik
-        intent: booking_berikan_nik
-        conditions:
-          - active_loop: booking_form_lama
-            requested_slot: booking_nik_lama
-      - type: from_entity
-        entity: nama_lengkap
-        intent: booking_berikan_nik
-        conditions:
-          - active_loop: booking_form_lama
-            requested_slot: booking_nik_lama
-      - type: from_text
-        conditions:
-          - active_loop: booking_form_lama
-            requested_slot: booking_nik_lama
-        not_intent: booking_batalkan
-
   booking_keluhan:
     type: text
     influence_conversation: false
@@ -158,13 +121,9 @@ slots:
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_keluhan
-          - active_loop: booking_form_lama
-            requested_slot: booking_keluhan
       - type: from_text
         conditions:
           - active_loop: booking_form_baru
-            requested_slot: booking_keluhan
-          - active_loop: booking_form_lama
             requested_slot: booking_keluhan
         not_intent: booking_batalkan
 
@@ -177,23 +136,17 @@ slots:
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_kunjungan
-          - active_loop: booking_form_lama
-            requested_slot: booking_tgl_kunjungan
       - type: from_text
         conditions:
           - active_loop: booking_form_baru
-            requested_slot: booking_tgl_kunjungan
-          - active_loop: booking_form_lama
             requested_slot: booking_tgl_kunjungan
         not_intent: booking_batalkan
 
   booking_step:
     type: categorical
     values:
-      - tanya_tipe
       - tanya_untuk_siapa
       - form_baru
-      - form_lama
       - review
       - selesai
       - batalkan
@@ -215,12 +168,6 @@ forms:
       - booking_keluhan
       - booking_tgl_kunjungan
 
-  booking_form_lama:
-    required_slots:
-      - booking_nik_lama
-      - booking_keluhan
-      - booking_tgl_kunjungan
-
 # Actions yang bisa dipanggil oleh rules/stories
 actions:
   - action_fetch_schedule
@@ -228,13 +175,11 @@ actions:
   - action_start_booking
   - action_handle_untuk_siapa
   - action_booking_form_baru_submit
-  - action_booking_form_lama_submit
   - action_booking_review
   - action_booking_confirm
   - action_booking_cancel
   - action_booking_reschedule
   - validate_booking_form_baru
-  - validate_booking_form_lama
   - action_slot_reset_booking
 
 responses:
@@ -279,17 +224,6 @@ responses:
   utter_ask_booking_untuk_siapa:
     - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan. Apakah Anda ingin mendaftar untuk *Diri Sendiri* atau untuk *Orang Lain*?"
 
-  utter_booking_tanya_tipe:
-    - text: |
-        Halo! Selamat datang di layanan pendaftaran digital Klinik SmartClinic 🏥
-
-        Agar saya bisa membantu lebih cepat, apakah Anda sebelumnya sudah pernah berobat ke klinik kami?
-
-        👤 Sudah Pernah
-        🆕 Pasien Baru
-
-        _(Balas dengan mengetik: *BARU* atau *LAMA*)_
-
   utter_booking_intro_baru:
     - text: |
         Selamat bergabung di Klinik SmartClinic! 😊
@@ -310,15 +244,6 @@ responses:
 
   utter_ask_booking_tgl_kunjungan:
     - text: "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?\n_(Contoh: 25/05/2026)_"
-
-  utter_booking_intro_lama:
-    - text: |
-        Senang menyapa Anda kembali! 😊
-
-        Mohon bantu isi data berikut agar kami bisa langsung mencocokkan jadwal Anda.
-
-  utter_ask_booking_nik_lama:
-    - text: "🪪 *NIK atau Nama Lengkap*:\nSilakan ketik NIK (16 digit) atau nama lengkap yang terdaftar."
 
   utter_booking_nik_invalid:
     - text: "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang."

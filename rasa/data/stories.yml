@@ -40,13 +40,13 @@ stories:
   # Alur-alur pendaftaran pasien baru dan lama
   #=================================================================
 
-  # ── Skenario 1: Pasien Baru Hingga Konfirmasi Sukses ───────────
-  - story: booking pasien baru - konfirmasi sukses
+  # ── Skenario 1: Diri Sendiri Hingga Konfirmasi Sukses ───────────
+  - story: booking diri sendiri - konfirmasi sukses
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
-      - intent: booking_pasien_baru
-      - action: utter_booking_intro_baru
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
       - action: booking_form_baru
       - active_loop: booking_form_baru
       - active_loop: null
@@ -57,13 +57,13 @@ stories:
       - intent: booking_konfirmasi
       - action: action_booking_confirm
 
-  # ── Skenario 5: Pasien Baru Mau Ubah Data Pasca Review ─────────
-  - story: booking pasien baru - ubah data pasca review
+  # ── Skenario 5: Diri Sendiri Mau Ubah Data Pasca Review ─────────
+  - story: booking diri sendiri - ubah data pasca review
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
-      - intent: booking_pasien_baru
-      - action: utter_booking_intro_baru
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
       - action: booking_form_baru
       - active_loop: booking_form_baru
       - active_loop: null
@@ -73,32 +73,23 @@ stories:
       - action: action_booking_review
       - intent: booking_ubah_data
       - action: action_slot_reset_booking
-      - action: utter_booking_tanya_tipe
+      - action: action_start_booking
 
-  # ── Skenario 2: Pasien Lama Hingga Konfirmasi Sukses ───────────────
-  - story: booking pasien lama - konfirmasi sukses
+  # ── Skenario: Orang Lain Handoff ─────────
+  - story: booking orang lain - handoff
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
-      - intent: booking_pasien_lama
-      - action: utter_booking_intro_lama
-      - action: booking_form_lama
-      - active_loop: booking_form_lama
-      - active_loop: null
-      - slot_was_set:
-          - requested_slot: null
-      - action: action_booking_form_lama_submit
-      - action: action_booking_review
-      - intent: booking_konfirmasi
-      - action: action_booking_confirm
+      - intent: intent_orang_lain
+      - action: action_handle_untuk_siapa
 
   # ── Skenario 3: Batalkan di tengah booking ───────────────────────
   - story: booking - batalkan di form
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
-      - intent: booking_pasien_baru
-      - action: utter_booking_intro_baru
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
       - action: booking_form_baru
       - active_loop: booking_form_baru
       - intent: booking_batalkan
@@ -112,12 +103,12 @@ stories:
       - action: action_booking_reschedule
 
   # ── Skenario 8: Booking lalu minta admin ─────────────────────────
-  - story: booking pasien baru lalu minta admin
+  - story: booking diri sendiri lalu minta admin
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
-      - intent: booking_pasien_baru
-      - action: utter_booking_intro_baru
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
       - action: booking_form_baru
       - active_loop: booking_form_baru
       - intent: request_human_agent

@@ -29,7 +29,7 @@ env311/
 env312/
 env313/
 env314/
-
+.agents/
 # Chat history (Opsional - uncomment jika tidak mau disimpan)
 # chat_history/
 

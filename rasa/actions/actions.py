@@ -56,10 +56,40 @@ def api_post(endpoint: str, payload: dict) -> Any:
 def get_patient_by_phone(phone_number: str) -> dict:
     """Mencari data pasien terdaftar menggunakan endpoint /api/patients/by-phone."""
     result = api_get("/api/patients/by-phone", params={"phone": phone_number})
-    if result and isinstance(result, dict):
-        return result
-    elif result and isinstance(result, list) and len(result) > 0:
-        return result[0]
+    if not result:
+        return {}
+    
+    # If the top level is a list (fallback)
+    if isinstance(result, list):
+        return result[0] if len(result) > 0 else {}
+        
+    if isinstance(result, dict):
+        # standard API success check
+        if result.get("success") is False:
+            return {}
+            
+        # extract 'data'
+        inner = result.get("data")
+        if inner is None:
+            # Maybe the top-level dict is already the patient data
+            if "nik" in result or "namaLengkap" in result:
+                return result
+            return {}
+            
+        if isinstance(inner, dict):
+            # double nesting check: {"success": true, "data": {"data": [...]}} or {"success": true, "data": {"data": {...}}}
+            if "data" in inner:
+                deep_inner = inner["data"]
+                if isinstance(deep_inner, list):
+                    return deep_inner[0] if len(deep_inner) > 0 else {}
+                elif isinstance(deep_inner, dict):
+                    return deep_inner
+            # single nesting: {"success": true, "data": {...}}
+            return inner
+        elif isinstance(inner, list):
+            # list nesting: {"success": true, "data": [...]}
+            return inner[0] if len(inner) > 0 else {}
+            
     return {}
 
 # ======================================================
@@ -253,24 +283,26 @@ class ActionStartBooking(Action):
         patient_data = get_patient_by_phone(sender_id)
         
         nik = patient_data.get("nik")
-        dob = patient_data.get("date_of_birth") or patient_data.get("tanggalLahir")
         
-        if nik and dob:
-            dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=nik)
-            return [
-                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
-                SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-                SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
-                SlotSet("booking_step", "tanya_untuk_siapa"), SlotSet("booking_untuk_siapa", None)
-            ]
-        else:
-            dispatcher.utter_message(response="utter_booking_tanya_tipe")
-            return [
-                SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
-                SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-                SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
-                SlotSet("booking_step", "tanya_tipe")
-            ]
+        # Mask NIK for security & confirmation
+        masked_nik = "Tidak Terdeteksi"
+        if nik:
+            nik_str = str(nik).strip()
+            if len(nik_str) >= 12:
+                # E.g. 3174********9012
+                masked_nik = f"{nik_str[:4]}********{nik_str[-4:]}"
+            elif len(nik_str) > 4:
+                masked_nik = f"{'*' * (len(nik_str) - 4)}{nik_str[-4:]}"
+            else:
+                masked_nik = nik_str
+        
+        dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=masked_nik)
+        return [
+            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+            SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
+            SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_step", "tanya_untuk_siapa"), SlotSet("booking_untuk_siapa", None)
+        ]
 
 
 class ActionHandleUntukSiapa(Action):
@@ -286,6 +318,8 @@ class ActionHandleUntukSiapa(Action):
             nama = patient_data.get("nama") or patient_data.get("namaLengkap", "")
             nik = patient_data.get("nik", "")
             dob = patient_data.get("date_of_birth") or patient_data.get("tanggalLahir", "")
+            if isinstance(dob, str) and "T" in dob:
+                dob = dob.split("T")[0]
             
             dispatcher.utter_message(response="utter_booking_intro_baru")
             return [
@@ -294,10 +328,19 @@ class ActionHandleUntukSiapa(Action):
                 ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
             ]
         else:
-            dispatcher.utter_message(response="utter_booking_intro_baru")
+            sender_id = tracker.sender_id
+            api_post(f"/api/handoff/{sender_id}", {})
             return [
-                SlotSet("booking_tipe_pasien", "baru"), SlotSet("booking_step", "form_baru"),
-                ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
+                ActiveLoop(None),
+                SlotSet("requested_slot", None),
+                SlotSet("booking_step", None),
+                SlotSet("booking_tipe_pasien", None),
+                SlotSet("booking_nik", None),
+                SlotSet("booking_nama", None),
+                SlotSet("booking_tgl_lahir", None),
+                SlotSet("booking_keluhan", None),
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("jadwalId", None)
             ]
 
 # ======================================================
@@ -409,131 +452,6 @@ class ValidateBookingFormBaru(FormValidationAction):
             return {"booking_tgl_kunjungan": parsed}
 
 
-class ValidateBookingFormLama(FormValidationAction):
-    def name(self) -> Text:
-        return "validate_booking_form_lama"
-
-    def validate_booking_nik_lama(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
-        nilai = str(slot_value).strip()
-        digit_only = re.sub(r"\D", "", nilai)
-        if len(digit_only) == 16:
-            return {"booking_nik_lama": digit_only}
-        if not nilai.isdigit() and len(nilai) >= 2:
-            return {"booking_nik_lama": nilai}
-        dispatcher.utter_message(text=(
-            "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang.\n\n"
-            "🪪 *NIK atau Nama Lengkap*:\nSilakan ketik NIK (16 digit) atau nama lengkap yang terdaftar."
-        ))
-        return {"booking_nik_lama": None}
-
-    def validate_booking_keluhan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
-        keluhan = str(slot_value).strip()
-        if len(keluhan) < 3:
-            dispatcher.utter_message(text="⚠️ Keluhan terlalu singkat. Mohon ceritakan sedikit lebih detail.")
-            return {"booking_keluhan": None}
-        return {"booking_keluhan": keluhan}
-
-    def validate_booking_tgl_kunjungan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
-        parsed = parse_tanggal_kunjungan(str(slot_value))
-        if not parsed:
-            dispatcher.utter_message(text=(
-                "⚠️ Tanggal kunjungan tidak valid. Gunakan format *DD/MM/YYYY*\n_(Contoh: 25/05/2026)_\n\n"
-                "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?"
-            ))
-            return {"booking_tgl_kunjungan": None}
-
-        try:
-            dt = datetime.strptime(parsed, "%Y-%m-%d")
-            hari_kunjungan = dt.isoweekday()
-
-            result = api_get("/api/schedules")
-            
-            # Mendukung format jika langsung array (List) atau bungkusan objek data (Dict)
-            if isinstance(result, list):
-                schedules = result
-            elif isinstance(result, dict):
-                schedules = result.get("data", result.get("schedules", []))
-            else:
-                schedules = []
-
-            jadwal_id_ditemukan = None
-            for sched in schedules:
-                hari_sched = sched.get("hari")
-                if hari_sched is not None:
-                    hari_sched = int(hari_sched)
-
-                # Jika property 'isAktif' absen dari database, fallback ke True agar tetap valid
-                is_aktif = sched.get("isAktif", True)
-                tanggal_libur = sched.get("tanggalLibur", [])
-
-                if (hari_sched == hari_kunjungan
-                        and is_aktif is True
-                        and parsed not in tanggal_libur):
-                    jadwal_id_ditemukan = sched.get("id")
-                    break
-
-            if jadwal_id_ditemukan:
-                print(f"[DEBUG Form Lama] jadwalId={jadwal_id_ditemukan} (hari={hari_kunjungan})")
-                return {
-                    "booking_tgl_kunjungan": parsed,
-                    "jadwalId": str(jadwal_id_ditemukan)
-                }
-            else:
-                dispatcher.utter_message(text=(
-                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n\n"
-                    "📅 *Rencana Tanggal Kunjungan*:\nSilakan pilih hari lain _(Senin–Jumat)_."
-                ))
-                return {"booking_tgl_kunjungan": None}
-        except Exception as e:
-            print(f"[Exception Form Lama tgl_kunjungan]: {e}")
-            return {"booking_tgl_kunjungan": parsed}
-
-# ======================================================
-# SUBMIT & REVIEW ACTIONS
-# ======================================================
-
-class ActionBookingFormBaruSubmit(Action):
-    def name(self) -> Text:
-        return "action_booking_form_baru_submit"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        return [SlotSet("booking_step", "review")]
-
-
-class ActionBookingFormLamaSubmit(Action):
-    def name(self) -> Text:
-        return "action_booking_form_lama_submit"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        identifier = tracker.get_slot("booking_nik_lama") or ""
-        events = [SlotSet("booking_step", "review")]
-        digit_only = re.sub(r"\D", "", identifier)
-
-        # Tembak GET /api/patients sesuai format payload array Swagger
-        if len(digit_only) == 16:
-            result = api_get("/api/patients", params={"nik": digit_only})
-        else:
-            result = api_get("/api/patients", params={"nama": identifier})
-
-        if result:
-            data = result if isinstance(result, list) else result.get("data", [])
-            if isinstance(data, list) and len(data) > 0:
-                data = data[0]
-            
-            nama = data.get("namaLengkap") or data.get("nama") or ""
-            tgl_lahir = data.get("tanggalLahir") or data.get("date_of_birth") or ""
-            nik = data.get("nik") or digit_only
-            
-            if nama:
-                dispatcher.utter_message(text=f"✅ Data Anda ditemukan. Halo kembali, *{nama}*! 😊")
-                events += [SlotSet("booking_nama", nama), SlotSet("booking_nik", nik), SlotSet("booking_tgl_lahir", tgl_lahir)]
-            else:
-                dispatcher.utter_message(text="⚠️ Data rekam medis Anda belum terdaftar secara instan. Kami bantu kroscek via review data ya.")
-        else:
-            dispatcher.utter_message(text="⚠️ Layanan sinkronisasi data sedang sibuk. Kita lanjutkan konfirmasi jadwal Anda dahulu.")
-
-        return events
-
 
 class ActionBookingReview(Action):
     def name(self) -> Text:
@@ -541,38 +459,27 @@ class ActionBookingReview(Action):
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         nama = tracker.get_slot("booking_nama") or "-"
-        nik = tracker.get_slot("booking_nik") or tracker.get_slot("booking_nik_lama") or "-"
+        nik = tracker.get_slot("booking_nik") or "-"
         tgl_lahir = tracker.get_slot("booking_tgl_lahir") or "-"
+        if isinstance(tgl_lahir, str) and "T" in tgl_lahir:
+            tgl_lahir = tgl_lahir.split("T")[0]
         keluhan = tracker.get_slot("booking_keluhan") or "-"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or "-"
-        tipe = tracker.get_slot("booking_tipe_pasien") or "baru"
 
         tgl_display = format_tgl_indonesia(tgl_kunjungan)
         nik_display = f"****-****-****-{nik[-4:]}" if len(nik) == 16 else nik
 
-        if tipe == "baru":
-            msg = (
-                "📋 *Ringkasan Data Pendaftaran (Pasien Baru)*\n\n"
-                f"👤 Nama        : *{nama}*\n"
-                f"🪪 NIK         : `{nik_display}`\n"
-                f"🎂 Tgl Lahir  : {tgl_lahir}\n"
-                f"🩺 Keluhan    : {keluhan}\n"
-                f"📅 Kunjungan : {tgl_display}\n\n"
-                "Apakah data di atas sudah benar?\n"
-                "Balas *ya* untuk melanjutkan\n"
-                "Balas *ubah* untuk memperbaiki"
-            )
-        else:
-            nama_display = f" ({nama})" if nama != "-" else ""
-            msg = (
-                "📋 *Ringkasan Data Pendaftaran (Pasien Lama)*\n\n"
-                f"🪪 Identitas   : *{nik_display}*{nama_display}\n"
-                f"🩺 Keluhan    : {keluhan}\n"
-                f"📅 Kunjungan : {tgl_display}\n\n"
-                "Apakah data di atas sudah benar?\n"
-                "Balas *ya* untuk melanjutkan\n"
-                "Balas *ubah* untuk memperbaiki"
-            )
+        msg = (
+            "📋 *Ringkasan Data Pendaftaran*\n\n"
+            f"👤 Nama        : *{nama}*\n"
+            f"🪪 NIK         : `{nik_display}`\n"
+            f"🎂 Tgl Lahir  : {tgl_lahir}\n"
+            f"🩺 Keluhan    : {keluhan}\n"
+            f"📅 Kunjungan : {tgl_display}\n\n"
+            "Apakah data di atas sudah benar?\n"
+            "Balas *ya* untuk melanjutkan\n"
+            "Balas *ubah* untuk memperbaiki"
+        )
 
         dispatcher.utter_message(text=msg)
         return [SlotSet("booking_step", "review")]
@@ -582,7 +489,7 @@ class ActionBookingConfirm(Action):
         return "action_booking_confirm"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        nama = tracker.get_slot("booking_nama") or tracker.get_slot("booking_nik_lama") or "Pasien"
+        nama = tracker.get_slot("booking_nama") or "Pasien"
         keluhan = tracker.get_slot("booking_keluhan") or "Pendaftaran via Bot"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or ""
         no_hp = tracker.sender_id
@@ -679,7 +586,7 @@ class ActionBookingConfirm(Action):
             SlotSet("requested_slot", None),
             SlotSet("booking_step", "selesai"),
             SlotSet("booking_id_konfirmasi", booking_id_final),
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None), SlotSet("booking_nik_lama", None),
+            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("jadwalId", None),
@@ -695,7 +602,6 @@ class ActionBookingCancel(Action):
         return [
             SlotSet("booking_tipe_pasien", None),
             SlotSet("booking_nik", None),
-            SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None),
@@ -712,18 +618,18 @@ class ActionSlotResetBooking(Action):
         return "action_slot_reset_booking"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan isi data Anda kembali. 😊")
+        dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan periksa data Anda kembali. 😊")
         return [
-           SlotSet("booking_tipe_pasien", None),
+            SlotSet("booking_tipe_pasien", None),
             SlotSet("booking_nik", None),
-            SlotSet("booking_nik_lama", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None),
             SlotSet("booking_tgl_kunjungan", None),
             SlotSet("jadwalId", None),
-            SlotSet("booking_step", "tanya_tipe"),
-            ActiveLoop(None)
+            SlotSet("booking_step", "tanya_untuk_siapa"),
+            ActiveLoop(None),
+            FollowupAction("action_start_booking")
         ]
     
 class ActionBookingReschedule(Action):
