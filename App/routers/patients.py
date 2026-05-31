@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, HTTPException, Path, Query, Request, Respon
 from pydantic import BaseModel, Field
 
 from App.config import supabase
-from App.helpers import normalize_phone_number
+from App.helpers import get_rme_patient_id_by_phone, normalize_phone_number
 from App.models import PatientPayload
 from App.smartclinic_auth import get_smartclinic_token
 
@@ -205,24 +205,11 @@ async def create_patient(
     },
 )
 async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepon pasien")):
-    if supabase is None:
-        raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
-
     normalized_phone = normalize_phone_number(phone)
-    response = (
-        supabase.table("patients")
-        .select("rme_patient_id")
-        .eq("phone_number", normalized_phone)
-        .limit(1)
-        .execute()
+    rme_patient_id = get_rme_patient_id_by_phone(
+        normalized_phone,
+        not_found_detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan",
     )
-
-    if not response.data:
-        raise HTTPException(status_code=404, detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan")
-
-    rme_patient_id = response.data[0].get("rme_patient_id")
-    if not rme_patient_id:
-        raise HTTPException(status_code=404, detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan")
 
     return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 

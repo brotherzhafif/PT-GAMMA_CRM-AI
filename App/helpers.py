@@ -202,6 +202,29 @@ def is_patient_registered(no_hp: str) -> bool:
     return len(result.data) > 0
 
 
+def get_rme_patient_id_by_phone(no_hp: str, *, not_found_detail: str = "Pasien tidak ditemukan") -> str:
+    """Ambil rme_patient_id dari tabel patients berdasarkan nomor HP."""
+    _require_supabase()
+
+    normalized_phone = normalize_phone_number(no_hp)
+    response = (
+        supabase.table("patients")
+        .select("rme_patient_id")
+        .eq("phone_number", normalized_phone)
+        .limit(1)
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+
+    rme_patient_id = response.data[0].get("rme_patient_id")
+    if not rme_patient_id:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+
+    return rme_patient_id
+
+
 # Chat History (JSON lokal) 
 
 def get_chat_history_json(no_hp: str, limit: int = 5) -> list:

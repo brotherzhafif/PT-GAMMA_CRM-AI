@@ -11,12 +11,13 @@ from typing import Optional
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
-from App.config import SMARTCLINIC_BASE_URL, supabase
-from App.helpers import normalize_phone_number, proxy_smartclinic
+from App.config import SMARTCLINIC_BASE_URL
+from App.helpers import get_rme_patient_id_by_phone, proxy_smartclinic
 
 
 router = APIRouter(prefix="/api/appointment", tags=["Appointments"])
 
+SMARTCLINIC_APPOINTMENTS_PATH = "/queues/appointments"
 SMARTCLINIC_QUEUES_BY_USER_PATH = "/queues/user"
 
 
@@ -89,7 +90,7 @@ async def get_queues(
     },
 )
 async def get_appointments_by_phone(phone_number: str = Query(..., description="Nomor telepon pasien")):
-    rme_patient_id = _lookup_rme_patient_id(phone_number)
+    rme_patient_id = get_rme_patient_id_by_phone(phone_number)
     return await proxy_smartclinic(
         "GET",
         SMARTCLINIC_BASE_URL,
@@ -122,29 +123,6 @@ async def get_appointments_by_phone(phone_number: str = Query(..., description="
 )
 async def cancel_appointment(id: str = Path(..., description="ID janji temu")):
     return await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"/queues/appointments/{id}/cancel")
-
-
-def _lookup_rme_patient_id(phone_number: str) -> str:
-    if supabase is None:
-        raise HTTPException(status_code=500, detail="Supabase belum dikonfigurasi")
-
-    normalized_phone = normalize_phone_number(phone_number)
-    response = (
-        supabase.table("patients")
-        .select("rme_patient_id")
-        .eq("phone_number", normalized_phone)
-        .limit(1)
-        .execute()
-    )
-
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Pasien tidak ditemukan")
-
-    rme_patient_id = response.data[0].get("rme_patient_id")
-    if not rme_patient_id:
-        raise HTTPException(status_code=404, detail="Pasien tidak ditemukan")
-
-    return rme_patient_id
 
 
 @router.post(
@@ -183,7 +161,7 @@ async def create_appointment(
         },
     )
 ):
-    rme_patient_id = _lookup_rme_patient_id(payload.phone_number)
+    rme_patient_id = get_rme_patient_id_by_phone(payload.phone_number)
 
     query_params = [("pasienId", rme_patient_id)]
     body = {
