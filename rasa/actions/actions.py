@@ -115,7 +115,7 @@ def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
                 days_ahead = 7
             return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
 
-    # Mendukung format DD/MM/YYYY atau DD-MM-YYYY
+    # format DD/MM/YYYY atau DD-MM-YYYY
     match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", teks)
     if match:
         day, month, year = match.groups()
@@ -127,7 +127,7 @@ def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
         except ValueError:
             return None
             
-    # Mendukung format ISO YYYY-MM-DD langsung dari entitas/sistem advanced
+    # format ISO YYYY-MM-DD 
     match_iso = re.search(r"(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})", teks)
     if match_iso:
         year, month, day = match_iso.groups()
@@ -193,80 +193,66 @@ class ActionFetchSchedule(Action):
             )
             return []
 
-        schedules = result if isinstance(result, list) else result.get("data", [])
+        # Mapping integer hari ke nama hari (1=Senin ... 7=Minggu)
+        HARI_MAP = {1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat", 6: "Sabtu", 7: "Minggu"}
+        HARI_STR_TO_INT = {v.lower(): k for k, v in HARI_MAP.items()}
+
+        # Parse data response API 
+        schedules = result.get("data", []) if isinstance(result, dict) else result
 
         if not schedules:
             dispatcher.utter_message(text="Saat ini belum ada jadwal dokter yang tersedia di sistem RME. 🙏")
             return []
 
-        # Filter jadwal di memori berdasarkan hari yang diminta user
-        filtered_schedules = []
-        for sched in schedules:
-            hari_sched = str(sched.get("hari_nama") or sched.get("hari") or "").lower()
-            if target_day and target_day not in hari_sched:
-                continue
-            filtered_schedules.append(sched)
+        # Convert target_day (string) ke integer lalu bandingkan dengan field "hari"
+        if target_day:
+            target_day_int = HARI_STR_TO_INT.get(target_day)
+            filtered_schedules = [
+                s for s in schedules
+                if target_day_int is not None and int(s.get("hari", 0)) == target_day_int
+            ]
+        else:
+            filtered_schedules = list(schedules)
 
         if not filtered_schedules and target_day:
             dispatcher.utter_message(text=f"Mohon maaf, tampaknya belum ada jadwal dokter yang tersedia khusus untuk hari *{target_day.title()}*. 🙏")
             return []
 
-        display_schedules = filtered_schedules if target_day else schedules[:6]
-        msg = f"📅 *Jadwal Dokter Klinik SmartClinic {'(' + target_day.title() + ')' if target_day else ''}*\n\n"
-        
-        for i, sched in enumerate(display_schedules, 1):
+        # Sort ascending berdasarkan integer hari (Senin → Minggu)
+        filtered_schedules.sort(key=lambda s: int(s.get("hari", 9)))
+
+        # Batasi 6 entri jika tidak ada filter hari (sebelum grouping)
+        source = filtered_schedules if target_day else filtered_schedules[:10]
+
+        # Grouping dokter + spesialis + hari yang sama → gabungkan jam ke dalam satu entri
+        grouped = {}
+        for sched in source:
             dokter_name = sched.get("dokter_nama") or sched.get("nama_dokter") or sched.get("dokter", {}).get("namaLengkap", "Dokter")
-            spesialis = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "Umum")
-            hari = sched.get("hari_nama") or sched.get("hari") or "Senin - Jumat"
-            jam = sched.get("jam") or f"{sched.get('jamMulai', '08:00')} - {sched.get('jamSelesai', '14:00')}"
-            
-            msg += f"{i}. 🩺 *{dokter_name}* ({spesialis})\n"
-            msg += f"   📆 Hari: {hari}\n"
-            msg += f"   🕐 Jam: {jam}\n\n"
+            spesialis   = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "Umum")
+            hari_int    = int(sched.get("hari", 0))
+            jam         = sched.get("jam") or f"{sched.get('jamMulai', '??')} - {sched.get('jamSelesai', '??')}"
+            key = (hari_int, dokter_name, spesialis)
+            if key not in grouped:
+                grouped[key] = {
+                    "dokter":    dokter_name,
+                    "spesialis": spesialis,
+                    "hari":      HARI_MAP.get(hari_int, str(hari_int)),
+                    "jam":       [jam],
+                }
+            else:
+                if jam not in grouped[key]["jam"]:
+                    grouped[key]["jam"].append(jam)
+
+        msg = f"📅 *Jadwal Dokter Klinik SmartClinic {'(' + target_day.title() + ')' if target_day else ''}*\n\n"
+
+        for i, entry in enumerate(grouped.values(), 1):
+            jam_display = "\n            ".join(entry["jam"])
+            msg += f"{i}. 🩺 *{entry['dokter']}*\n"
+            msg += f"   📆 Hari      : {entry['hari']}\n"
+            msg += f"   🚑 Poliklinik: {entry['spesialis']}\n"
+            msg += f"   🕐 Jam       : {jam_display}\n\n"
 
         msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
-        dispatcher.utter_message(text=msg)
-        return []
-
-
-class ActionFetchQueue(Action):
-    def name(self) -> Text:
-        return "action_fetch_queue"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        tgl_text = next(tracker.get_latest_entity_values("tanggal_kunjungan"), None) or tracker.get_slot("booking_tgl_kunjungan")
-        target_date = parse_tanggal_kunjungan(str(tgl_text)) if tgl_text else datetime.now().strftime("%Y-%m-%d")
-        
-        if not target_date:
-            target_date = datetime.now().strftime("%Y-%m-%d")
-
-        result = api_get("/api/appointment", params={"tanggal": target_date})
-
-        if result is None:
-            dispatcher.utter_message(text="Mohon maaf, saya gagal memuat status antrean saat ini. Silakan coba lagi nanti.")
-            return []
-
-        data_obj = result.get("data", {})
-        
-        if isinstance(data_obj, list):
-            total_antrean = len(data_obj)
-            menunggu = sum(1 for q in data_obj if q.get("status", "MENUNGGU").upper() == "MENUNGGU")
-            hadir = sum(1 for q in data_obj if q.get("status", "").upper() in ("HADIR", "DIPANGGIL", "DIPERIKSA"))
-        else:
-            total_antrean = data_obj.get("total", 0)
-            menunggu = data_obj.get("menunggu", 0)
-            hadir = data_obj.get("hadir", 0)
-
-        tgl_display = format_tgl_indonesia(target_date)
-        msg = f"🔢 *Status Antrian Klinik*\n📅 Waktu: {tgl_display}\n\n📊 Total antrian terdaftar: *{total_antrean}* pasien\n"
-        
-        if total_antrean > 0:
-            msg += f"⏳ MENUNGGU : {menunggu} orang\n"
-            msg += f"📢 TERLAYANI: {hadir} orang\n"
-        else:
-            msg += "📋 Belum ada antrean berjalan untuk tanggal ini."
-
-        msg += "\nApakah ada hal lain yang bisa saya bantu? 😊"
         dispatcher.utter_message(text=msg)
         return []
 
