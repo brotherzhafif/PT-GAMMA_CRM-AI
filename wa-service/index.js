@@ -26,6 +26,7 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 3000
 const CHAT_FILES_DIR = '/app/chat_files'
+const AUTH_DATA_PATH = '/app/.wwebjs_auth'
 const WA_EXECUTABLE_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
 
 if (!fs.existsSync(CHAT_FILES_DIR)) {
@@ -50,28 +51,70 @@ let isReady = false        // true jika WA sudah terkoneksi
 let isInitializing = true  // true selama proses init/scan QR
 
 // WhatsApp Client 
-const client = new Client({
-    authStrategy: new LocalAuth({
-        // Session disimpan di folder /app/.wwebjs_auth di dalam container
-        // Di-mount ke volume Docker agar persistent setelah restart
-        dataPath: '/app/.wwebjs_auth',
-    }),
-    puppeteer: {
-        headless: true,
-        executablePath: WA_EXECUTABLE_PATH,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-        ],
-    },
-})
+let client = null
 
 let bootstrapPromise = null
+
+function createClient() {
+    return new Client({
+        authStrategy: new LocalAuth({
+            // Session disimpan di folder /app/.wwebjs_auth di dalam container
+            // Di-mount ke volume Docker agar persistent setelah restart
+            dataPath: AUTH_DATA_PATH,
+        }),
+        puppeteer: {
+            headless: true,
+            executablePath: WA_EXECUTABLE_PATH,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu',
+            ],
+        },
+    })
+}
+
+async function disposeClient(instance) {
+    if (!instance) return
+
+    try {
+        await instance.destroy()
+    } catch (error) {
+        if (instance.pupBrowser?.close) {
+            try {
+                await instance.pupBrowser.close()
+            } catch (closeError) {
+                // Abaikan error cleanup agar retry tetap berjalan.
+            }
+        }
+    }
+}
+
+function clearStaleBrowserLocks() {
+    const lockDirectories = [
+        path.join(AUTH_DATA_PATH, 'session'),
+        AUTH_DATA_PATH,
+    ]
+
+    for (const directory of lockDirectories) {
+        for (const fileName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+            const filePath = path.join(directory, fileName)
+            if (fs.existsSync(filePath)) {
+                try {
+                    fs.unlinkSync(filePath)
+                } catch (error) {
+                    // Jika file sedang dipakai browser lain, retry akan menangani sendiri.
+                }
+            }
+        }
+    }
+}
+
+client = createClient()
 
 async function bootstrapClient() {
     if (bootstrapPromise) {
@@ -86,6 +129,10 @@ async function bootstrapClient() {
 
             try {
                 isInitializing = true
+                if (!client) {
+                    client = createClient()
+                    attachClientEvents(client)
+                }
                 await client.initialize()
                 return
             } catch (error) {
@@ -93,6 +140,10 @@ async function bootstrapClient() {
                 qrCodeData = null
                 isInitializing = true
                 console.error(`[WA] Gagal inisialisasi client (percobaan ${attempt}):`, error)
+
+                await disposeClient(client)
+                client = null
+                clearStaleBrowserLocks()
 
                 const retryDelayMs = Math.min(30000, 5000 * attempt)
                 await delay(retryDelayMs)
@@ -107,39 +158,43 @@ async function bootstrapClient() {
 
 // Events 
 
-client.on('qr', (qr) => {
-    qrCodeData = qr
-    isReady = false
-    isInitializing = false
-    // Tampilkan QR di terminal juga untuk debugging
-    qrcode.generate(qr, { small: true })
-    console.log('[WA] QR Code generated — scan via GET /qr atau lihat terminal')
-})
+function attachClientEvents(instance) {
+    instance.on('qr', (qr) => {
+        qrCodeData = qr
+        isReady = false
+        isInitializing = false
+        // Tampilkan QR di terminal juga untuk debugging
+        qrcode.generate(qr, { small: true })
+        console.log('[WA] QR Code generated — scan via GET /qr atau lihat terminal')
+    })
 
-client.on('ready', () => {
-    isReady = true
-    isInitializing = false
-    qrCodeData = null
-    console.log('[WA] WhatsApp siap digunakan!')
-})
+    instance.on('ready', () => {
+        isReady = true
+        isInitializing = false
+        qrCodeData = null
+        console.log('[WA] WhatsApp siap digunakan!')
+    })
 
-client.on('authenticated', () => {
-    console.log('[WA] Authenticated — session tersimpan')
-})
+    instance.on('authenticated', () => {
+        console.log('[WA] Authenticated — session tersimpan')
+    })
 
-client.on('auth_failure', (msg) => {
-    isReady = false
-    console.error('[WA] Auth gagal:', msg)
-})
+    instance.on('auth_failure', (msg) => {
+        isReady = false
+        console.error('[WA] Auth gagal:', msg)
+    })
 
-client.on('disconnected', (reason) => {
-    isReady = false
-    isInitializing = true
-    qrCodeData = null
-    console.warn('[WA] Disconnected:', reason)
-    // Auto reconnect
-    void bootstrapClient()
-})
+    instance.on('disconnected', (reason) => {
+        isReady = false
+        isInitializing = true
+        qrCodeData = null
+        console.warn('[WA] Disconnected:', reason)
+        // Auto reconnect
+        void bootstrapClient()
+    })
+}
+
+attachClientEvents(client)
 
 // Mulai inisialisasi client
 void bootstrapClient()
