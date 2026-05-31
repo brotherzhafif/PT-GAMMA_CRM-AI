@@ -12,6 +12,7 @@ class MessageQueueManager:
     def __init__(self):
         self.msg_queue = queue.Queue()
         self.token = os.getenv('FONNTE_TOKEN', '').strip()
+        self.wa_service_url = os.getenv('WA_SERVICE_URL', 'http://wa-service:3000').rstrip('/')
         worker_thread = threading.Thread(target=self._worker, name="FonnteQueueWorker", daemon=True)
         worker_thread.start()
         print(f"[QUEUE] Worker thread '{worker_thread.name}' started. Token loaded: {'yes' if self.token else 'NO - cek .env!'}")
@@ -42,6 +43,41 @@ class MessageQueueManager:
             self.msg_queue.task_done()
 
     def _send_now(self, target, message):
+        if self._is_wa_connected():
+            if self._send_via_wa_service(target, message):
+                return
+            print(f"[QUEUE] wa-service gagal kirim ke {target}, fallback ke Fonnte...")
+
+        self._send_via_fonnte(target, message)
+
+    def _is_wa_connected(self):
+        try:
+            response = requests.get(f"{self.wa_service_url}/status", timeout=4)
+            if response.status_code != 200:
+                return False
+            data = response.json() or {}
+            return bool(data.get("ready"))
+        except Exception as e:
+            print(f"[QUEUE] Gagal cek status wa-service: {e}")
+            return False
+
+    def _send_via_wa_service(self, target, message):
+        try:
+            response = requests.post(
+                f"{self.wa_service_url}/send-message",
+                json={"target": target, "message": message},
+                timeout=20,
+            )
+            if response.status_code >= 400:
+                print(f"[QUEUE] wa-service error {response.status_code}: {response.text}")
+                return False
+            print(f"[QUEUE] Sent to {target} via wa-service. Status: {response.status_code}")
+            return True
+        except Exception as e:
+            print(f"[QUEUE] Error sending via wa-service to {target}: {e}")
+            return False
+
+    def _send_via_fonnte(self, target, message):
         url = "https://api.fonnte.com/send"
         payload = {
             'target': target,

@@ -6,6 +6,7 @@
 // Endpoint:
 //  GET  /status           Cek status koneksi WA
 //  GET  /qr               Ambil QR code untuk login (base64)
+//  POST /send-message     Kirim pesan teks ke nomor WA
 //  POST /send-attachment  Kirim file ke nomor WA
 //
 // Last Change   :   18 May 2026
@@ -159,6 +160,51 @@ app.get('/qr', async (req, res) => {
 
 
 /**
+ * POST /send-message
+ * Kirim pesan teks ke nomor WhatsApp.
+ *
+ * Body:
+ *   target   : string — nomor WA tujuan (628xxx)
+ *   message  : string — isi pesan
+ */
+app.post('/send-message', async (req, res) => {
+    const { target, message } = req.body
+
+    if (!target || !message) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'target dan message wajib diisi',
+        })
+    }
+
+    if (!isReady) {
+        return res.status(503).json({
+            status: 'error',
+            message: 'WhatsApp belum terkoneksi. Scan QR dulu via GET /qr',
+            has_qr: !!qrCodeData,
+        })
+    }
+
+    try {
+        const chatId = formatNumber(target)
+
+        // Delay acak 2-5 detik sebelum kirim (anti-ban)
+        const delayMs = Math.floor(Math.random() * 3000) + 2000
+        console.log(`[WA] Delay ${delayMs}ms sebelum kirim teks ke ${target}...`)
+        await delay(delayMs)
+
+        await client.sendMessage(chatId, message)
+        console.log(`[WA] Pesan teks terkirim ke ${target}`)
+
+        res.json({ status: 'ok', message: `Pesan terkirim ke ${target}` })
+    } catch (err) {
+        console.error(`[WA] Error kirim teks ke ${target}:`, err.message)
+        res.status(500).json({ status: 'error', message: err.message })
+    }
+})
+
+
+/**
  * POST /send-attachment
  * Kirim file ke nomor WhatsApp.
  *
@@ -216,5 +262,5 @@ app.post('/send-attachment', async (req, res) => {
 // Start Server 
 app.listen(PORT, () => {
     console.log(`[WA] Service berjalan di http://0.0.0.0:${PORT}`)
-    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-attachment`)
+    console.log(`[WA] Endpoints: GET /status | GET /qr | POST /send-message | POST /send-attachment`)
 })
