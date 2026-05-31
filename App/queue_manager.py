@@ -7,6 +7,8 @@ import threading
 import queue
 import os
 
+import requests
+
 from App.wa_service_client import wa_service_request
 
 class MessageQueueManager:
@@ -88,10 +90,16 @@ class MessageQueueManager:
         headers = {'Authorization': self.token}
 
         try:
-            response = requests.post(url, data=payload, headers=headers)
+            response = requests.post(url, data=payload, headers=headers, timeout=30)
+            if response.status_code >= 400:
+                print(f"[QUEUE] Fonnte error {response.status_code}: {response.text}")
+                return False
+
             print(f"[QUEUE] Sent to {target}. Status: {response.status_code} | Response: {response.text}")
+            return True
         except Exception as e:
             print(f"[QUEUE] Error sending to {target}: {e}")
+            return False
 
 
 fonnte_queue = MessageQueueManager()

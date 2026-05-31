@@ -12,7 +12,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult, SendInteractiveTargetPayload
-from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number
+from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number, normalize_whatsapp_target
 from App.queue_manager import fonnte_queue
 from App.wa_gateway import send_text_best_effort
 from App.wa_gateway import buat_menu_booking, buat_menu_layanan, buat_poll_feedback
@@ -104,7 +104,8 @@ def send_message(
     )
 ):
     try:
-        target = normalize_phone_number(payload.target)
+        target = normalize_whatsapp_target(payload.target)
+        delivery = None
         if payload.attachment_url:
             # Kirim via whatsapp-web.js (attachment) 
             response = wa_service_request(
@@ -120,13 +121,20 @@ def send_message(
             )
             response.raise_for_status()
             source = "wa-service"
+            delivery = response.json()
         else:
             send_result = send_text_best_effort(target, payload.message)
             source = send_result.get("channel", "manual")
+            delivery = send_result
 
         save_to_supabase(target, payload.message, direction="outbound", source=source)
         print(f"[SEND] {source} → {target}: {payload.message[:60]}...")
-        return {"status": "ok", "message": f"Pesan untuk {target} masuk antrian"}
+        return {
+            "status": "ok",
+            "message": f"Pesan untuk {target} diproses via {source}",
+            "source": source,
+            "delivery": delivery,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -160,7 +168,7 @@ def send_media(
     file: UploadFile = File(..., description="File media yang akan dikirim"),
 ):
     try:
-        normalized_target = normalize_phone_number(target)
+        normalized_target = normalize_whatsapp_target(target)
 
         file.file.seek(0)
         response = wa_service_request(
@@ -214,7 +222,7 @@ def send_interactive_booking(
     ),
 ):
     try:
-        target = normalize_phone_number(payload.target)
+        target = normalize_whatsapp_target(payload.target)
         result = buat_menu_booking(target)
         save_to_supabase(target, "[interactive] booking menu", direction="outbound", source=result.get("channel", "interactive"))
         return {
@@ -247,7 +255,7 @@ def send_interactive_services(
     ),
 ):
     try:
-        target = normalize_phone_number(payload.target)
+        target = normalize_whatsapp_target(payload.target)
         result = buat_menu_layanan(target)
         save_to_supabase(target, "[interactive] layanan menu", direction="outbound", source=result.get("channel", "interactive"))
         return {
@@ -280,7 +288,7 @@ def send_interactive_poll(
     ),
 ):
     try:
-        target = normalize_phone_number(payload.target)
+        target = normalize_whatsapp_target(payload.target)
         result = buat_poll_feedback(target)
         save_to_supabase(target, "[interactive] poll feedback", direction="outbound", source=result.get("channel", "interactive"))
         return {

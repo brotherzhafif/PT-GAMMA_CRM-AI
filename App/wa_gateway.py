@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from App.helpers import normalize_phone_number
+from App.helpers import normalize_phone_number, normalize_whatsapp_target
 from App.wa_service_client import wa_service_request
 
 
@@ -20,7 +20,9 @@ def _wa_service_ready() -> bool:
 
 
 def send_text_best_effort(target: str, message: str) -> dict[str, Any]:
-    normalized_target = normalize_phone_number(target)
+    normalized_target = normalize_whatsapp_target(target)
+
+    is_group_chat = normalized_target.endswith("@g.us")
 
     if _wa_service_ready():
         try:
@@ -38,6 +40,12 @@ def send_text_best_effort(target: str, message: str) -> dict[str, Any]:
             }
         except Exception:
             pass
+
+    if is_group_chat:
+        raise HTTPException(
+            status_code=503,
+            detail="WhatsApp group hanya bisa dikirim lewat wa-service yang sedang ready.",
+        )
 
     from App.queue_manager import fonnte_queue
 
@@ -98,7 +106,7 @@ def build_poll_message(
 
 
 def send_interactive_message(target: str, payload: dict[str, Any]) -> dict[str, Any]:
-    normalized_target = normalize_phone_number(target)
+    normalized_target = normalize_whatsapp_target(target)
 
     if not _wa_service_ready():
         raise HTTPException(

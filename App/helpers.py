@@ -43,6 +43,19 @@ def normalize_phone_number(phone_number: str) -> str:
 
     return digits
 
+
+def normalize_whatsapp_target(target: str) -> str:
+    """Normalize target WA: nomor tetap dinormalisasi, chat ID grup dipertahankan."""
+    value = (target or "").strip()
+
+    if not value:
+        return ""
+
+    if value.endswith("@g.us") or value.endswith("@c.us"):
+        return value
+
+    return normalize_phone_number(value)
+
 def _require_supabase():
     """Guard: raise 500 jika Supabase belum dikonfigurasi."""
     if supabase is None:

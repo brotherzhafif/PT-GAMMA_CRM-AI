@@ -88,14 +88,14 @@ class UpdateCampaignPayload(BaseModel):
 # Send 
 
 class SendMessagePayload(BaseModel):
-    target: str = Field(..., description="Nomor WhatsApp tujuan", examples=["6281234567890"])
+    target: str = Field(..., description="Nomor WhatsApp tujuan atau chat ID grup WhatsApp", examples=["6281234567890", "1203630xxxxxxxx@g.us"])
     message: str = Field(..., description="Isi pesan yang akan dikirim")
     attachment_url: Optional[str] = Field(default=None, description="URL file attachment (PDF, gambar). Jika diisi, dikirim via whatsapp-web.js")
     filename: Optional[str] = Field(default=None, description="Nama file yang tampil di WhatsApp (opsional)")
 
 
 class SendInteractiveTargetPayload(BaseModel):
-    target: str = Field(..., description="Nomor WhatsApp tujuan", examples=["6281234567890"])
+    target: str = Field(..., description="Nomor WhatsApp tujuan atau chat ID grup WhatsApp", examples=["6281234567890", "1203630xxxxxxxx@g.us"])
 
 
 class BroadcastPayload(BaseModel):

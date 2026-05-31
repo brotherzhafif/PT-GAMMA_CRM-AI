@@ -114,6 +114,30 @@ function clearStaleBrowserLocks() {
     }
 }
 
+async function getCurrentWhatsAppStatus() {
+    let connectionState = null
+
+    try {
+        if (client) {
+            connectionState = await client.getState()
+        }
+    } catch (error) {
+        connectionState = null
+    }
+
+    const normalizedState = typeof connectionState === 'string' ? connectionState.toUpperCase() : null
+    const browserConnected = !!client?.pupBrowser?.isConnected?.()
+    const connected = !!isReady && browserConnected && normalizedState === 'CONNECTED'
+    const initializing = !!isInitializing && !connected
+
+    return {
+        status: connected ? 'connected' : initializing ? 'initializing' : 'disconnected',
+        ready: connected,
+        has_qr: !!qrCodeData,
+        connection_state: connectionState,
+    }
+}
+
 client = createClient()
 
 async function bootstrapClient() {
@@ -213,6 +237,20 @@ function formatNumber(number) {
         num = '62' + num.slice(1)
     }
     return `${num}@c.us`
+}
+
+function resolveChatId(target) {
+    const value = (target || '').trim()
+
+    if (!value) {
+        return ''
+    }
+
+    if (value.endsWith('@g.us') || value.endsWith('@c.us')) {
+        return value
+    }
+
+    return formatNumber(value)
 }
 
 /**
@@ -343,11 +381,16 @@ async function sendInteractiveMessage(chatId, payload) {
  * Cek status koneksi WhatsApp.
  */
 app.get('/status', (req, res) => {
-    res.json({
-        status: isReady ? 'connected' : isInitializing ? 'initializing' : 'disconnected',
-        ready: isReady,
-        has_qr: !!qrCodeData,
-    })
+    void getCurrentWhatsAppStatus()
+        .then((payload) => res.json(payload))
+        .catch((error) => {
+            res.status(500).json({
+                status: 'disconnected',
+                ready: false,
+                has_qr: !!qrCodeData,
+                connection_state: null,
+            })
+        })
 })
 
 
@@ -357,7 +400,9 @@ app.get('/status', (req, res) => {
  * Tampilkan di dashboard admin untuk proses scan pertama kali.
  */
 app.get('/qr', async (req, res) => {
-    if (isReady) {
+    const currentStatus = await getCurrentWhatsAppStatus()
+
+    if (currentStatus.ready) {
         return res.json({ status: 'already_connected', qr: null })
     }
     if (!qrCodeData) {
@@ -395,7 +440,7 @@ app.post('/send-media', upload.single('file'), async (req, res) => {
 
     const savedPath = req.file.path
     const mimeType = req.file.mimetype || 'application/octet-stream'
-    const chatId = formatNumber(target)
+    const chatId = resolveChatId(target)
 
     try {
         const media = MessageMedia.fromFilePath(savedPath)
@@ -448,7 +493,7 @@ app.post('/send-message', async (req, res) => {
     }
 
     try {
-        const chatId = formatNumber(target)
+        const chatId = resolveChatId(target)
 
         // Delay acak 2-5 detik sebelum kirim (anti-ban)
         const delayMs = Math.floor(Math.random() * 3000) + 2000
@@ -495,7 +540,7 @@ app.post('/send-attachment', async (req, res) => {
     }
 
     try {
-        const chatId = formatNumber(target)
+        const chatId = resolveChatId(target)
 
         // Download file dari URL dan konversi ke format WA
         console.log(`[WA] Download attachment dari: ${attachment_url}`)
@@ -542,7 +587,7 @@ app.post('/send-interactive', async (req, res) => {
     }
 
     try {
-        const chatId = formatNumber(target)
+        const chatId = resolveChatId(target)
 
         const delayMs = Math.floor(Math.random() * 3000) + 2000
         console.log(`[WA] Delay ${delayMs}ms sebelum kirim interactive ke ${target}...`)
