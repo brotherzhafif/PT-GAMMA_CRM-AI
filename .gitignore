@@ -7,6 +7,7 @@ __pycache__/
 
 chat_history
 chat_state
+chat_files
 handoff_state
 
 # -------------------------
