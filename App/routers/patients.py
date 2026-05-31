@@ -214,26 +214,26 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
     return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
-@router.get(
-    "/rm/{noRm}",
-    summary="Ambil data pasien berdasarkan nomor RM",
-    responses={
-        200: {
-            "description": "Pasien berhasil diambil",
-            "content": {"application/json": {"example": PATIENT_EXAMPLE}},
-        },
-        404: {
-            "description": "Pasien tidak ditemukan",
-            "content": {"application/json": {"example": PATIENT_ERROR_EXAMPLE}},
-        },
-        500: {
-            "description": "Gagal mengambil pasien",
-            "content": {"application/json": {"example": {"detail": "..."}}},
-        },
-    },
-)
-async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")):
-    return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
+# @router.get(
+#     "/rm/{noRm}",
+#     summary="Ambil data pasien berdasarkan nomor RM",
+#     responses={
+#         200: {
+#             "description": "Pasien berhasil diambil",
+#             "content": {"application/json": {"example": PATIENT_EXAMPLE}},
+#         },
+#         404: {
+#             "description": "Pasien tidak ditemukan",
+#             "content": {"application/json": {"example": PATIENT_ERROR_EXAMPLE}},
+#         },
+#         500: {
+#             "description": "Gagal mengambil pasien",
+#             "content": {"application/json": {"example": {"detail": "..."}}},
+#         },
+#     },
+# )
+# async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")):
+#     return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
 
 
 @router.get(
