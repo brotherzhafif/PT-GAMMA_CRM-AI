@@ -1,6 +1,6 @@
 # ======================================================
 # SmartClinic CRM AI — routers/appointments.py
-# Endpoint: /api/appointments
+# Endpoint: /api/appointment
 #
 # Last Change   :   31 May 2026
 # Developer     :   Raja Zhafif Raditya Harahap
@@ -17,7 +17,7 @@ from App.helpers import normalize_phone_number, proxy_smartclinic
 
 router = APIRouter(prefix="/api/appointment", tags=["Appointments"])
 
-SMARTCLINIC_APPOINTMENTS_PATH = "/queues/appointments"
+SMARTCLINIC_QUEUES_BY_USER_PATH = "/queues/user"
 
 
 class CreateAppointmentPayload(BaseModel):
@@ -63,18 +63,27 @@ async def get_queues(
 
 @router.get(
     "/appointments/by-phone",
-    summary="Ambil janji temu berdasarkan nomor telepon",
+    summary="Ambil antrean berdasarkan nomor telepon",
+    description="Menerima nomor telepon pasien, mencari rme_patient_id di Supabase, lalu memanggil endpoint RME /api/v1/queues/user/{userId}.",
     responses={
         200: {
-            "description": "Daftar janji temu berhasil diambil",
-            "content": {"application/json": {"example": {"data": []}}},
+            "description": "Daftar antrean berhasil diambil",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": [],
+                        "timestamp": "2026-05-31T14:53:56.476Z",
+                    }
+                }
+            },
         },
         404: {
             "description": "Pasien tidak ditemukan",
             "content": {"application/json": {"example": {"detail": "Pasien tidak ditemukan"}}},
         },
         500: {
-            "description": "Gagal mengambil janji temu",
+            "description": "Gagal mengambil antrean",
             "content": {"application/json": {"example": {"detail": "..."}}},
         },
     },
@@ -84,7 +93,7 @@ async def get_appointments_by_phone(phone_number: str = Query(..., description="
     return await proxy_smartclinic(
         "GET",
         SMARTCLINIC_BASE_URL,
-        f"{SMARTCLINIC_APPOINTMENTS_PATH}/{rme_patient_id}",
+        f"{SMARTCLINIC_QUEUES_BY_USER_PATH}/{rme_patient_id}",
     )
 
 
@@ -112,7 +121,7 @@ async def get_appointments_by_phone(phone_number: str = Query(..., description="
     },
 )
 async def cancel_appointment(id: str = Path(..., description="ID janji temu")):
-    return await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_APPOINTMENTS_PATH}/{id}/cancel")
+    return await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"/queues/appointments/{id}/cancel")
 
 
 def _lookup_rme_patient_id(phone_number: str) -> str:
