@@ -523,7 +523,7 @@ class ActionBookingConfirm(Action):
             "phone_number": no_hp,
             "jadwalId": jadwal_id,
             "tanggalKunjungan": tgl_kunjungan,
-            "catatan": f"Nama: {nama}. Keluhan: {keluhan}",
+            "catatan": keluhan,
             "jenisKunjunganBpjs": "NORMAL",
             "noRujukanFktp": ""
         }
