@@ -22,6 +22,7 @@ from App.helpers import (
     is_patient_registered,
     upsert_patient,
     normalize_phone_number,
+    normalize_whatsapp_target,
     query_rasa,
     is_handoff_keyword,
     increment_fallback,
@@ -58,11 +59,21 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 # ======================================================
 
 def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
-    """Kirim reply ke queue Fonnte, simpan ke JSON dan Supabase, lalu return ChatResponse."""
-    send_result = send_text_best_effort(no_hp, reply)
+    """Kirim reply via wa-service (pattern dari /send), simpan ke JSON dan Supabase."""
+    # Pattern dari /api/send endpoint - normalize target dulu
+    target = normalize_whatsapp_target(no_hp)
+    
+    # Kirim via wa_gateway (sudah handle queue otomatis)
+    send_result = send_text_best_effort(target, reply)
+    
+    # Simpan ke storage
     save_chat_to_json(no_hp, input_pesan, reply, source=source)
-    save_to_supabase(no_hp, reply, direction="outbound", source=send_result.get("channel", source))
-    return ChatResponse(status="ok", source=source, reply=reply)
+    
+    # Gunakan channel dari send_result sebagai source
+    actual_source = send_result.get("channel", source)
+    save_to_supabase(no_hp, reply, direction="outbound", source=actual_source)
+    
+    return ChatResponse(status="ok", source=actual_source, reply=reply)
 
 
 # ======================================================
@@ -96,7 +107,7 @@ def home():
     "/webhook",
     response_model=ChatResponse,
     tags=["System"],
-    summary="Terima pesan WhatsApp masuk dari Fonnte",
+    summary="Terima pesan WhatsApp masuk dari wa-service",
     description=(
         "Entry point utama. Pesan diklasifikasikan oleh Rasa; "
         "jika confidence rendah atau intent tidak dikenal, Groq LLM mengambil alih."
@@ -138,7 +149,7 @@ def webhook(
         waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         print(f"\n[{waktu}] [INCOMING] Dari: {no_hp} | Pesan: {input_pesan}")
-        save_to_supabase(no_hp, input_pesan, direction="inbound", source="fonnte")
+        save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service")
 
         # ── Step 0: Cek mode handoff 
         # Bot diam selama handoff aktif — admin yang balas dari dashboard.
@@ -380,13 +391,9 @@ def webhook(
                 )
                 print(f"[Handoff] {no_hp} auto-handoff setelah {fallback_count}x fallback")
 
-        # Kirim pesan ke antrean Fonnte dan simpan ke DB
-        fonnte_queue.add_to_queue(no_hp, reply)
-        save_chat_to_json(no_hp, input_pesan, reply, source=source)
-        save_to_supabase(no_hp, reply, direction="outbound", source=source)
-
+        # Kirim pesan via wa-service dan simpan ke DB (gunakan helper)
         print(f"[{waktu}] Selesai proses dari {no_hp} (source: {source})")
-        return ChatResponse(status="ok", source=source, reply=reply)
+        return _send_reply(no_hp, input_pesan, reply, source=source)
 
     except HTTPException:
         raise

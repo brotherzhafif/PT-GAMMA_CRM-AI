@@ -68,3 +68,6 @@ step_by_step_run_guide.md.resolved
 .rasa/
 .keras/
 .config/
+.bob
+AGENTS.md
+qr_new.html

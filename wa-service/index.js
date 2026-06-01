@@ -50,6 +50,10 @@ let qrCodeData = null      // QR code string untuk ditampilkan
 let isReady = false        // true jika WA sudah terkoneksi
 let isInitializing = true  // true selama proses init/scan QR
 
+// Map: numericId → full chatId (@c.us atau @lid)
+// Diisi saat pesan masuk dari kontak @lid agar balasan pakai format yang benar
+const lidChatMap = new Map()
+
 // WhatsApp Client 
 let client = null
 
@@ -95,23 +99,35 @@ async function disposeClient(instance) {
 }
 
 function clearStaleBrowserLocks() {
-    const lockDirectories = [
-        path.join(AUTH_DATA_PATH, 'session'),
-        AUTH_DATA_PATH,
-    ]
+    const lockFileNames = ['SingletonLock', 'SingletonCookie', 'SingletonSocket']
 
-    for (const directory of lockDirectories) {
-        for (const fileName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    // Cari lock files secara rekursif di semua subdirektori auth path
+    function clearInDir(directory) {
+        if (!fs.existsSync(directory)) return
+        for (const fileName of lockFileNames) {
             const filePath = path.join(directory, fileName)
             if (fs.existsSync(filePath)) {
                 try {
                     fs.unlinkSync(filePath)
+                    console.log(`[WA] Dihapus lock file: ${filePath}`)
                 } catch (error) {
-                    // Jika file sedang dipakai browser lain, retry akan menangani sendiri.
+                    // Abaikan — retry akan menangani sendiri.
                 }
             }
         }
+        // Rekursi ke subdirektori
+        try {
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+                if (entry.isDirectory()) {
+                    clearInDir(path.join(directory, entry.name))
+                }
+            }
+        } catch (error) {
+            // Abaikan error baca direktori.
+        }
     }
+
+    clearInDir(AUTH_DATA_PATH)
 }
 
 async function getCurrentWhatsAppStatus() {
@@ -153,6 +169,10 @@ async function bootstrapClient() {
 
             try {
                 isInitializing = true
+                // Bersihkan lock file SEBELUM setiap percobaan inisialisasi
+                // agar sisa lock dari container sebelumnya tidak menghalangi
+                clearStaleBrowserLocks()
+
                 if (!client) {
                     client = createClient()
                     attachClientEvents(client)
@@ -216,6 +236,101 @@ function attachClientEvents(instance) {
         // Auto reconnect
         void bootstrapClient()
     })
+
+    // ── INCOMING MESSAGE HANDLER ──
+    // Forward semua pesan masuk ke FastAPI webhook
+    instance.on('message', async (msg) => {
+        try {
+            // Skip pesan dari bot sendiri
+            if (msg.fromMe) {
+                return
+            }
+
+            const isGroup = msg.from.endsWith('@g.us')
+            if (isGroup) {
+                console.log(`[WA] Skip pesan grup: ${msg.from}`)
+                return
+            }
+
+            const isLid = msg.from.endsWith('@lid')
+            const message = msg.body || ''
+
+            // Numeric sender ID (tanpa suffix) — bisa di-overwrite jika LID berhasil di-resolve
+            let numericSender = msg.from
+                .replace('@c.us', '')
+                .replace('@g.us', '')
+                .replace('@lid', '')
+
+            if (isLid) {
+                try {
+                    let resolvedPhone = null
+
+                    // Approach 1: contact.id._serialized dalam format @c.us (paling akurat)
+                    const contact = await msg.getContact()
+                    if (contact?.id?._serialized?.endsWith('@c.us')) {
+                        resolvedPhone = contact.id.user
+                        console.log(`[WA] LID resolved via contact.id: ${msg.from} → ${resolvedPhone}@c.us`)
+                    }
+
+                    // Approach 2: contact.number — cek panjangnya, LID biasanya >15 digit
+                    if (!resolvedPhone && contact?.number) {
+                        const num = String(contact.number).replace(/\D/g, '')
+                        if (num.length >= 8 && num.length <= 15) {
+                            resolvedPhone = num
+                            console.log(`[WA] LID resolved via contact.number: ${msg.from} → ${resolvedPhone}`)
+                        }
+                    }
+
+                    // Approach 3: chat.id dalam format @c.us
+                    if (!resolvedPhone) {
+                        const chat = await msg.getChat()
+                        if (chat?.id?._serialized?.endsWith('@c.us')) {
+                            resolvedPhone = chat.id.user
+                            console.log(`[WA] LID resolved via chat.id: ${msg.from} → ${resolvedPhone}@c.us`)
+                        }
+                    }
+
+                    if (resolvedPhone) {
+                        // Normalisasi ke format Indonesia: 628xxx
+                        let phone = String(resolvedPhone).replace(/\D/g, '')
+                        if (phone.startsWith('0')) phone = '62' + phone.slice(1)
+                        else if (!phone.startsWith('62')) phone = '62' + phone
+
+                        // Simpan mapping: nomor telepon → @lid chatId (untuk kirim balik)
+                        lidChatMap.set(phone, msg.from)
+                        lidChatMap.set(numericSender, msg.from) // backup: LID numeric → @lid
+                        numericSender = phone
+                        console.log(`[WA] LID sender → nomor Indonesia: ${phone}`)
+                    } else {
+                        // Tidak bisa resolve — simpan LID mapping sebagai fallback
+                        lidChatMap.set(numericSender, msg.from)
+                        console.warn(`[WA] LID tidak bisa di-resolve ke nomor telepon: ${msg.from} — pakai LID ID`)
+                    }
+                } catch (lidErr) {
+                    lidChatMap.set(numericSender, msg.from)
+                    console.warn(`[WA] Error resolve LID ${msg.from}: ${lidErr.message}`)
+                }
+            }
+
+            console.log(`[WA] Pesan masuk dari ${numericSender} ${isLid ? '(via LID)' : ''}: ${message.substring(0, 50)}...`)
+
+            // Forward ke FastAPI webhook
+            await axios.post('http://app:5000/webhook', {
+                sender: numericSender,
+                message: message,
+            }, {
+                timeout: 30000, // 30 detik timeout
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+
+            console.log(`[WA] Pesan dari ${numericSender} berhasil diteruskan ke webhook`)
+        } catch (error) {
+            console.error('[WA] Error forwarding message to webhook:', error.message)
+            // Jangan throw error agar bot tetap jalan meski webhook gagal
+        }
+    })
 }
 
 attachClientEvents(client)
@@ -233,6 +348,13 @@ console.log('[WA] Initializing WhatsApp client...')
  */
 function formatNumber(number) {
     let num = number.replace(/\D/g, '') // hapus non-digit
+
+    // Deteksi LID (Linked ID): biasanya 14+ digit dan BUKAN berawalan 62, 0, atau 8.
+    // Jika formatnya cocok dengan LID, kita kembalikan dengan @lid agar whatsapp-web.js bisa kirim.
+    if (num.length >= 14 && !num.startsWith('62') && !num.startsWith('0') && !num.startsWith('8')) {
+        return `${num}@lid`
+    }
+
     if (num.startsWith('0')) {
         num = '62' + num.slice(1)
     }
@@ -246,8 +368,16 @@ function resolveChatId(target) {
         return ''
     }
 
-    if (value.endsWith('@g.us') || value.endsWith('@c.us')) {
+    if (value.endsWith('@g.us') || value.endsWith('@c.us') || value.endsWith('@lid')) {
         return value
+    }
+
+    // Cek dulu apakah nomor ini adalah kontak LID — jika iya, pakai @lid chatId
+    const numericOnly = value.replace(/\D/g, '')
+    if (lidChatMap.has(numericOnly)) {
+        const mappedId = lidChatMap.get(numericOnly)
+        console.log(`[WA] resolveChatId: LID map hit ${numericOnly} → ${mappedId}`)
+        return mappedId
     }
 
     return formatNumber(value)
