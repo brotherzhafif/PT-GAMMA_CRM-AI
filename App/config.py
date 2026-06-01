@@ -24,10 +24,11 @@ supabase: Optional[Client] = (
     create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
 )
 
-#  Fonnte 
-FONNTE_TOKEN = os.getenv("FONNTE_TOKEN")
+#  WhatsApp Web Service
+WA_SERVICE_URL = os.getenv("WA_SERVICE_URL", "http://wa-service:3000")
+FASTAPI_WEBHOOK_URL = os.getenv("FASTAPI_WEBHOOK_URL", "http://app:5000/webhook")
 
-#  SmartClinic RME API 
+#  SmartClinic RME API
 SMARTCLINIC_BASE_URL = os.getenv(
     "SMARTCLINIC_BASE_URL",
     "https://smartclinic-rekam-medis.onrender.com/api/v1",

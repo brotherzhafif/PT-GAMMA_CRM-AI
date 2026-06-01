@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/send.py
 # Endpoint: /api/send
 #
-# Last Change   :   16 May 2026
+# Last Change   :   01 June 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -13,7 +13,6 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult, SendInteractiveTargetPayload
 from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number, normalize_whatsapp_target
-from App.queue_manager import fonnte_queue
 from App.wa_gateway import send_text_best_effort
 from App.wa_gateway import buat_menu_booking, buat_menu_layanan, buat_poll_feedback
 from App.wa_service_client import wa_service_request
@@ -66,7 +65,7 @@ SEND_BROADCAST_UPLOAD_EXAMPLE = {
     "",
     summary="Kirim pesan ke satu nomor",
     description=(
-        "Kirim pesan teks ke satu nomor via Fonnte, atau kirim attachment via wa-service "
+        "Kirim pesan teks ke satu nomor via wa-service, atau kirim attachment via wa-service "
         "jika attachment_url diisi. Pesan tetap dicatat ke Supabase sebagai outbound."
     ),
     responses={

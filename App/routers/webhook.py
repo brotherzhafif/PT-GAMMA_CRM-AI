@@ -58,7 +58,7 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 # ======================================================
 
 def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
-    """Kirim reply ke queue Fonnte, simpan ke JSON dan Supabase, lalu return ChatResponse."""
+    """Kirim reply via wa-service, simpan ke JSON dan Supabase, lalu return ChatResponse."""
     send_result = send_text_best_effort(no_hp, reply)
     save_chat_to_json(no_hp, input_pesan, reply, source=source)
     save_to_supabase(no_hp, reply, direction="outbound", source=send_result.get("channel", source))
@@ -96,7 +96,7 @@ def home():
     "/webhook",
     response_model=ChatResponse,
     tags=["System"],
-    summary="Terima pesan WhatsApp masuk dari Fonnte",
+    summary="Terima pesan WhatsApp masuk dari wa-service",
     description=(
         "Entry point utama. Pesan diklasifikasikan oleh Rasa; "
         "jika confidence rendah atau intent tidak dikenal, Groq LLM mengambil alih."
@@ -380,10 +380,10 @@ def webhook(
                 )
                 print(f"[Handoff] {no_hp} auto-handoff setelah {fallback_count}x fallback")
 
-        # Kirim pesan ke antrean Fonnte dan simpan ke DB
-        fonnte_queue.add_to_queue(no_hp, reply)
+        # Kirim pesan via wa-service dan simpan ke DB
+        send_result = send_text_best_effort(no_hp, reply)
         save_chat_to_json(no_hp, input_pesan, reply, source=source)
-        save_to_supabase(no_hp, reply, direction="outbound", source=source)
+        save_to_supabase(no_hp, reply, direction="outbound", source=send_result.get("channel", source))
 
         print(f"[{waktu}] Selesai proses dari {no_hp} (source: {source})")
         return ChatResponse(status="ok", source=source, reply=reply)

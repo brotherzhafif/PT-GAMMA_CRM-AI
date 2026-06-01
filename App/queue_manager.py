@@ -1,28 +1,24 @@
-# File ini beriskan logic untuk meminimalisir kemungkinan nomor whatsapp diblokir karena terlalu cepat mengirim pesan.
+# File ini berisikan logic untuk meminimalisir kemungkinan nomor whatsapp diblokir karena terlalu cepat mengirim pesan.
 # Queue Manager akan mengatur antrian pengiriman pesan ke nomor whatsapp, dengan interval tertentu untuk setiap nomor HP. 
 
 import time
 import random
 import threading
 import queue
-import os
-
-import requests
 
 from App.wa_service_client import wa_service_request
 
 class MessageQueueManager:
     def __init__(self):
         self.msg_queue = queue.Queue()
-        self.token = os.getenv('FONNTE_TOKEN', '').strip()
-        worker_thread = threading.Thread(target=self._worker, name="FonnteQueueWorker", daemon=True)
+        worker_thread = threading.Thread(target=self._worker, name="WAServiceQueueWorker", daemon=True)
         worker_thread.start()
-        print(f"[QUEUE] Worker thread '{worker_thread.name}' started. Token loaded: {'yes' if self.token else 'NO - cek .env!'}")
+        print(f"[QUEUE] Worker thread '{worker_thread.name}' started for wa-service")
 
     def add_to_queue(self, target, message):
         """Masukkan pesan ke antrean"""
         self.msg_queue.put({"target": target, "message": message})
-        print(f"[QUEUE] Pesan dari {target} masuk antrean. Queue size: {self.msg_queue.qsize()}")
+        print(f"[QUEUE] Pesan untuk {target} masuk antrean. Queue size: {self.msg_queue.qsize()}")
 
     def _worker(self):
         """Worker yang berjalan terus menerus memproses antrean"""
@@ -39,20 +35,32 @@ class MessageQueueManager:
             print(f"[QUEUE] Menunggu {delay:.2f} detik sebelum kirim ke {target}...")
             time.sleep(delay)
 
-            # 2. Kirim Pesan
+            # Kirim Pesan via wa-service
             self._send_now(target, message)
             
             self.msg_queue.task_done()
 
     def _send_now(self, target, message):
-        if self._is_wa_connected():
-            if self._send_via_wa_service(target, message):
-                return
-            print(f"[QUEUE] wa-service gagal kirim ke {target}, fallback ke Fonnte...")
-
-        self._send_via_fonnte(target, message)
+        """Kirim pesan via wa-service dengan retry logic"""
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(1, max_retries + 1):
+            if self._is_wa_connected():
+                if self._send_via_wa_service(target, message):
+                    return
+                print(f"[QUEUE] wa-service gagal kirim ke {target} (percobaan {attempt}/{max_retries})")
+            else:
+                print(f"[QUEUE] wa-service tidak ready (percobaan {attempt}/{max_retries})")
+            
+            if attempt < max_retries:
+                print(f"[QUEUE] Retry dalam {retry_delay} detik...")
+                time.sleep(retry_delay)
+        
+        print(f"[QUEUE] GAGAL kirim ke {target} setelah {max_retries} percobaan. Pesan: {message[:50]}...")
 
     def _is_wa_connected(self):
+        """Cek apakah wa-service ready"""
         try:
             response = wa_service_request("GET", "/status", timeout=4)
             if response.status_code != 200:
@@ -64,6 +72,7 @@ class MessageQueueManager:
             return False
 
     def _send_via_wa_service(self, target, message):
+        """Kirim pesan via wa-service"""
         try:
             response = wa_service_request(
                 "POST",
@@ -74,32 +83,14 @@ class MessageQueueManager:
             if response.status_code >= 400:
                 print(f"[QUEUE] wa-service error {response.status_code}: {response.text}")
                 return False
-            print(f"[QUEUE] Sent to {target} via wa-service. Status: {response.status_code}")
+            print(f"[QUEUE] ✓ Sent to {target} via wa-service. Status: {response.status_code}")
             return True
         except Exception as e:
             print(f"[QUEUE] Error sending via wa-service to {target}: {e}")
             return False
 
-    def _send_via_fonnte(self, target, message):
-        url = "https://api.fonnte.com/send"
-        payload = {
-            'target': target,
-            'message': message,
-            'countryCode': '62'
-        }
-        headers = {'Authorization': self.token}
 
-        try:
-            response = requests.post(url, data=payload, headers=headers, timeout=30)
-            if response.status_code >= 400:
-                print(f"[QUEUE] Fonnte error {response.status_code}: {response.text}")
-                return False
+# Global instance
+wa_queue = MessageQueueManager()
 
-            print(f"[QUEUE] Sent to {target}. Status: {response.status_code} | Response: {response.text}")
-            return True
-        except Exception as e:
-            print(f"[QUEUE] Error sending to {target}: {e}")
-            return False
-
-
-fonnte_queue = MessageQueueManager()
+# Made with Bob

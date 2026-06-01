@@ -20,9 +20,11 @@ def _wa_service_ready() -> bool:
 
 
 def send_text_best_effort(target: str, message: str) -> dict[str, Any]:
+    """
+    Kirim pesan teks via wa-service.
+    Jika wa-service tidak ready, masukkan ke queue untuk retry otomatis.
+    """
     normalized_target = normalize_whatsapp_target(target)
-
-    is_group_chat = normalized_target.endswith("@g.us")
 
     if _wa_service_ready():
         try:
@@ -38,20 +40,15 @@ def send_text_best_effort(target: str, message: str) -> dict[str, Any]:
                 "target": normalized_target,
                 "response": response.json(),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WA_GATEWAY] wa-service error: {e}, adding to queue...")
 
-    if is_group_chat:
-        raise HTTPException(
-            status_code=503,
-            detail="WhatsApp group hanya bisa dikirim lewat wa-service yang sedang ready.",
-        )
-
-    from App.queue_manager import fonnte_queue
-
-    fonnte_queue.add_to_queue(normalized_target, message)
+    # Fallback ke queue jika wa-service tidak ready atau error
+    from App.queue_manager import wa_queue
+    
+    wa_queue.add_to_queue(normalized_target, message)
     return {
-        "channel": "fonnte",
+        "channel": "wa-service-queue",
         "target": normalized_target,
         "queued": True,
     }

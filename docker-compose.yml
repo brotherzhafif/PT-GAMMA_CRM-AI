@@ -62,6 +62,7 @@ services:
     environment:
       - TZ=Asia/Jakarta
       - PORT=3000
+      - FASTAPI_WEBHOOK_URL=http://app:5000/webhook
     ports:
       # Hanya expose ke localhost — tidak perlu akses dari luar
       - "127.0.0.1:3001:3000"

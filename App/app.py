@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     try:
         seed_bootstrap_users() 
         print("[Lifespan] Bootstrap user seeder finished successfully.")
-    except Exception as e:
+    except BaseException as e:
         print(f"[Lifespan] Bootstrap user seeder failed: {e}")
         # Jika Anda ingin aplikasi tetap jalan walau seeder gagal, biarkan saja.
         # Jika ingin aplikasi crash sengaja saat gagal, biarkan error-nya raise.

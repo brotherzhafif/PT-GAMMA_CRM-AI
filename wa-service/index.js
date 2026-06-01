@@ -50,6 +50,10 @@ let qrCodeData = null      // QR code string untuk ditampilkan
 let isReady = false        // true jika WA sudah terkoneksi
 let isInitializing = true  // true selama proses init/scan QR
 
+// Map: numericId → full chatId (@c.us atau @lid)
+// Diisi saat pesan masuk dari kontak @lid agar balasan pakai format yang benar
+const lidChatMap = new Map()
+
 // WhatsApp Client 
 let client = null
 
@@ -103,12 +107,11 @@ function clearStaleBrowserLocks() {
     for (const directory of lockDirectories) {
         for (const fileName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
             const filePath = path.join(directory, fileName)
-            if (fs.existsSync(filePath)) {
-                try {
-                    fs.unlinkSync(filePath)
-                } catch (error) {
-                    // Jika file sedang dipakai browser lain, retry akan menangani sendiri.
-                }
+            try {
+                fs.unlinkSync(filePath)
+                console.log(`[WA] Mengurangi lock usang: ${filePath}`)
+            } catch (error) {
+                // Abaikan jika file tidak ada atau gagal didelete
             }
         }
     }
@@ -180,7 +183,7 @@ async function bootstrapClient() {
     return bootstrapPromise
 }
 
-// Events 
+// Events
 
 function attachClientEvents(instance) {
     instance.on('qr', (qr) => {
@@ -216,6 +219,101 @@ function attachClientEvents(instance) {
         // Auto reconnect
         void bootstrapClient()
     })
+
+    // ── INCOMING MESSAGE HANDLER ──
+    // Forward semua pesan masuk ke FastAPI webhook
+    instance.on('message', async (msg) => {
+        try {
+            // Skip pesan dari diri sendiri
+            if (msg.fromMe) {
+                return
+            }
+
+            const isGroup = msg.from.endsWith('@g.us')
+            const isLid = msg.from.endsWith('@lid')
+            const message = msg.body || ''
+
+            // Numeric sender ID (tanpa suffix) — bisa di-overwrite jika LID berhasil di-resolve
+            let numericSender = msg.from
+                .replace('@c.us', '')
+                .replace('@g.us', '')
+                .replace('@lid', '')
+
+            if (isLid) {
+                try {
+                    let resolvedPhone = null
+
+                    // Approach 1: contact.id._serialized dalam format @c.us (paling akurat)
+                    const contact = await msg.getContact()
+                    if (contact?.id?._serialized?.endsWith('@c.us')) {
+                        resolvedPhone = contact.id.user
+                        console.log(`[WA] LID resolved via contact.id: ${msg.from} → ${resolvedPhone}@c.us`)
+                    }
+
+                    // Approach 2: contact.number — cek panjangnya, LID biasanya >15 digit
+                    if (!resolvedPhone && contact?.number) {
+                        const num = String(contact.number).replace(/\D/g, '')
+                        if (num.length >= 8 && num.length <= 15) {
+                            resolvedPhone = num
+                            console.log(`[WA] LID resolved via contact.number: ${msg.from} → ${resolvedPhone}`)
+                        }
+                    }
+
+                    // Approach 3: chat.id dalam format @c.us
+                    if (!resolvedPhone) {
+                        const chat = await msg.getChat()
+                        if (chat?.id?._serialized?.endsWith('@c.us')) {
+                            resolvedPhone = chat.id.user
+                            console.log(`[WA] LID resolved via chat.id: ${msg.from} → ${resolvedPhone}@c.us`)
+                        }
+                    }
+
+                    if (resolvedPhone) {
+                        // Normalisasi ke format Indonesia: 628xxx
+                        let phone = String(resolvedPhone).replace(/\D/g, '')
+                        if (phone.startsWith('0')) phone = '62' + phone.slice(1)
+                        else if (!phone.startsWith('62')) phone = '62' + phone
+
+                        // Simpan mapping: nomor telepon → @lid chatId (untuk kirim balik)
+                        lidChatMap.set(phone, msg.from)
+                        lidChatMap.set(numericSender, msg.from) // backup: LID numeric → @lid
+                        numericSender = phone
+                        console.log(`[WA] LID sender → nomor Indonesia: ${phone}`)
+                    } else {
+                        // Tidak bisa resolve — simpan LID mapping sebagai fallback
+                        lidChatMap.set(numericSender, msg.from)
+                        console.warn(`[WA] LID tidak bisa di-resolve ke nomor telepon: ${msg.from} — pakai LID ID`)
+                    }
+                } catch (lidErr) {
+                    lidChatMap.set(numericSender, msg.from)
+                    console.warn(`[WA] Error resolve LID ${msg.from}: ${lidErr.message}`)
+                }
+            }
+
+            console.log(`[WA] Pesan masuk dari ${numericSender} ${isGroup ? '(group)' : ''}: ${message.substring(0, 50)}...`)
+
+            // Forward ke FastAPI webhook
+            const FASTAPI_WEBHOOK_URL = process.env.FASTAPI_WEBHOOK_URL || 'http://app:5000/webhook'
+            
+            const response = await axios.post(
+                FASTAPI_WEBHOOK_URL,
+                {
+                    sender: numericSender,
+                    message: message,
+                    is_group: isGroup,
+                    timestamp: new Date().toISOString(),
+                },
+                {
+                    timeout: 30000,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            )
+
+            console.log(`[WA] Forwarded to FastAPI: ${response.status} ${response.statusText}`)
+        } catch (error) {
+            console.error('[WA] Error handling incoming message:', error.message)
+        }
+    })
 }
 
 attachClientEvents(client)
@@ -246,8 +344,16 @@ function resolveChatId(target) {
         return ''
     }
 
-    if (value.endsWith('@g.us') || value.endsWith('@c.us')) {
+    if (value.endsWith('@g.us') || value.endsWith('@c.us') || value.endsWith('@lid')) {
         return value
+    }
+
+    // Cek dulu apakah nomor ini adalah kontak LID — jika iya, pakai @lid chatId
+    const numericOnly = value.replace(/\D/g, '')
+    if (lidChatMap.has(numericOnly)) {
+        const mappedId = lidChatMap.get(numericOnly)
+        console.log(`[WA] resolveChatId: LID map hit ${numericOnly} → ${mappedId}`)
+        return mappedId
     }
 
     return formatNumber(value)
@@ -375,6 +481,20 @@ async function sendInteractiveMessage(chatId, payload) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ENDPOINTS
 // ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /health
+ * Health check endpoint untuk monitoring.
+ */
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'wa-service',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+    })
+})
+
 
 /**
  * GET /status

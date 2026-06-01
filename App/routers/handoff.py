@@ -18,7 +18,7 @@ from App.handoff_manager import (
     update_admin_reply_time,
     get_all_handoff_sessions,
 )
-from App.queue_manager import fonnte_queue
+from App.queue_manager import wa_queue
 
 router = APIRouter(prefix="/api/handoff", tags=["Unified Chat"])
 
@@ -92,7 +92,7 @@ def start_handoff_manual(phone_number: str = Path(..., description="Nomor HP yan
             "Mohon tunggu sebentar ya 🙏\n\n"
             "_Bot sementara tidak aktif._"
         )
-        fonnte_queue.add_to_queue(phone_number, notif)
+        wa_queue.add_to_queue(phone_number, notif)
         save_to_supabase(phone_number, notif, direction="outbound", source="system")
         return {"status": "ok", "message": f"Handoff untuk {phone_number} dimulai"}
     except Exception as e:
@@ -127,7 +127,7 @@ def end_handoff_endpoint(phone_number: str = Path(..., description="Nomor HP yan
             "Terima kasih sudah menunggu! 😊 "
             "Bot kami sudah aktif kembali dan siap membantu kamu."
         )
-        fonnte_queue.add_to_queue(phone_number, notif)
+        wa_queue.add_to_queue(phone_number, notif)
         save_to_supabase(phone_number, notif, direction="outbound", source="system")
         return {"status": "ok", "message": f"Handoff untuk {phone_number} diakhiri, bot aktif kembali"}
     except HTTPException:
@@ -177,7 +177,7 @@ def admin_reply(
                 status_code=400,
                 detail=f"{phone_number} tidak dalam mode handoff. Mulai handoff dulu via POST /api/handoff/{phone_number}",
             )
-        fonnte_queue.add_to_queue(phone_number, payload.message)
+        wa_queue.add_to_queue(phone_number, payload.message)
         save_to_supabase(phone_number, payload.message, direction="outbound", source="admin")
         update_admin_reply_time(phone_number)
         print(f"[Handoff] Admin → {phone_number}: {payload.message[:60]}...")
