@@ -1,32 +1,60 @@
 import asyncio
-import os
 from typing import Any
 
-import jwt
+import requests
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from App.config import SUPABASE_JWT_SECRET, supabase_admin
+from App.config import SUPABASE_ANON_KEY, SUPABASE_URL, supabase_admin
 
 
 http_bearer = HTTPBearer()
 
 
 def _verify_supabase_jwt(token: str) -> dict[str, Any]:
-    secret = SUPABASE_JWT_SECRET or os.getenv("SUPABASE_JWT_SECRET")
-    if not secret:
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SUPABASE_JWT_SECRET belum dikonfigurasi",
+            detail="Supabase belum dikonfigurasi",
         )
 
     try:
-        return jwt.decode(token, secret, algorithms=["HS256"])
-    except jwt.PyJWTError as exc:
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+            headers={
+                "apikey": SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {token}",
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gagal memvalidasi token ke Supabase Auth",
+        ) from exc
+
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token tidak valid",
+        )
+
+    try:
+        user = response.json()
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token tidak valid",
         ) from exc
+
+    if not isinstance(user, dict) or not user.get("id"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token tidak valid",
+        )
+
+    user["sub"] = user.get("id")
+    return user
 
 
 def _fetch_active_user_by_auth_id(auth_id: str) -> dict[str, Any] | None:
@@ -65,7 +93,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(http_bearer),
 ) -> dict:
     payload = _verify_supabase_jwt(credentials.credentials)
-    user_id = payload.get("sub")
+    user_id = payload.get("sub") or payload.get("id")
 
     if not user_id:
         raise HTTPException(
