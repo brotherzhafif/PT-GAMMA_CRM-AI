@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from App.activity_logger import log_activity
 from App.auth.dependencies import require_any_staff
-from App.config import supabase
+from App.config import supabase, supabase_admin
 
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -56,14 +56,14 @@ def _user_id_from_auth_user(auth_user: Any) -> str | None:
 
 
 def _get_user_profile_by_auth_id(auth_id: str) -> dict[str, Any] | None:
-    if supabase is None:
+    if supabase_admin is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase belum dikonfigurasi",
+            detail="Supabase admin belum dikonfigurasi",
         )
 
     response = (
-        supabase.table("users")
+        supabase_admin.table("users")
         .select("id, auth_id, name, email, role, is_active")
         .eq("auth_id", auth_id)
         .limit(1)
