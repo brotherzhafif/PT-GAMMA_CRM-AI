@@ -47,7 +47,8 @@ def api_post(endpoint: str, payload: dict) -> Any:
         resp = requests.post(url, json=payload, timeout=12)
         if resp.status_code in (200, 201):
             return resp.json()
-        print(f"[API Error] POST {endpoint} status: {resp.status_code} | Response: {resp.text}")
+        print(f"[API Error] POST {endpoint} status: {resp.status_code}")
+        print(f"[API Error] Response body: {resp.text}")
         return None
     except Exception as e:
         print(f"[API Exception] POST {endpoint}: {e}")
@@ -255,6 +256,64 @@ class ActionFetchSchedule(Action):
         msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
         dispatcher.utter_message(text=msg)
         return []
+    
+class ActionFetchQueue(Action):
+    def name(self) -> Text:
+        return "action_fetch_queue"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        today = datetime.now().strftime("%Y-%m-%d")
+        result = api_get("/api/appointment", params={"tanggal": today})
+
+        if result is None or not result.get("success"):
+            dispatcher.utter_message(
+                text="Mohon maaf, saya tidak bisa mengakses data antrian saat ini. Silakan coba beberapa saat lagi. 🙏"
+            )
+            return []
+
+        data = result.get("data", {})
+        queue_list = data.get("data", [])
+        total = data.get("total", 0)
+        menunggu = data.get("menunggu", 0)
+        hadir = data.get("hadir", 0)
+
+        if not queue_list:
+            dispatcher.utter_message(
+                text=f"📋 Tidak ada antrian untuk hari ini ({format_tgl_indonesia(today)}). 🙏"
+            )
+            return []
+
+        msg = (
+            f"🔢 *Status Antrian Hari Ini*\n"
+            f"_{format_tgl_indonesia(today)}_\n\n"
+            f"📊 Total: *{total}* | ⏳ Menunggu: *{menunggu}* | ✅ Hadir: *{hadir}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+
+        for q in queue_list:
+            no_antrian = q.get("noAntrian", "-")
+            status = q.get("status", "MENUNGGU")
+            pasien = q.get("pasien", {})
+            nama_pasien = pasien.get("namaLengkap", "Pasien")
+            jadwal = q.get("jadwal", {})
+            dokter = jadwal.get("dokter", {})
+            nama_dokter = dokter.get("namaLengkap", "Dokter")
+            spesialis = dokter.get("spesialis", "Umum")
+            jam_mulai = jadwal.get("jamMulai", "")
+            jam_selesai = jadwal.get("jamSelesai", "")
+
+            status_emoji = "⏳" if status == "MENUNGGU" else "✅" if status == "HADIR" else "🔵"
+
+            msg += (
+                f"🎫 *No. {no_antrian}* {status_emoji} {status}\n"
+                f"👤 {nama_pasien}\n"
+                f"🩺 {nama_dokter} ({spesialis})\n"
+                f"🕐 {jam_mulai} – {jam_selesai}\n\n"
+            )
+
+        msg += "Apakah ada yang bisa saya bantu lagi? 😊"
+        dispatcher.utter_message(text=msg)
+        return []
 
 # ======================================================
 # APPOINTMENT BOOKING START
@@ -284,7 +343,6 @@ class ActionStartBooking(Action):
         
         dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=masked_nik)
         return [
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("booking_step", "tanya_untuk_siapa"), SlotSet("booking_untuk_siapa", None)
@@ -310,7 +368,7 @@ class ActionHandleUntukSiapa(Action):
             dispatcher.utter_message(response="utter_booking_intro_baru")
             return [
                 SlotSet("booking_nama", nama), SlotSet("booking_nik", nik), SlotSet("booking_tgl_lahir", dob),
-                SlotSet("booking_tipe_pasien", "baru"), SlotSet("booking_step", "form_baru"),
+                SlotSet("booking_step", "form_baru"),
                 ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
             ]
         else:
@@ -320,7 +378,6 @@ class ActionHandleUntukSiapa(Action):
                 ActiveLoop(None),
                 SlotSet("requested_slot", None),
                 SlotSet("booking_step", None),
-                SlotSet("booking_tipe_pasien", None),
                 SlotSet("booking_nik", None),
                 SlotSet("booking_nama", None),
                 SlotSet("booking_tgl_lahir", None),
@@ -469,6 +526,18 @@ class ActionBookingReview(Action):
 
         dispatcher.utter_message(text=msg)
         return [SlotSet("booking_step", "review")]
+    
+    
+class ActionBookingFormBaruSubmit(Action):
+    def name(self) -> Text:
+        return "action_booking_form_baru_submit"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        # Form selesai diisi → arahkan ke review
+        return [
+            SlotSet("booking_step", "review"),
+            FollowupAction("action_booking_review")
+        ]
 
 class ActionBookingConfirm(Action):
     def name(self) -> Text:
@@ -520,10 +589,10 @@ class ActionBookingConfirm(Action):
             ]
 
         payload = {
-            "phone_number": no_hp,
-            "jadwalId": jadwal_id,
-            "tanggalKunjungan": tgl_kunjungan,
-            "catatan": keluhan,
+            "phone_number": str(no_hp),
+            "jadwalId": str(jadwal_id),
+            "tanggalKunjungan": str(tgl_kunjungan),
+            "catatan": str(keluhan),
             "jenisKunjunganBpjs": "NORMAL",
             "noRujukanFktp": ""
         }
@@ -572,7 +641,7 @@ class ActionBookingConfirm(Action):
             SlotSet("requested_slot", None),
             SlotSet("booking_step", "selesai"),
             SlotSet("booking_id_konfirmasi", booking_id_final),
-            SlotSet("booking_tipe_pasien", None), SlotSet("booking_nik", None),
+             SlotSet("booking_nik", None),
             SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
             SlotSet("jadwalId", None),
@@ -586,7 +655,6 @@ class ActionBookingCancel(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(response="utter_booking_batalkan")
         return [
-            SlotSet("booking_tipe_pasien", None),
             SlotSet("booking_nik", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
@@ -606,7 +674,6 @@ class ActionSlotResetBooking(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan periksa data Anda kembali. 😊")
         return [
-            SlotSet("booking_tipe_pasien", None),
             SlotSet("booking_nik", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
