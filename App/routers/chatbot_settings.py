@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Body, HTTPException
 from App.config import supabase
 from App.helpers import _require_supabase
 from App.models import ChatbotSettingsRecord, UpdateChatbotSettingsPayload
+from LLM.groq_service import groq_service
 
 router = APIRouter(prefix="/api/chatbot-settings", tags=["System"])
 
@@ -22,9 +24,12 @@ CHATBOT_SETTINGS_EXAMPLE = {
     "primary_language": "id",
     "conversation_tone": "friendly",
     "handoff_threshold": 70,
-    "handoff_timeout_minutes": 15,
     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
     "ai_badge_enabled": True,
+    "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "quota_used_tokens": 12500,
+    "quota_limit_tokens": 50000,
+    "quota": "12500/50000",
     "created_at": "2026-05-25T10:00:00Z",
     "updated_at": "2026-05-25T10:00:00Z",
 }
@@ -45,11 +50,30 @@ def _default_chatbot_settings_row() -> dict:
     }
 
 
+def _groq_quota_state() -> dict[str, int | str]:
+    used_tokens = int(groq_service.last_usage.get("total_tokens") or 0)
+    limit_value = groq_service.last_rate_limits.get("tokens", {}).get("limit")
+    try:
+        limit_tokens = int(limit_value) if limit_value is not None else 0
+    except (TypeError, ValueError):
+        limit_tokens = 0
+    return {
+        "quota_used_tokens": used_tokens,
+        "quota_limit_tokens": limit_tokens,
+        "quota": f"{used_tokens}/{limit_tokens}",
+    }
+
+
+def _groq_api_key() -> Optional[str]:
+    return groq_service.api_key
+
+
 def _chatbot_settings_columns() -> str:
     return "id, ai_name, primary_language, conversation_tone, handoff_threshold, handoff_message, ai_badge_enabled, created_at, updated_at"
 
 
 def _chatbot_settings_row(record: dict) -> dict:
+    quota_state = _groq_quota_state()
     return {
         "id": record.get("id"),
         "ai_name": record.get("ai_name"),
@@ -58,6 +82,10 @@ def _chatbot_settings_row(record: dict) -> dict:
         "handoff_threshold": record.get("handoff_threshold"),
         "handoff_message": record.get("handoff_message"),
         "ai_badge_enabled": record.get("ai_badge_enabled"),
+        "api_key": _groq_api_key(),
+        "quota_used_tokens": quota_state["quota_used_tokens"],
+        "quota_limit_tokens": quota_state["quota_limit_tokens"],
+        "quota": quota_state["quota"],
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
     }
@@ -109,7 +137,10 @@ def get_max_fallback_before_handoff(default: int = DEFAULT_MAX_FALLBACK_BEFORE_H
     "",
     response_model=ChatbotSettingsRecord,
     summary="Ambil chatbot settings",
-    description="Mengembalikan satu baris settings chatbot dari Supabase.",
+    description=(
+        "Mengembalikan satu baris settings chatbot dari Supabase beserta api_key runtime aktif dan ringkasan kuota Groq "
+        "dalam format used/limit dari request terakhir."
+    ),
     responses={
         200: {
             "description": "Settings berhasil diambil",
@@ -135,7 +166,10 @@ def get_chatbot_settings():
     "",
     response_model=ChatbotSettingsRecord,
     summary="Update chatbot settings",
-    description="Memperbarui satu baris settings chatbot dan menyimpan updated_at saat ini.",
+    description=(
+        "Memperbarui satu baris settings chatbot. Field api_key akan dipakai oleh runtime Groq saat ini, sementara quota "
+        "di response menampilkan used/limit dari metadata respons Groq terakhir."
+    ),
     responses={
         200: {
             "description": "Settings berhasil diperbarui",
@@ -160,6 +194,7 @@ def update_chatbot_settings(
                     "handoff_threshold": 70,
                     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                     "ai_badge_enabled": True,
+                    "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 },
             }
         },
@@ -167,6 +202,11 @@ def update_chatbot_settings(
 ):
     try:
         update_data = payload.model_dump(exclude_none=True)
+        api_key = update_data.pop("api_key", None)
+        if api_key:
+            os.environ["GROQ_API_KEY"] = api_key
+            groq_service.api_key = api_key
+
         current_row = _get_single_settings_row()
         if current_row is None:
             return _chatbot_settings_row(_create_chatbot_settings_row(update_data))

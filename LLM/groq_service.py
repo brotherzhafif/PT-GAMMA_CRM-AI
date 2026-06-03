@@ -145,6 +145,15 @@ class GroqService:
         self.api_key = os.getenv('GROQ_API_KEY')
         self.url = "https://api.groq.com/openai/v1/chat/completions"
         self.guardrail = ResponseGuardrail()
+        self.last_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        self.last_rate_limits = {
+            "requests": {"limit": None, "remaining": None, "reset": None},
+            "tokens": {"limit": None, "remaining": None, "reset": None},
+        }
 
     # ── Function untuk memanggil API Groq dengan role dan chat history ──
     def get_response(self, user_message, role_type="default", chat_history=None):
@@ -158,7 +167,7 @@ class GroqService:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            # Panggil API Groq untuk generate respons berdasarkan role dan chat history
+            # Panggil API Groq
             response = requests.post(
                 self.url,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json", "Cache-Control": "no-transform"},
@@ -166,19 +175,64 @@ class GroqService:
             )
             response.raise_for_status()
 
-            # Ekstrak respons dari API Groq (masih mentah)
-            raw_response = response.json()['choices'][0]['message']['content']
+            # 1. Ekstrak data JSON dari response body
+            response_json = response.json()
+            raw_response = response_json['choices'][0]['message']['content']
 
-            # Respons di filter menggunakan guardrail.py
+            # Respons difilter menggunakan guardrail.py
             final_response = self.guardrail.filter(raw_response)
 
-            return final_response
+            # 2. Ambil info TOKEN USAGE dari Response Body JSON
+            usage = response_json.get("usage", {})
+            token_info = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            }
+
+            # 3. Ambil info RATE LIMIT dari Response Headers
+            headers = response.headers
+            rate_limit_info = {
+                "requests": {
+                    "limit": headers.get("x-ratelimit-limit-requests"),
+                    "remaining": headers.get("x-ratelimit-remaining-requests"),
+                    "reset": headers.get("x-ratelimit-reset-requests")
+                },
+                "tokens": {
+                    "limit": headers.get("x-ratelimit-limit-tokens"),
+                    "remaining": headers.get("x-ratelimit-remaining-tokens"),
+                    "reset": headers.get("x-ratelimit-reset-tokens")
+                }
+            }
+
+            self.last_usage = token_info
+            self.last_rate_limits = rate_limit_info
+
+            # Kembalikan semua data dalam bentuk dictionary
+            return {
+                "status": "success",
+                "response": final_response,
+                "usage": token_info,
+                "rate_limits": rate_limit_info
+            }
 
         except requests.exceptions.Timeout:
-            return "Mohon Maaf Bapak/Ibu, permintaan membutuhkan waktu terlalu lama. Silakan coba kembali dalam beberapa saat."
+            return {
+                "status": "error",
+                "message": "Mohon Maaf Bapak/Ibu, permintaan membutuhkan waktu terlalu lama. Silakan coba kembali dalam beberapa saat."
+            }
         
         except requests.exceptions.ConnectionError:
-            return "Mohon Maaf Bapak/Ibu, tidak dapat terhubung ke layanan saat ini. Silakan periksa koneksi atau hubungi customer service kami."
+            return {
+                "status": "error",
+                "message": "Mohon Maaf Bapak/Ibu, tidak dapat terhubung ke layanan saat ini. Silakan periksa koneksi atau hubungi customer service kami."
+            }
     
         except (KeyError, IndexError):
-            return "Mohon Maaf Bapak/Ibu, terjadi kesalahan dalam memproses respons. Silakan coba kembali dalam beberapa saat."
+            return {
+                "status": "error",
+                "message": "Mohon Maaf Bapak/Ibu, terjadi kesalahan dalam memproses respons. Silakan coba kembali dalam beberapa saat."
+            }
+
+
+groq_service = GroqService()

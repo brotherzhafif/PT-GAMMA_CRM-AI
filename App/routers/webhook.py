@@ -31,10 +31,18 @@ from App.helpers import (
 from App.routers.chatbot_settings import get_max_fallback_before_handoff
 from App.handoff_manager import is_in_handoff, start_handoff
 from App.wa_gateway import send_text_best_effort
-from LLM.groq_service import GroqService
+from LLM.groq_service import groq_service as groq
 
 router = APIRouter()
-groq = GroqService()
+
+
+def _groq_reply_text(result) -> tuple[str, dict | None]:
+    if isinstance(result, dict):
+        if result.get("status") == "success":
+            return str(result.get("response") or ""), result
+        return str(result.get("message") or "Mohon maaf, layanan AI sedang bermasalah. Silakan coba lagi."), result
+
+    return str(result or ""), None
 
 # ======================================================
 #   KONSTANTA
@@ -362,7 +370,7 @@ def webhook(
             # Di luar form: keyword Emergency → handoff, keyword gejala → triage Groq tanpa handoff
             if is_emergency_keyword:
                 role = "triage"
-                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                reply, groq_meta = _groq_reply_text(groq.get_response(input_pesan, role_type=role, chat_history=chat_history))
                 source = "groq"
                 start_handoff(no_hp)
                 reset_fallback(no_hp)
@@ -370,12 +378,12 @@ def webhook(
                 print(f"[EMERGENCY] → Keyword darurat lolos dari Rasa. Ditangani oleh Groq Triage + Auto-Handoff.")
             elif is_triage_keyword:
                 role = "triage"
-                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                reply, groq_meta = _groq_reply_text(groq.get_response(input_pesan, role_type=role, chat_history=chat_history))
                 source = "groq"
                 print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: triage | rasa_intent={rasa_intent} | confidence={rasa_confidence:.4f})")
             else:
                 role = "default"
-                reply = groq.get_response(input_pesan, role_type=role, chat_history=chat_history)
+                reply, groq_meta = _groq_reply_text(groq.get_response(input_pesan, role_type=role, chat_history=chat_history))
                 source = "groq"
                 print(f"[DEBUG] → Direspons oleh: GROQ LLM ✨ (role: {role} | rasa_intent={rasa_intent} | confidence={rasa_confidence:.4f} | trusted={rasa_trusted})")
 

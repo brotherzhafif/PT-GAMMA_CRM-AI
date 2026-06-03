@@ -232,6 +232,10 @@ class ChatbotSettingsRecord(BaseModel):
                 "handoff_threshold": 70,
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
+                "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "quota_used_tokens": 12500,
+                "quota_limit_tokens": 50000,
+                "quota": "12500/50000",
                 "created_at": "2026-05-25T10:00:00Z",
                 "updated_at": "2026-05-25T10:00:00Z",
             }
@@ -245,6 +249,26 @@ class ChatbotSettingsRecord(BaseModel):
     handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100)
     handoff_message: Optional[str] = Field(default=None)
     ai_badge_enabled: Optional[bool] = Field(default=None)
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Groq API key aktif yang dipakai proses runtime saat ini.",
+        examples=["gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],
+    )
+    quota_used_tokens: Optional[int] = Field(
+        default=None,
+        description="Total token dari respons Groq terakhir yang tersimpan di memory proses.",
+        examples=[12500],
+    )
+    quota_limit_tokens: Optional[int] = Field(
+        default=None,
+        description="Batas token dari header rate limit Groq terakhir.",
+        examples=[50000],
+    )
+    quota: Optional[str] = Field(
+        default=None,
+        description="Format quota token used/limit dari request Groq terakhir.",
+        examples=["12500/50000"],
+    )
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
 
@@ -259,6 +283,7 @@ class UpdateChatbotSettingsPayload(BaseModel):
                 "handoff_threshold": 70,
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
+                "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             }
         }
     )
@@ -272,6 +297,11 @@ class UpdateChatbotSettingsPayload(BaseModel):
     handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100, description="Ambang handoff 0-100")
     handoff_message: Optional[str] = Field(default=None, description="Pesan handoff")
     ai_badge_enabled: Optional[bool] = Field(default=None, description="Tampilkan badge AI")
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Groq API key aktif yang akan dipakai runtime.",
+        examples=["gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],
+    )
 
 
 # Feedback
