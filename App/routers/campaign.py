@@ -36,6 +36,20 @@ CAMPAIGN_EXAMPLE = {
     "updated_at": "2026-05-22T10:00:00Z",
 }
 
+CAMPAIGN_LIST_EXAMPLE = [
+    CAMPAIGN_EXAMPLE,
+    {
+        **CAMPAIGN_EXAMPLE,
+        "id": "8c6f4ce1-7d7a-4f6d-9c01-2db0b1f5a222",
+        "campaign_name": "Promo Scaling Gigi Juni",
+        "schedule_date": "2026-06-02T09:00:00Z",
+        "campaign_message": "Promo scaling gigi bulan ini tersedia dengan kuota terbatas.",
+        "attachment_url": "file://chat_state/campaign_uploads/demo-scaling-gigi.pdf",
+        "filename": "demo-scaling-gigi.pdf",
+        "status": "sent",
+    },
+]
+
 SUCCESS_MESSAGE_EXAMPLE = {
     "status": "ok",
     "message": "Campaign berhasil diproses",
@@ -112,11 +126,11 @@ def _store_campaign_attachment(file: UploadFile) -> tuple[str, str]:
     "",
     response_model=list[CampaignRecord],
     summary="Ambil semua campaign",
-    description="Mengembalikan campaign name, schedule date, campaign message, dan metadata status.",
+    description="Mengembalikan semua campaign yang tersimpan, tanpa limit default, kecuali yang canceled jika include_canceled=false.",
     responses={
         200: {
             "description": "Campaign berhasil diambil",
-            "content": {"application/json": {"example": [CAMPAIGN_EXAMPLE]}},
+            "content": {"application/json": {"example": CAMPAIGN_LIST_EXAMPLE}},
         },
         500: {
             "description": "Gagal mengambil campaign",
@@ -124,14 +138,13 @@ def _store_campaign_attachment(file: UploadFile) -> tuple[str, str]:
         },
     },
 )
-def get_all_campaigns(limit: int = 100, include_canceled: bool = False):
+def get_all_campaigns(include_canceled: bool = False):
     _require_supabase()
     try:
         response = (
             supabase.table("campaigns")
             .select(_campaign_select_columns())
             .order("campaign_name", desc=False)
-            .limit(limit)
             .execute()
         )
         campaigns = response.data or []

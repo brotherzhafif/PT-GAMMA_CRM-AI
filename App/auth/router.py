@@ -4,22 +4,56 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from App.activity_logger import log_activity
 from App.auth.dependencies import require_any_staff
 from App.config import supabase, supabase_admin
+from App.models import AuthLoginResponse, AuthRefreshResponse, AuthSimpleMessage
 
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
+LOGIN_EXAMPLE = {
+    "email": "superadmin@smartclinic.local",
+    "password": "Admin@12345!",
+}
+
+LOGIN_RESPONSE_EXAMPLE = {
+    "access_token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "stjkhvrykqfo",
+    "user": {
+        "id": "0c16dc6d-e940-475e-a822-479ffbaca372",
+        "name": "Super Admin",
+        "email": "superadmin@smartclinic.local",
+        "role": "super_admin",
+    },
+}
+
 
 class LoginPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "superadmin@smartclinic.local",
+                "password": "Admin@12345!",
+            }
+        }
+    )
+
     email: str
     password: str
 
 
 class RefreshPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "refresh_token": "stjkhvrykqfo",
+            }
+        }
+    )
+
     refresh_token: str
 
 
@@ -86,8 +120,38 @@ def _get_user_profile_by_auth_id(auth_id: str) -> dict[str, Any] | None:
     }
 
 
-@router.post("/login")
-async def login(payload: LoginPayload, request: Request):
+@router.post(
+    "/login",
+    response_model=AuthLoginResponse,
+    summary="Login admin",
+    description="Masukkan email superadmin dan password default untuk masuk ke dashboard admin.",
+    responses={
+        200: {
+            "description": "Login berhasil",
+            "content": {"application/json": {"example": LOGIN_RESPONSE_EXAMPLE}},
+        },
+        401: {
+            "description": "Login gagal",
+            "content": {"application/json": {"example": {"detail": "Email atau password salah"}}},
+        },
+        500: {
+            "description": "Supabase belum dikonfigurasi",
+            "content": {"application/json": {"example": {"detail": "Supabase belum dikonfigurasi"}}},
+        },
+    },
+)
+async def login(
+    request: Request,
+    payload: LoginPayload = Body(
+        ...,
+        examples={
+            "superadminLogin": {
+                "summary": "Login superadmin",
+                "value": LOGIN_EXAMPLE,
+            }
+        },
+    ),
+):
     if supabase is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -169,11 +233,36 @@ async def logout(request: Request, current_user: dict = require_any_staff):
         device=request.headers.get("user-agent"),
     )
 
-    return {"message": "Logout berhasil"}
+    return AuthSimpleMessage(message="Logout berhasil")
 
 
-@router.post("/refresh")
-async def refresh_token(payload: RefreshPayload = Body(...)):
+@router.post(
+    "/refresh",
+    response_model=AuthRefreshResponse,
+    summary="Refresh token",
+    description="Tukar refresh token dengan access token baru.",
+    responses={
+        200: {
+            "description": "Token berhasil diperbarui",
+            "content": {"application/json": {"example": {"access_token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9...", "refresh_token": "stjkhvrykqfo"}}},
+        },
+        401: {
+            "description": "Refresh token tidak valid",
+            "content": {"application/json": {"example": {"detail": "Refresh token tidak valid"}}},
+        },
+    },
+)
+async def refresh_token(
+    payload: RefreshPayload = Body(
+        ...,
+        examples={
+            "refreshTokenExample": {
+                "summary": "Contoh refresh token",
+                "value": {"refresh_token": "stjkhvrykqfo"},
+            }
+        },
+    )
+):
     if supabase is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

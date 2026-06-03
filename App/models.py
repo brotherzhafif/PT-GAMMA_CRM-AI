@@ -8,12 +8,21 @@
 
 from typing import List, Optional, Literal
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # Webhook 
 
 class WebhookPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "sender": "6281234567890",
+                "message": "Jadwal dokter hari ini?",
+            }
+        }
+    )
+
     sender: str = Field(..., description="Nomor WhatsApp pengirim", examples=["6281234567890"])
     message: str = Field(..., description="Isi pesan masuk", examples=["Jadwal dokter hari ini?"])
 
@@ -22,6 +31,30 @@ class ChatResponse(BaseModel):
     status: str
     source: Optional[str] = None
     reply: Optional[str] = None
+
+
+# Auth
+
+class AuthUserProfile(BaseModel):
+    id: str = Field(..., description="ID profil user internal", examples=["0c16dc6d-e940-475e-a822-479ffbaca372"])
+    name: str = Field(..., description="Nama user", examples=["Super Admin"])
+    email: str = Field(..., description="Email login", examples=["superadmin@smartclinic.local"])
+    role: str = Field(..., description="Role user internal", examples=["super_admin"])
+
+
+class AuthLoginResponse(BaseModel):
+    access_token: str = Field(..., description="Access token Supabase Auth")
+    refresh_token: str = Field(..., description="Refresh token Supabase Auth")
+    user: AuthUserProfile
+
+
+class AuthRefreshResponse(BaseModel):
+    access_token: str = Field(..., description="Access token Supabase Auth")
+    refresh_token: str = Field(..., description="Refresh token Supabase Auth")
+
+
+class AuthSimpleMessage(BaseModel):
+    message: str
 
 
 # Messages 
@@ -38,6 +71,18 @@ class ChatRecord(BaseModel):
 # Patients 
 
 class PatientPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "nik": "3273010101010001",
+                "namaLengkap": "Budi Santoso",
+                "tanggalLahir": "1990-01-01",
+                "jenisKelamin": "LAKI_LAKI",
+                "telepon": "6281234567890",
+            }
+        }
+    )
+
     nik: str = Field(..., description="NIK pasien")
     namaLengkap: str = Field(..., description="Nama lengkap pasien")
     tanggalLahir: str = Field(..., description="Tanggal lahir pasien")
@@ -58,6 +103,22 @@ class PatientPayload(BaseModel):
 # Marketing Campaigns
 
 class CampaignRecord(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "7f5f4ce1-7d7a-4f6d-9c01-2db0b1f5a111",
+                "campaign_name": "Promo Cek Gigi Mei",
+                "schedule_date": "2026-05-25T09:00:00Z",
+                "campaign_message": "Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei.",
+                "attachment_url": "https://example.com/promo-cekgigi.jpg",
+                "filename": "promo-cekgigi.jpg",
+                "status": "scheduled",
+                "created_at": "2026-05-22T10:00:00Z",
+                "updated_at": "2026-05-22T10:00:00Z",
+            }
+        }
+    )
+
     id: Optional[str] = Field(default=None)
     campaign_name: str = Field(..., description="Nama campaign", examples=["Promo Cek Gigi Mei"])
     schedule_date: Optional[datetime] = Field(
@@ -78,6 +139,19 @@ class CampaignRecord(BaseModel):
 
 
 class SaveCampaignPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "campaign_name": "Promo Cek Gigi Mei",
+                "schedule_date": "2026-05-25T09:00:00Z",
+                "campaign_message": "Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei.",
+                "attachment_url": "https://example.com/promo-cekgigi.jpg",
+                "filename": "promo-cekgigi.jpg",
+                "status": "scheduled",
+            }
+        }
+    )
+
     campaign_name: str = Field(..., description="Nama campaign", examples=["Promo Cek Gigi Mei"])
     schedule_date: Optional[datetime] = Field(default=None, description="Waktu campaign (ISO 8601)", examples=["2026-05-25T09:00:00Z"])
     campaign_message: str = Field(..., description="Isi pesan campaign", examples=["Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei."])
@@ -87,6 +161,19 @@ class SaveCampaignPayload(BaseModel):
 
 
 class UpdateCampaignPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "campaign_name": "Promo Cek Gigi Mei Revisi",
+                "schedule_date": "2026-05-26T09:00:00Z",
+                "campaign_message": "Promo cek gigi diperpanjang sampai akhir Mei.",
+                "attachment_url": "https://example.com/promo-cekgigi.jpg",
+                "filename": "promo-cekgigi.jpg",
+                "status": "scheduled",
+            }
+        }
+    )
+
     campaign_name: Optional[str] = Field(default=None, description="Nama campaign baru", examples=["Promo Cek Gigi Mei Revisi"])
     schedule_date: Optional[datetime] = Field(default=None, description="Waktu campaign baru (ISO 8601)", examples=["2026-05-26T09:00:00Z"])
     campaign_message: Optional[str] = Field(default=None, description="Isi pesan campaign baru", examples=["Promo cek gigi diperpanjang sampai akhir Mei."])
@@ -135,6 +222,22 @@ class HandoffSession(BaseModel):
 # Chatbot Settings
 
 class ChatbotSettingsRecord(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "2f4d52c2-1111-4b5f-9b5d-1b2c3d4e5f67",
+                "ai_name": "SmartClinic AI",
+                "primary_language": "id",
+                "conversation_tone": "friendly",
+                "handoff_threshold": 70,
+                "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
+                "ai_badge_enabled": True,
+                "created_at": "2026-05-25T10:00:00Z",
+                "updated_at": "2026-05-25T10:00:00Z",
+            }
+        }
+    )
+
     id: Optional[str] = Field(default=None)
     ai_name: Optional[str] = Field(default=None)
     primary_language: Optional[str] = Field(default=None)
@@ -147,6 +250,19 @@ class ChatbotSettingsRecord(BaseModel):
 
 
 class UpdateChatbotSettingsPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "ai_name": "SmartClinic AI",
+                "primary_language": "id",
+                "conversation_tone": "friendly",
+                "handoff_threshold": 70,
+                "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
+                "ai_badge_enabled": True,
+            }
+        }
+    )
+
     ai_name: Optional[str] = Field(default=None, description="Nama AI")
     primary_language: Optional[str] = Field(default=None, description="Bahasa utama percakapan")
     conversation_tone: Optional[Literal["friendly", "professional", "caring"]] = Field(
@@ -161,12 +277,33 @@ class UpdateChatbotSettingsPayload(BaseModel):
 # Feedback
 
 class FeedbackPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "no_hp": "6281234567890",
+                "rating": 5,
+                "ulasan": "Pelayanan ramah dan cepat.",
+            }
+        }
+    )
+
     no_hp: str = Field(..., description="Nomor WhatsApp pasien", examples=["6281234567890"])
     rating: int = Field(..., ge=1, le=5, description="Rating 1-5")
     ulasan: str = Field(default="", description="Ulasan pasien")
 
 
 class FeedbackRecord(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "nama": "Budi Santoso",
+                "no_hp": "6281234567890",
+                "rating": 5,
+                "ulasan": "Pelayanan ramah dan cepat.",
+            }
+        }
+    )
+
     nama: Optional[str] = Field(default=None)
     no_hp: str
     rating: int
@@ -174,6 +311,18 @@ class FeedbackRecord(BaseModel):
 
 
 class FeedbackDashboardRecord(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_feedback": 12,
+                "rata_rating": 4.8,
+                "total_survey_terkirim": 20,
+                "total_ngisi": 12,
+                "total_gak_ngisi": 8,
+            }
+        }
+    )
+
     total_feedback: int
     rata_rating: Optional[float]
     total_survey_terkirim: int
