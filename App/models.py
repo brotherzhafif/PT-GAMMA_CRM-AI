@@ -7,6 +7,7 @@
 # ======================================================
 
 from typing import List, Optional, Literal
+from datetime import datetime
 from pydantic import BaseModel, Field
 
 
@@ -58,32 +59,40 @@ class PatientPayload(BaseModel):
 
 class CampaignRecord(BaseModel):
     id: Optional[str] = Field(default=None)
-    campaign_name: str = Field(..., description="Nama campaign")
-    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
-    campaign_message: str = Field(..., description="Isi pesan campaign")
-    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (gambar/PDF)")
-    filename: Optional[str] = Field(default=None, description="Nama file attachment yang dikirim ke broadcast")
-    status: Optional[str] = Field(default=None, description="Status campaign")
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
+    campaign_name: str = Field(..., description="Nama campaign", examples=["Promo Cek Gigi Mei"])
+    schedule_date: Optional[datetime] = Field(
+        default=None,
+        description="Waktu campaign (ISO 8601)",
+        examples=["2026-05-25T09:00:00Z"],
+    )
+    campaign_message: str = Field(..., description="Isi pesan campaign", examples=["Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei."])
+    attachment_url: Optional[str] = Field(
+        default=None,
+        description="URL attachment campaign atau path lokal file upload",
+        examples=["https://example.com/promo-cekgigi.jpg", "file://chat_state/campaign_uploads/promo-cekgigi.jpg"],
+    )
+    filename: Optional[str] = Field(default=None, description="Nama file attachment yang dikirim ke broadcast", examples=["promo-cekgigi.jpg"])
+    status: Optional[str] = Field(default=None, description="Status campaign", examples=["scheduled", "processing", "sent", "failed"])
+    created_at: Optional[datetime] = Field(default=None)
+    updated_at: Optional[datetime] = Field(default=None)
 
 
 class SaveCampaignPayload(BaseModel):
-    campaign_name: str = Field(..., description="Nama campaign")
-    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign")
-    campaign_message: str = Field(..., description="Isi pesan campaign")
-    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (opsional)")
-    filename: Optional[str] = Field(default=None, description="Nama file attachment (opsional)")
-    status: Optional[str] = Field(default=None, description="Status campaign")
+    campaign_name: str = Field(..., description="Nama campaign", examples=["Promo Cek Gigi Mei"])
+    schedule_date: Optional[datetime] = Field(default=None, description="Waktu campaign (ISO 8601)", examples=["2026-05-25T09:00:00Z"])
+    campaign_message: str = Field(..., description="Isi pesan campaign", examples=["Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei."])
+    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (opsional)", examples=["https://example.com/promo-cekgigi.jpg"])
+    filename: Optional[str] = Field(default=None, description="Nama file attachment (opsional)", examples=["promo-cekgigi.jpg"])
+    status: Optional[str] = Field(default=None, description="Status campaign", examples=["scheduled"])
 
 
 class UpdateCampaignPayload(BaseModel):
-    campaign_name: Optional[str] = Field(default=None, description="Nama campaign baru")
-    schedule_date: Optional[str] = Field(default=None, description="Tanggal/jadwal campaign baru")
-    campaign_message: Optional[str] = Field(default=None, description="Isi pesan campaign baru")
-    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign baru (opsional)")
-    filename: Optional[str] = Field(default=None, description="Nama file attachment baru (opsional)")
-    status: Optional[str] = Field(default=None, description="Status campaign baru")
+    campaign_name: Optional[str] = Field(default=None, description="Nama campaign baru", examples=["Promo Cek Gigi Mei Revisi"])
+    schedule_date: Optional[datetime] = Field(default=None, description="Waktu campaign baru (ISO 8601)", examples=["2026-05-26T09:00:00Z"])
+    campaign_message: Optional[str] = Field(default=None, description="Isi pesan campaign baru", examples=["Promo cek gigi diperpanjang sampai akhir Mei."])
+    attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign baru (opsional)", examples=["https://example.com/promo-cekgigi.jpg"])
+    filename: Optional[str] = Field(default=None, description="Nama file attachment baru (opsional)", examples=["promo-cekgigi.jpg"])
+    status: Optional[str] = Field(default=None, description="Status campaign baru", examples=["scheduled"])
 
 # Send 
 

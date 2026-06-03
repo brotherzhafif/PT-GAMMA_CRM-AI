@@ -7,6 +7,8 @@
 # ======================================================
 
 import os
+import io
+import mimetypes
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 
@@ -54,6 +56,32 @@ SEND_BROADCAST_UPLOAD_EXAMPLE = {
     "total_sent": 2,
     "recipients": ["6281234567890", "6289876543210"],
 }
+
+
+def _send_media_to_target(
+    target: str,
+    message: str,
+    *,
+    file_name: str,
+    file_bytes: bytes,
+    content_type: str,
+):
+    return wa_service_request(
+        "POST",
+        "/send-media",
+        data={
+            "target": target,
+            "message": message,
+        },
+        files={
+            "file": (
+                file_name,
+                io.BytesIO(file_bytes),
+                content_type,
+            )
+        },
+        timeout=60,
+    )
 
 
 # ======================================================
@@ -170,22 +198,13 @@ def send_media(
     try:
         normalized_target = normalize_whatsapp_target(target)
 
-        file.file.seek(0)
-        response = wa_service_request(
-            "POST",
-            "/send-media",
-            data={
-                "target": normalized_target,
-                "message": message,
-            },
-            files={
-                "file": (
-                    file.filename or "upload",
-                    file.file,
-                    file.content_type or "application/octet-stream",
-                )
-            },
-            timeout=60,
+        file_bytes = file.file.read()
+        response = _send_media_to_target(
+            normalized_target,
+            message,
+            file_name=file.filename or "upload",
+            file_bytes=file_bytes,
+            content_type=file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream",
         )
         response.raise_for_status()
 
@@ -306,6 +325,7 @@ def broadcast_to_patients(
     attachment_url: str | None = None,
     filename: str | None = None,
     file: UploadFile | None = None,
+    attachment_file_path: str | None = None,
 ) -> BroadcastResult:
     _require_supabase()
 
@@ -320,27 +340,32 @@ def broadcast_to_patients(
 
     recipients = []
 
+    file_bytes: bytes | None = None
+    file_name: str | None = None
+    file_content_type = "application/octet-stream"
+
     if file is not None:
-        file.file.seek(0)
+        file_bytes = file.file.read()
+        file_name = file.filename or "upload"
+        file_content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+    elif attachment_file_path:
+        with open(attachment_file_path, "rb") as file_handle:
+            file_bytes = file_handle.read()
+        file_name = os.path.basename(attachment_file_path) or "upload"
+        file_content_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
 
     for patient in patients:
         number = normalize_phone_number(patient.get("phone_number", ""))
         if not number:
             continue
 
-        if file is not None:
-            wa_service_request(
-                "POST",
-                "/send-media",
-                data={"target": number, "message": message},
-                files={
-                    "file": (
-                        file.filename or "upload",
-                        file.file,
-                        file.content_type or "application/octet-stream",
-                    )
-                },
-                timeout=60,
+        if file_bytes is not None and file_name is not None:
+            _send_media_to_target(
+                number,
+                message,
+                file_name=file_name,
+                file_bytes=file_bytes,
+                content_type=file_content_type,
             )
             source = "wa-service"
         elif attachment_url:

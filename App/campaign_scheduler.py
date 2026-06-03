@@ -52,10 +52,17 @@ def _process_campaign(campaign: dict):
 
         _mark_campaign_status(campaign_id, "processing")
 
+        attachment_url = campaign.get("attachment_url")
+        attachment_file_path = None
+        if isinstance(attachment_url, str) and attachment_url.startswith("file://"):
+            attachment_file_path = attachment_url.removeprefix("file://")
+            attachment_url = None
+
         broadcast_to_patients(
             campaign.get("campaign_message", ""),
-            attachment_url=campaign.get("attachment_url"),
+            attachment_url=attachment_url,
             filename=campaign.get("filename"),
+            attachment_file_path=attachment_file_path,
         )
 
         _mark_campaign_status(campaign_id, "sent")
