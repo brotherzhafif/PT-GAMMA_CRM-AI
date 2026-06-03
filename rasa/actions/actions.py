@@ -7,7 +7,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   29 Mei 2026
+# Last Change   :   03 Juni 2026
 # ======================================================
 
 import os
@@ -165,6 +165,7 @@ def format_tgl_indonesia(tgl_str: str) -> str:
 #  JADWAL & ANTREAN ACTIONS
 # ======================================================
 
+#Action untuk mengambil jadwal dokter 
 class ActionFetchSchedule(Action):
     def name(self) -> Text:
         return "action_fetch_schedule"
@@ -256,7 +257,8 @@ class ActionFetchSchedule(Action):
         msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
         dispatcher.utter_message(text=msg)
         return []
-    
+
+# Action untuk ambil data antrian hari ini, dengan filter tanggal & grouping per dokter
 class ActionFetchQueue(Action):
     def name(self) -> Text:
         return "action_fetch_queue"
@@ -290,25 +292,38 @@ class ActionFetchQueue(Action):
             f"━━━━━━━━━━━━━━━━━━━━━\n\n"
         )
 
+        # Kelompokkan antrian per dokter
+        grouped_queue = {}
         for q in queue_list:
-            no_antrian = q.get("noAntrian", "-")
-            status = q.get("status", "MENUNGGU")
-            pasien = q.get("pasien", {})
-            nama_pasien = pasien.get("namaLengkap", "Pasien")
             jadwal = q.get("jadwal", {})
             dokter = jadwal.get("dokter", {})
             nama_dokter = dokter.get("namaLengkap", "Dokter")
-            spesialis = dokter.get("spesialis", "Umum")
-            jam_mulai = jadwal.get("jamMulai", "")
+            spesialis   = dokter.get("spesialis", "Umum")
+            jam_mulai   = jadwal.get("jamMulai", "")
             jam_selesai = jadwal.get("jamSelesai", "")
+            key = (nama_dokter, spesialis, jam_mulai, jam_selesai)
+            if key not in grouped_queue:
+                grouped_queue[key] = {
+                    "dokter":      nama_dokter,
+                    "spesialis":   spesialis,
+                    "jam_mulai":   jam_mulai,
+                    "jam_selesai": jam_selesai,
+                    "total":       0,
+                    "menunggu":    0,
+                    "hadir":       0,
+                }
+            grouped_queue[key]["total"] += 1
+            status = q.get("status", "MENUNGGU")
+            if status == "MENUNGGU":
+                grouped_queue[key]["menunggu"] += 1
+            elif status in ("HADIR", "DIPANGGIL", "DIPERIKSA"):
+                grouped_queue[key]["hadir"] += 1
 
-            status_emoji = "⏳" if status == "MENUNGGU" else "✅" if status == "HADIR" else "🔵"
-
+        for grp in grouped_queue.values():
             msg += (
-                f"🎫 *No. {no_antrian}* {status_emoji} {status}\n"
-                f"👤 {nama_pasien}\n"
-                f"🩺 {nama_dokter} ({spesialis})\n"
-                f"🕐 {jam_mulai} – {jam_selesai}\n\n"
+                f"🩺 *{grp['dokter']}* ({grp['spesialis']})\n"
+                f"🕐 {grp['jam_mulai']} – {grp['jam_selesai']}\n"
+                f"📊 Total: *{grp['total']}* | ⏳ Menunggu: *{grp['menunggu']}* | ✅ Hadir: *{grp['hadir']}*\n\n"
             )
 
         msg += "Apakah ada yang bisa saya bantu lagi? 😊"
@@ -601,7 +616,7 @@ class ActionBookingConfirm(Action):
         result = api_post("/api/appointment/appointments", payload)
         print(f"[DEBUG] Respon API: {result}")
 
-        if result and result.get("status") in ("ok", "success", True):
+        if result and result.get("status") == "ok":
             nomor_antrian = result.get("nomorAntrian") or result.get("queue_number") or "Akan diberikan di klinik"
             booking_id = result.get("appointmentId") or result.get("id") or f"SC-{datetime.now().strftime('%m%d%H%M')}"
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
