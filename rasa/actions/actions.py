@@ -23,9 +23,9 @@ from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction
 # URL Base API FastAPI 
 API_BASE_URL = os.getenv("SMARTCLINIC_API_URL", "https://ai-crm.brotherzhafif.my.id")
 
-# ======================================================
+# ------------------------------------------------------
 #  CORE HELPERS 
-# ======================================================
+# ------------------------------------------------------
 
 def api_get(endpoint: str, params: dict = None) -> Any:
     """Melakukan request HTTP GET terpadu ke gateway FastAPI."""
@@ -93,9 +93,9 @@ def get_patient_by_phone(phone_number: str) -> dict:
             
     return {}
 
-# ======================================================
-# FORMAT & VALIDASI TANGGAL + NIK
-# ======================================================
+# ------------------------------------------------------
+# FORMAT dan VALIDASI TANGGAL 
+#------------------------------------------------------
 
 def parse_tanggal_kunjungan(teks: str) -> Optional[str]:
     teks = teks.strip().lower()
@@ -161,9 +161,9 @@ def format_tgl_indonesia(tgl_str: str) -> str:
     except Exception:
         return tgl_str
 
-# ======================================================
-#  JADWAL & ANTREAN ACTIONS
-# ======================================================
+# ------------------------------------------------------
+# JADWAL dan ANTREAN actions
+# ------------------------------------------------------
 
 #Action untuk mengambil jadwal dokter 
 class ActionFetchSchedule(Action):
@@ -330,9 +330,9 @@ class ActionFetchQueue(Action):
         dispatcher.utter_message(text=msg)
         return []
 
-# ======================================================
-# APPOINTMENT BOOKING START
-# ======================================================
+# ------------------------------------------------------
+# Alur Booking dan Actionnya
+# ------------------------------------------------------
 
 class ActionStartBooking(Action):
     def name(self) -> Text:
@@ -401,9 +401,9 @@ class ActionHandleUntukSiapa(Action):
                 SlotSet("jadwalId", None)
             ]
 
-# ======================================================
-#  FORM VALIDATION ACTIONS
-# ======================================================
+# ------------------------------------------------------
+#  Fungsi Validator Booking
+# ------------------------------------------------------
 
 class ValidateBookingFormBaru(FormValidationAction):
     def name(self) -> Text:
@@ -469,7 +469,6 @@ class ValidateBookingFormBaru(FormValidationAction):
 
             result = api_get("/api/schedules")
             
-            # Mendukung format jika langsung array (List) atau bungkusan objek data (Dict)
             if isinstance(result, list):
                 schedules = result
             elif isinstance(result, dict):
@@ -483,7 +482,6 @@ class ValidateBookingFormBaru(FormValidationAction):
                 if hari_sched is not None:
                     hari_sched = int(hari_sched)
 
-                # Jika property 'isAktif' absen dari database, fallback ke True agar tetap valid
                 is_aktif = sched.get("isAktif", True)
                 tanggal_libur = sched.get("tanggalLibur", [])
 
@@ -557,28 +555,28 @@ class ActionBookingFormBaruSubmit(Action):
 class ActionBookingConfirm(Action):
     def name(self) -> Text:
         return "action_booking_confirm"
-
+ 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         nama = tracker.get_slot("booking_nama") or "Pasien"
         keluhan = tracker.get_slot("booking_keluhan") or "Pendaftaran via Bot"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or ""
         no_hp = tracker.sender_id
-
+ 
         dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
-
+ 
         # Auto-assign jadwalId dari hari kunjungan
         jadwal_id = None
         try:
             dt = datetime.strptime(tgl_kunjungan, "%Y-%m-%d")
             hari_kunjungan = dt.isoweekday()
-
+ 
             schedules_result = api_get("/api/schedules")
             if schedules_result:
                 if isinstance(schedules_result, list):
                     jadwal_list = schedules_result
                 else:
                     jadwal_list = schedules_result.get("data", [])
-
+ 
                 # Filter jadwal aktif di hari yang sama, tidak libur
                 tersedia = [
                     j for j in jadwal_list
@@ -592,7 +590,7 @@ class ActionBookingConfirm(Action):
                     print(f"[Booking] Auto-assign jadwalId={jadwal_id} (hari={hari_kunjungan})")
         except Exception as e:
             print(f"[Booking] Gagal auto-assign jadwal: {e}")
-
+ 
         if not jadwal_id:
             dispatcher.utter_message(text=(
                 "⚠️ Maaf, tidak ada jadwal dokter yang tersedia pada tanggal tersebut.\n\n"
@@ -602,7 +600,7 @@ class ActionBookingConfirm(Action):
                 SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("booking_step", "review"),
             ]
-
+ 
         payload = {
             "phone_number": str(no_hp),
             "jadwalId": str(jadwal_id),
@@ -611,22 +609,44 @@ class ActionBookingConfirm(Action):
             "jenisKunjunganBpjs": "NORMAL",
             "noRujukanFktp": ""
         }
-
+ 
         print(f"[DEBUG] Payload Booking: {payload}")
         result = api_post("/api/appointment/appointments", payload)
         print(f"[DEBUG] Respon API: {result}")
-
+ 
         if result and result.get("status") == "ok":
-            nomor_antrian = result.get("nomorAntrian") or result.get("queue_number") or "Akan diberikan di klinik"
-            booking_id = result.get("appointmentId") or result.get("id") or f"SC-{datetime.now().strftime('%m%d%H%M')}"
+            # GET noAntrian dan jam praktik dari /api/appointment
+            nomor_antrian = "Akan diberikan di klinik"
+            jam_praktik = "-"
+            booking_id = f"SC-{datetime.now().strftime('%m%d%H%M')}"
+            try:
+                antrian_result = api_get("/api/appointment", params={"tanggal": tgl_kunjungan})
+                if antrian_result and antrian_result.get("success"):
+                    antrian_list = antrian_result.get("data", {}).get("data", [])
+                    milik_pasien = [
+                        a for a in antrian_list
+                        if a.get("jadwalId") == str(jadwal_id)
+                    ]
+                    if milik_pasien:
+                        terbaru = max(milik_pasien, key=lambda x: x.get("createdAt", ""))
+                        nomor_antrian = terbaru.get("noAntrian", nomor_antrian)
+                        booking_id = terbaru.get("id", booking_id)
+                        jadwal_info = terbaru.get("jadwal", {})
+                        jam_mulai = jadwal_info.get("jamMulai", "")
+                        jam_selesai = jadwal_info.get("jamSelesai", "")
+                        if jam_mulai and jam_selesai:
+                            jam_praktik = f"{jam_mulai} - {jam_selesai}"
+            except Exception as e:
+                print(f"[Booking] Gagal ambil noAntrian: {e}")
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
             tiket = (
                 "✅ *Pendaftaran Berhasil!* 🎉\n\n"
                 "🎫 *Konfirmasi Kunjungan*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 Nama Pasien  : *{nama}*\n"
-                f"📅 Waktu           : {tgl_display}\n"
-                f"🔢 No. Antrian   : *{nomor_antrian}*\n"
+                f"👤 Nama Pasien         : *{nama}*\n"
+                f"📅 Waktu                   : {tgl_display}\n"
+                f"🔢 No. Antrian          : *{nomor_antrian}*\n"
+                f"🕐 Jam Praktik Dokter: {jam_praktik}\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "📍 Jl. Magelang No. 88, Sinduadi, Sleman\n"
                 "⚠️ Mohon datang *15 menit lebih awal*.\n"
@@ -640,17 +660,18 @@ class ActionBookingConfirm(Action):
             print(f"[Booking Warning] API gagal, masuk fallback. Result: {result}")
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
             dispatcher.utter_message(text=(
-                "✅ *Pendaftaran Disimpan* 🎉\n\n"
+                "⚠️ Maaf, terjadi kendala saat memproses pendaftaran Anda.\n\n"
                 "🎫 *Tiket Antrean Bot*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 Nama Pasien  : *{nama}*\n"
                 f"📅 Waktu           : {tgl_display}\n"
                 f"🔢 No. Antrian   : *S-01 (Konfirmasi Manual)*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                "⚠️ Data Anda telah disimpan. Admin akan segera memverifikasi via WhatsApp. Terima kasih! 🙏"
+                "⚠️ Data Anda sudah tercatat. Admin klinik akan segera menghubungi Anda via WhatsApp untuk konfirmasi. 🙏"
             ))
+            api_post(f"/api/handoff/{no_hp}", {})
             booking_id_final = f"FALLBACK-{datetime.now().strftime('%H%M%S')}"
-
+ 
         return [
             ActiveLoop(None),
             SlotSet("requested_slot", None),
@@ -662,7 +683,7 @@ class ActionBookingConfirm(Action):
             SlotSet("jadwalId", None),
             FollowupAction("action_listen"),
         ]
-
+ 
 class ActionBookingCancel(Action):
     def name(self) -> Text:
         return "action_booking_cancel"
