@@ -401,6 +401,52 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Simulasi mengetik sebelum mengirim pesan (typing indicator + dynamic delay)
+ *
+ * Menampilkan status "typing..." di WhatsApp penerima dan menunggu
+ * selama durasi yang dihitung berdasarkan panjang pesan.
+ *
+ * @param {string}  chatId        - Chat ID tujuan (@c.us / @lid)
+ * @param {string}  text          - Teks pesan (untuk hitung delay)
+ * @param {object}  opts          - Opsi konfigurasi delay
+ * @param {number}  opts.baseMin  - Delay dasar minimum (ms) — waktu "berpikir"
+ * @param {number}  opts.baseMax  - Delay dasar maximum (ms)
+ * @param {number}  opts.msPerChar - Delay per karakter (simulasi kecepatan ketik)
+ * @param {number}  opts.minTotal - Total delay minimum (ms)
+ * @param {number}  opts.maxTotal - Total delay maximum (ms)
+ */
+async function simulateTyping(chatId, text = '', opts = {}) {
+    const {
+        baseMin  = 1500,
+        baseMax  = 2500,
+        msPerChar = 25,
+        minTotal = 2000,
+        maxTotal = 7000,
+    } = opts
+
+    // 1. Hitung delay dinamis: waktu berpikir + kecepatan mengetik
+    const baseDelay = Math.floor(Math.random() * (baseMax - baseMin)) + baseMin
+    let delayMs = baseDelay + (text.length * msPerChar)
+
+    // 2. Clamp agar tetap wajar
+    delayMs = Math.min(maxTotal, Math.max(minTotal, delayMs))
+
+    console.log(`[WA] Typing indicator aktif selama ${delayMs}ms ke ${chatId} (${text.length} chars)`)
+
+    // 3. Aktifkan status "typing..." di WhatsApp penerima
+    try {
+        const chat = await client.getChatById(chatId)
+        await chat.sendStateTyping()
+    } catch (err) {
+        // Jika gagal aktifkan typing (misal chat belum ada), tetap lanjut kirim
+        console.warn(`[WA] Gagal aktifkan typing untuk ${chatId}: ${err.message}`)
+    }
+
+    // 4. Tunggu sesuai delay yang dihitung
+    await delay(delayMs)
+}
+
 function getMediaMethod(mimeType) {
     if (!mimeType) return 'document'
     if (mimeType.startsWith('image/')) return 'image'
@@ -625,10 +671,8 @@ app.post('/send-message', async (req, res) => {
     try {
         const chatId = resolveChatId(target)
 
-        // Delay acak 2-5 detik sebelum kirim (anti-ban)
-        const delayMs = Math.floor(Math.random() * 3000) + 2000
-        console.log(`[WA] Delay ${delayMs}ms sebelum kirim teks ke ${target}...`)
-        await delay(delayMs)
+        // Typing indicator + delay dinamis berdasarkan panjang pesan
+        await simulateTyping(chatId, message)
 
         await client.sendMessage(chatId, message)
         console.log(`[WA] Pesan teks terkirim ke ${target}`)
