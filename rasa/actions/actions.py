@@ -371,6 +371,7 @@ class ActionHandleUntukSiapa(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         intent = tracker.latest_message.get("intent", {}).get("name")
         
+        # Untuk diri sendiri
         if intent == "intent_diri_sendiri":
             sender_id = tracker.sender_id
             patient_data = get_patient_by_phone(sender_id)
@@ -386,8 +387,25 @@ class ActionHandleUntukSiapa(Action):
                 SlotSet("booking_step", "form_baru"),
                 ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
             ]
+        
+        # Untuk orang lain 
         else:
             sender_id = tracker.sender_id
+            dispatcher.utter_message(text=(
+                "Halo Bapak/Ibu 😊\n\n"
+                "Mohon lengkapi data berikut untuk pendaftaran pasien:\n\n"
+                "Nama Lengkap:\n"
+                "NIK:\n"
+                "Tanggal Lahir (DD/MM/YYYY):\n"
+                "Keluhan:\n"
+                "Tanggal Kunjungan:\n\n"
+                "Terima kasih 🙏"
+            ))
+            dispatcher.utter_message(text=(
+                "Halo! Admin kami akan segera membalas pesanmu. "
+                "Mohon tunggu sebentar ya 🙏\n"
+                "Bot sementara tidak aktif."
+            ))
             api_post(f"/api/handoff/{sender_id}", {})
             return [
                 ActiveLoop(None),
@@ -400,6 +418,7 @@ class ActionHandleUntukSiapa(Action):
                 SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("jadwalId", None)
             ]
+
 
 # ------------------------------------------------------
 #  Fungsi Validator Booking
@@ -614,18 +633,21 @@ class ActionBookingConfirm(Action):
         result = api_post("/api/appointment/appointments", payload)
         print(f"[DEBUG] Respon API: {result}")
  
-        if result and result.get("status") == "ok":
-            # GET noAntrian dan jam praktik dari /api/appointment
+        if result is not None:
+            # GET noAntrian dan jam praktik via by-phone endpoint
             nomor_antrian = "Akan diberikan di klinik"
             jam_praktik = "-"
             booking_id = f"SC-{datetime.now().strftime('%m%d%H%M')}"
             try:
-                antrian_result = api_get("/api/appointment", params={"tanggal": tgl_kunjungan})
+                antrian_result = api_get(
+                    "/api/appointment/appointments/by-phone",
+                    params={"phone_number": no_hp}
+                )
                 if antrian_result and antrian_result.get("success"):
-                    antrian_list = antrian_result.get("data", {}).get("data", [])
+                    antrian_list = antrian_result.get("data", [])
                     milik_pasien = [
                         a for a in antrian_list
-                        if a.get("jadwalId") == str(jadwal_id)
+                        if a.get("tanggalKunjungan", "").startswith(tgl_kunjungan)
                     ]
                     if milik_pasien:
                         terbaru = max(milik_pasien, key=lambda x: x.get("createdAt", ""))
