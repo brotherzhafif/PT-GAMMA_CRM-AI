@@ -338,31 +338,49 @@ class ActionStartBooking(Action):
     def name(self) -> Text:
         return "action_start_booking"
 
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+    def run(self, dispatcher, tracker, domain):
         sender_id = tracker.sender_id
         patient_data = get_patient_by_phone(sender_id)
-        
         nik = patient_data.get("nik")
-        
-        # Mask NIK for security & confirmation
         masked_nik = "Tidak Terdeteksi"
         if nik:
             nik_str = str(nik).strip()
             if len(nik_str) >= 12:
-                # E.g. 3174********9012
                 masked_nik = f"{nik_str[:4]}********{nik_str[-4:]}"
             elif len(nik_str) > 4:
                 masked_nik = f"{'*' * (len(nik_str) - 4)}{nik_str[-4:]}"
             else:
                 masked_nik = nik_str
-        
-        dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=masked_nik)
+
+        dispatcher.utter_message(response="utter_tanya_bpjs")
         return [
-            SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-            SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
-            SlotSet("booking_step", "tanya_untuk_siapa"), SlotSet("booking_untuk_siapa", None)
+            SlotSet("booking_nama", None), SlotSet("booking_nik", None),
+            SlotSet("booking_tgl_lahir", None), SlotSet("booking_keluhan", None),
+            SlotSet("booking_tgl_kunjungan", None), SlotSet("booking_is_bpjs", None),
+            SlotSet("booking_step", "tanya_bpjs"), SlotSet("booking_untuk_siapa", None)
         ]
 
+class ActionHandleBpjs(Action):
+    def name(self) -> Text:
+        return "action_handle_bpjs"
+
+    def run(self, dispatcher, tracker, domain):
+        intent = tracker.latest_message.get("intent", {}).get("name")
+
+        if intent == "booking_pengguna_bpjs":
+            dispatcher.utter_message(response="utter_bpjs_redirect_jkn")
+            return [
+                SlotSet("booking_is_bpjs", "true"),
+                SlotSet("booking_step", "selesai"),
+            ]
+
+        # Non-BPJS → tanya untuk siapa
+        dispatcher.utter_message(response="utter_ask_booking_untuk_siapa",
+                                  nik=tracker.get_slot("booking_nik") or "Tidak Terdeteksi")
+        return [
+            SlotSet("booking_is_bpjs", "false"),
+            SlotSet("booking_step", "tanya_untuk_siapa"),
+        ]
 
 class ActionHandleUntukSiapa(Action):
     def name(self) -> Text:
@@ -398,14 +416,16 @@ class ActionHandleUntukSiapa(Action):
                 "NIK:\n"
                 "Tanggal Lahir (DD/MM/YYYY):\n"
                 "Keluhan:\n"
+                "Poliklinik:\n"
                 "Tanggal Kunjungan:\n\n"
                 "Terima kasih 🙏"
             ))
-            dispatcher.utter_message(text=(
-                "Halo! Admin kami akan segera membalas pesanmu. "
-                "Mohon tunggu sebentar ya 🙏\n"
-                "Bot sementara tidak aktif."
-            ))
+            # Sementara di hide dulu karena double respon
+            #dispatcher.utter_message(text=(
+               # "Halo! Admin kami akan segera membalas pesanmu. "
+                #"Mohon tunggu sebentar ya 🙏\n"
+                #"Bot sementara tidak aktif."
+           # ))
             api_post(f"/api/handoff/{sender_id}", {})
             return [
                 ActiveLoop(None),
@@ -671,10 +691,9 @@ class ActionBookingConfirm(Action):
                 f"🕐 Jam Praktik Dokter: {jam_praktik}\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "📍 Jl. Magelang No. 88, Sinduadi, Sleman\n"
-                "⚠️ Mohon datang *15 menit lebih awal*.\n"
+                "⚠️ Admin akan memanggil anda *15 menit Sebelum Waktu Pemeriksaan*.\n"
                 "Sampai jumpa di klinik! 🙏\n\n"
                 "_Ketik *reschedule* untuk ganti jadwal_\n"
-                "_Ketik *batalkan* untuk membatalkan_"
             )
             dispatcher.utter_message(text=tiket)
             booking_id_final = str(booking_id)
@@ -713,6 +732,7 @@ class ActionBookingCancel(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(response="utter_booking_batalkan")
         return [
+            SlotSet("booking_is_bpjs", None),
             SlotSet("booking_nik", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
@@ -732,6 +752,7 @@ class ActionSlotResetBooking(Action):
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         dispatcher.utter_message(text="Baik, mari kita mulai ulang. Silakan periksa data Anda kembali. 😊")
         return [
+            SlotSet("booking_is_bpjs", None),
             SlotSet("booking_nik", None),
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
@@ -744,6 +765,7 @@ class ActionSlotResetBooking(Action):
         ]
     
 class ActionBookingReschedule(Action):
+
     def name(self) -> Text:
         return "action_booking_reschedule"
 

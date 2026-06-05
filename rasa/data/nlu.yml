@@ -689,9 +689,44 @@ nlu:
       - mau mundurin hari pemeriksaan
       - jadwal booking saya yang kemarin mau diubah harinya
 
-  # =============================================================
-  # LOOKUP — Daftar entitas kamus kaku
-  # =============================================================
+  - intent: booking_pengguna_bpjs
+    examples: |
+      - bpjs
+      - pakai bpjs
+      - saya bpjs
+      - pake bpjs
+      - bpjs dong
+      - iya bpjs
+      - punya bpjs
+      - peserta bpjs
+      - pake jkn
+      - jkn
+      - kartu bpjs
+      - iya pake bpjs
+      - bpjs kak
+      - pakai kartu bpjs
+
+  - intent: booking_pengguna_umum
+    examples: |
+      - umum
+      - tidak pakai bpjs
+      - non bpjs
+      - bayar sendiri
+      - tidak ada bpjs
+      - ga pake bpjs
+      - gak bpjs
+      - umum aja
+      - bayar cash
+      - tidak punya bpjs
+      - tidak bpjs
+      - biasa aja
+      - reguler
+      - non-bpjs
+      - umum kak
+
+  # ------------------------------------------------------------
+  # LOOKUP  Daftar entitas kamus
+  # ------------------------------------------------------------
   - lookup: poli
     examples: |
       - poli umum
@@ -718,9 +753,9 @@ nlu:
       - Sabtu
       - Minggu
 
-  # =============================================================
-  # SYNONYM — Versi Pembersihan Tanpa Mengganggu Tokenizer Form
-  # =============================================================
+  # ------------------------------------------------------------
+  # SYNONYM: Pembersihan Kata Tanpa Mengganggu Tokenizer Form
+  # ------------------------------------------------------------
   - synonym: tidak
     examples: |
       - ga
@@ -867,9 +902,9 @@ nlu:
       - kritis
       - parah banget
 
-  # =============================================================
-  # REGEX — Pola ekspresi reguler
-  # =============================================================
+  # ------------------------------------------------------------
+  # REGEX: Pola ekspresi reguler
+  # ------------------------------------------------------------
   - regex: nomor_antrian
     examples: |
       - \b(nomor|no\.?|nomer|no)\s*(antrian|antri|urut)\b

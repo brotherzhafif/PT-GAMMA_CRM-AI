@@ -1,4 +1,4 @@
-# Log Last Change: 29 Mei 2026
+# Log Last Change: 5 Juni  2026
 version: "3.1"
 
 stories:
@@ -36,15 +36,25 @@ stories:
       - intent: emergency
       - action: utter_emergency
 
-  #=================================================================
-  # Alur-alur pendaftaran pasien baru dan lama
-  #=================================================================
+  #---------------------------------------------------
+  # Alur-alur pendaftaran
+  #----------------------------------------------------
 
-  # ── Skenario 1: Diri Sendiri Hingga Konfirmasi Sukses ───────────
+  # ── Skenario BPJS: Redirect ke Mobile JKN ────────────────────────
+  - story: booking - pasien BPJS redirect JKN
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pengguna_bpjs
+      - action: action_handle_bpjs
+
+  # ── Skenario 1: Non-BPJS Diri Sendiri Hingga Konfirmasi Sukses ───
   - story: booking diri sendiri - konfirmasi sukses
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
       - intent: intent_diri_sendiri
       - action: action_handle_untuk_siapa
       - action: booking_form_baru
@@ -57,11 +67,13 @@ stories:
       - intent: booking_konfirmasi
       - action: action_booking_confirm
 
-  # ── Skenario 5: Diri Sendiri Mau Ubah Data Pasca Review ─────────
+  # ── Skenario 2: Non-BPJS Diri Sendiri Ubah Data Pasca Review ─────
   - story: booking diri sendiri - ubah data pasca review
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
       - intent: intent_diri_sendiri
       - action: action_handle_untuk_siapa
       - action: booking_form_baru
@@ -75,19 +87,23 @@ stories:
       - action: action_slot_reset_booking
       - action: action_start_booking
 
-  # ── Skenario: Orang Lain Handoff ─────────
+  # ── Skenario 3: Non-BPJS Orang Lain Handoff ──────────────────────
   - story: booking orang lain - handoff
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
       - intent: intent_orang_lain
       - action: action_handle_untuk_siapa
 
-  # ── Skenario 3: Batalkan di tengah booking ───────────────────────
+  # ── Skenario 4: Batalkan di tengah form ──────────────────────────
   - story: booking - batalkan di form
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
       - intent: intent_diri_sendiri
       - action: action_handle_untuk_siapa
       - action: booking_form_baru
@@ -96,17 +112,37 @@ stories:
       - action: action_booking_cancel
       - active_loop: null
 
+  # ── Skenario 5: Batalkan saat tanya BPJS ─────────────────────────
+  - story: booking - batalkan saat tanya bpjs
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_batalkan
+      - action: action_booking_cancel
+
+  # ── Skenario 6: Batalkan saat tanya untuk siapa ───────────────────
+  - story: booking - batalkan saat tanya untuk siapa
+    steps:
+      - intent: intent_ingin_booking
+      - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
+      - intent: booking_batalkan
+      - action: action_booking_cancel
+
   # ── Skenario 7: Reschedule setelah booking selesai ───────────────
   - story: Reschedule booking
     steps:
       - intent: booking_reschedule
       - action: action_booking_reschedule
 
-  # ── Skenario 8: Booking lalu minta admin ─────────────────────────
+  # ── Skenario 8: Booking diri sendiri lalu minta admin ────────────
   - story: booking diri sendiri lalu minta admin
     steps:
       - intent: intent_ingin_booking
       - action: action_start_booking
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
       - intent: intent_diri_sendiri
       - action: action_handle_untuk_siapa
       - action: booking_form_baru

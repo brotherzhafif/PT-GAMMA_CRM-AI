@@ -1,4 +1,4 @@
-# Log Last Change: 28 Mei 2026
+# Log Last Change: 5 Juni 2026
 version: "3.1"
 
 intents:
@@ -26,6 +26,8 @@ intents:
   - booking_ubah_data
   - booking_batalkan
   - booking_reschedule
+  - booking_pengguna_bpjs
+  - booking_pengguna_umum
 
 entities:
   - nik
@@ -65,6 +67,17 @@ slots:
     influence_conversation: false
     mappings:
       - type: custom
+
+  booking_is_bpjs:
+    type: text
+    influence_conversation: true
+    mappings:
+      - type: from_intent
+        intent: booking_pengguna_bpjs
+        value: "true"
+      - type: from_intent
+        intent: booking_pengguna_umum
+        value: "false"
 
   booking_nama:
     type: text
@@ -145,6 +158,7 @@ slots:
   booking_step:
     type: categorical
     values:
+      - tanya_bpjs
       - tanya_untuk_siapa
       - form_baru
       - review
@@ -174,6 +188,7 @@ actions:
   - action_fetch_queue
   - action_start_booking
   - action_handle_untuk_siapa
+  - action_handle_bpjs
   - action_booking_form_baru_submit
   - action_booking_review
   - action_booking_confirm
@@ -184,15 +199,14 @@ actions:
 
 responses:
   utter_greet:
-    - text: "Halo! 👋 Saya Hana, asisten virtual Klinik SmartClinic. Ada yang bisa saya bantu hari ini? Anda bisa tanya jadwal dokter, cek antrian, atau informasi layanan klinik."
-    - text: "Selamat datang di Klinik SmartClinic! Saya Hana, asisten virtual yang siap membantu Anda 24/7. Silakan tanyakan apa saja seputar layanan klinik kami. 😊"
+    - text: "Halo! 👋 Saya Hana, asisten virtual Klinik SmartClinic. \n Ada yang bisa saya bantu hari ini? Anda bisa tanya:\n *Jadwal Dokter*, \n*Cek Antrian*, *Biaya Layanan*, *Booking Poliklinik*, \natau *informasi layanan klinik lainnya*."
 
   utter_goodbye:
     - text: "Terima kasih telah menghubungi Klinik SmartClinic. Semoga sehat selalu! 🙏 Jangan ragu untuk menghubungi kami lagi jika ada pertanyaan."
     - text: "Sampai jumpa! Semoga hari Anda menyenangkan. Jika butuh bantuan lagi, Hana selalu siap membantu. 😊"
 
   utter_services:
-    - text: "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n*Poliklinik:*\n🩺 Poli Umum\n👶 Poli Anak (Sp.A)\n🫀 Poli Penyakit Dalam (Sp.PD)\n🤰 Poli Kandungan & Kebidanan (Sp.OG)\n✨ Poli Kulit & Kelamin (Sp.KK)\n👂 Poli THT (Sp.THT)\n👁️ Poli Mata (Sp.M)\n🧠 Poli Saraf (Sp.S)\n🥗 Poli Gizi Klinik (Sp.GK)\n👩 Poli KIA/KB\n🚨 UGD\n📋 Medical Check-Up (MCU)\n\n*Layanan Penunjang:*\n🔬 Laboratorium Klinik\n🩻 Radiologi (Rontgen/X-Ray)\n❤️ EKG (Rekam Jantung)\n\n*Layanan Khusus:*\n💉 Vaksinasi\n📊 Program Prolanis (BPJS)\n🏠 Home Visit\n📄 Surat Keterangan Sehat\n🧪 Rapid Test & Swab Antigen\n\nAda layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
+    - text: "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n*Poliklinik:*\n🩺 Poli Umum\n🫀 Poli Penyakit Dalam (Sp.PD)\n🚨 UGD\n📋 Medical Check-Up (MCU)\n\n*Layanan Penunjang:*\n🔬 Laboratorium Klinik\n🩻 Radiologi (Rontgen/X-Ray)\n❤️ EKG (Rekam Jantung)\n\n*Layanan Khusus:*\n💉 Vaksinasi\n📊 Program Prolanis (BPJS)\n🏠 Home Visit\n📄 Surat Keterangan Sehat\n🧪 Rapid Test & Swab Antigen\n\nAda layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
 
   utter_location:
     - text: "📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284\n🏪 *Patokan:* Sebelah utara UPN Veteran Yogyakarta, berhadapan dengan Indomaret\n🗺️ *Google Maps:* https://maps.google.com/?q=-7.7218,110.3568\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
@@ -222,13 +236,13 @@ responses:
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
 
   utter_ask_booking_untuk_siapa:
-    - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan. Apakah Anda ingin mendaftar untuk *Diri Sendiri* atau untuk *Orang Lain*?"
+    - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan.\n\n Apakah Anda ingin mendaftar untuk: \n*Diri Sendiri* atau untuk *Orang Lain*?"
 
   utter_booking_intro_baru:
     - text: |
         Selamat bergabung di Klinik SmartClinic! 😊
 
-        Karena ini kunjungan pertama Anda, mohon lengkapi data berikut. Saya akan tanya satu per satu ya.
+        Mohon lengkapi data berikut. Saya akan tanya satu per satu ya.
 
   utter_ask_booking_nama:
     - text: "📝 *Nama Lengkap* (sesuai KTP):\nSilakan ketik nama lengkap Anda."
@@ -267,6 +281,12 @@ responses:
         🕐 Senin–Sabtu, 08.00–17.00 WIB
 
         Atau ketik *admin* untuk dihubungkan langsung. 🙏
+
+  utter_tanya_bpjs:
+    - text: "Sebelum mulai pendaftaran, apakah Bapak/Ibu menggunakan *BPJS* atau *Umum* (non-BPJS)?\n\n_(Balas: *BPJS* atau *Umum*)_"
+
+  utter_bpjs_redirect_jkn:
+    - text: "Untuk peserta BPJS, pendaftaran dapat dilakukan melalui aplikasi *Mobile JKN* 📱\n\nLangkah-langkahnya:\n1. Buka aplikasi *Mobile JKN*\n2. Pilih menu *Pendaftaran Pelayanan*\n3. Pilih *Klinik SmartClinic* sebagai faskes\n4. Pilih jadwal dan dokter yang tersedia\n\nJika mengalami kendala, ketik *admin* untuk bantuan langsung. 🙏"
 
 session_config:
   session_expiration_time: 60

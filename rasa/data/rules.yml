@@ -49,7 +49,7 @@ rules:
       - action: utter_emergency
       - active_loop: null
 
-  # ── JANGKAR SUBMIT FORM (Hanya untuk mematikan form) ──
+  # SUBMIT FORM (Hanya untuk mematikan form)
   - rule: Submit booking_form_baru selesai
     condition:
       - active_loop: booking_form_baru
@@ -89,7 +89,7 @@ rules:
       - intent: booking_batalkan
       - action: action_booking_cancel
 
-  # ── BREAK-OUT: User minta booking baru saat form sedang aktif ──
+  # BREAK-OUT: User minta booking baru saat form sedang aktif
   - rule: Booking baru saat form_baru aktif
     condition:
       - active_loop: booking_form_baru
@@ -98,3 +98,20 @@ rules:
       - action: action_booking_cancel
       - active_loop: null
       - action: action_start_booking
+
+  # BPJS Rules
+  - rule: Handle jawaban BPJS
+    condition:
+      - slot_was_set:
+          - booking_step: tanya_bpjs
+    steps:
+      - intent: booking_pengguna_bpjs
+      - action: action_handle_bpjs
+
+  - rule: Handle jawaban non-BPJS
+    condition:
+      - slot_was_set:
+          - booking_step: tanya_bpjs
+    steps:
+      - intent: booking_pengguna_umum
+      - action: action_handle_bpjs
