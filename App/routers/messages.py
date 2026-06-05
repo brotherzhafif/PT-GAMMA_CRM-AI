@@ -14,6 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from App.config import supabase
 from App.helpers import _require_supabase
+from App.wa_service_client import wa_service_request
 
 router = APIRouter(prefix="/api/messages", tags=["Unified Chat"])
 
@@ -154,22 +155,23 @@ async def get_latest_messages(request: Request):
     },
 )
 async def get_messages_by_number(request: Request, phone_number: str, limit: int = 50):
-    _require_supabase()
-
     async def generator():
-        # 1. Ambil data awal (kita biarkan desc=True untuk limitasi data terbaru di database)
-        result = supabase.table("messages").select("*") \
-            .eq("sender_number", phone_number) \
-            .order("created_at", desc=True).limit(limit).execute()
-
-        # Kita balik urutan datanya di Python biar kronologis sejak awal (Lama -> Baru)
-        initial_data = list(reversed(result.data)) if result.data else []
+        # 1. Ambil data awal langsung dari wa-service (wwebjs)
+        initial_data = []
+        try:
+            resp = wa_service_request(
+                "GET", "/messages", params={"target": phone_number, "limit": limit}, timeout=10.0
+            )
+            if resp.status_code == 200:
+                initial_data = resp.json().get("data", [])
+        except Exception as e:
+            print(f"[SSE] Error fetching initial messages from wwebjs: {e}")
 
         # Kirim data awal ke frontend dengan event 'initial'
         yield {"event": "initial", "data": json.dumps(initial_data)}
 
         # Simpan state ID pesan yang sudah diketahui
-        known_ids = {r["id"] for r in result.data} if result.data else set()
+        known_ids = {m["id"] for m in initial_data} if initial_data else set()
 
         while True:
             if await request.is_disconnected():
@@ -177,27 +179,28 @@ async def get_messages_by_number(request: Request, phone_number: str, limit: int
                 
             await asyncio.sleep(2)
             
-            # Cek apakah ada pesan baru masuk
-            check_new = supabase.table("messages").select("id") \
-                .eq("sender_number", phone_number) \
-                .order("created_at", desc=True).limit(5).execute()
+            # Cek apakah ada pesan baru masuk via polling ke wa-service
+            current_data = []
+            try:
+                resp = wa_service_request(
+                    "GET", "/messages", params={"target": phone_number, "limit": limit}, timeout=10.0
+                )
+                if resp.status_code == 200:
+                    current_data = resp.json().get("data", [])
+            except Exception as e:
+                print(f"[SSE] Error polling messages from wwebjs: {e}")
+                yield {"event": "heartbeat", "data": "null"}
+                continue
                 
-            has_new = any(m["id"] not in known_ids for m in check_new.data) if check_new.data else False
+            current_ids = {m["id"] for m in current_data} if current_data else set()
+            has_new = not current_ids.issubset(known_ids) if current_ids else False
 
             if has_new:
-                # 2. Jika terdeteksi ada pesan baru, tarik riwayat utuh terupdate sesuai limit
-                updated_result = supabase.table("messages").select("*") \
-                    .eq("sender_number", phone_number) \
-                    .order("created_at", desc=True).limit(limit).execute()
-                
                 # Update daftar known_ids
-                known_ids = {r["id"] for r in updated_result.data}
-                
-                # Balik urutan agar kronologis (Lama -> Baru)
-                updated_data = list(reversed(updated_result.data))
+                known_ids = current_ids
                 
                 # Kirim data utuh menggunakan event 'update' agar frontend merender ulang secara realtime
-                yield {"event": "update", "data": json.dumps(updated_data)}
+                yield {"event": "update", "data": json.dumps(current_data)}
             else:
                 yield {"event": "heartbeat", "data": "null"}
 

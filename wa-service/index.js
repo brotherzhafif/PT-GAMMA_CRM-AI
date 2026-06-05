@@ -571,6 +571,42 @@ app.get('/status', (req, res) => {
 
 
 /**
+ * GET /messages
+ * Ambil riwayat pesan dari chat tertentu di WhatsApp secara langsung (wwebjs).
+ */
+app.get('/messages', async (req, res) => {
+    const { target, limit } = req.query
+    if (!target) {
+        return res.status(400).json({ status: 'error', message: 'target (phone number) wajib diisi' })
+    }
+    if (!isReady) {
+        return res.status(503).json({ status: 'error', message: 'WhatsApp belum terkoneksi.' })
+    }
+    try {
+        const chatId = resolveChatId(target)
+        const chat = await client.getChatById(chatId)
+        const wwebMsgs = await chat.fetchMessages({ limit: parseInt(limit) || 50 })
+        
+        const numericPhone = target.replace(/\D/g, '').replace('@c.us', '').replace('@lid', '')
+        const mappedMsgs = wwebMsgs.map(msg => {
+            return {
+                id: msg.id._serialized,
+                sender_number: numericPhone,
+                message_text: msg.body || '',
+                direction: msg.fromMe ? 'outbound' : 'inbound',
+                source: msg.fromMe ? 'admin' : 'wwebjs',
+                created_at: new Date(msg.timestamp * 1000).toISOString()
+            }
+        })
+        res.json({ status: 'ok', data: mappedMsgs })
+    } catch (err) {
+        console.error(`[WA] Error fetch messages for ${target}:`, err.message)
+        res.status(500).json({ status: 'error', message: err.message })
+    }
+})
+
+
+/**
  * GET /qr
  * Ambil QR code dalam format base64 PNG.
  * Tampilkan di dashboard admin untuk proses scan pertama kali.
