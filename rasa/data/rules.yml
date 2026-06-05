@@ -1,4 +1,4 @@
-# Log Last Change: 29 Mei 2026
+# Log Last Change: 5 Juni 2026
 version: "3.1"
 
 rules:
@@ -99,7 +99,7 @@ rules:
       - active_loop: null
       - action: action_start_booking
 
-  # BPJS Rules
+    # BPJS Rules
   - rule: Handle jawaban BPJS
     condition:
       - slot_was_set:
@@ -115,3 +115,26 @@ rules:
     steps:
       - intent: booking_pengguna_umum
       - action: action_handle_bpjs
+
+  - rule: Setelah handle bpjs tunggu input
+    steps:
+      - action: action_handle_bpjs
+      - action: action_listen
+
+  # Untuk siapa Rules
+  - rule: Handle diri sendiri
+    condition:
+      - slot_was_set:
+          - booking_step: tanya_untuk_siapa
+    steps:
+      - intent: intent_diri_sendiri
+      - action: action_handle_untuk_siapa
+
+  - rule: Handle orang lain
+    condition:
+      - slot_was_set:
+          - booking_step: tanya_untuk_siapa
+    steps:
+      - intent: intent_orang_lain
+      - action: action_handle_untuk_siapa
+      - action: action_listen

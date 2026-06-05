@@ -18,7 +18,8 @@ from typing import Any, Text, Dict, List, Optional
 
 from rasa_sdk import Action, Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
-from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction
+from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction, ConversationPaused
+
 
 # URL Base API FastAPI 
 API_BASE_URL = os.getenv("SMARTCLINIC_API_URL", "https://ai-crm.brotherzhafif.my.id")
@@ -371,12 +372,22 @@ class ActionHandleBpjs(Action):
             dispatcher.utter_message(response="utter_bpjs_redirect_jkn")
             return [
                 SlotSet("booking_is_bpjs", "true"),
-                SlotSet("booking_step", "selesai"),
+                SlotSet("booking_step", None),
             ]
 
         # Non-BPJS → tanya untuk siapa
-        dispatcher.utter_message(response="utter_ask_booking_untuk_siapa",
-                                  nik=tracker.get_slot("booking_nik") or "Tidak Terdeteksi")
+        sender_id = tracker.sender_id
+        patient_data = get_patient_by_phone(sender_id)
+        nik = patient_data.get("nik", "")
+        nik_str = str(nik).strip() if nik else ""
+        if len(nik_str) >= 12:
+            masked_nik = f"{nik_str[:4]}********{nik_str[-4:]}"
+        elif len(nik_str) > 4:
+            masked_nik = f"{'*' * (len(nik_str) - 4)}{nik_str[-4:]}"
+        else:
+            masked_nik = nik_str or "Tidak Terdeteksi"
+
+        dispatcher.utter_message(response="utter_ask_booking_untuk_siapa", nik=masked_nik)
         return [
             SlotSet("booking_is_bpjs", "false"),
             SlotSet("booking_step", "tanya_untuk_siapa"),
@@ -401,12 +412,15 @@ class ActionHandleUntukSiapa(Action):
             
             dispatcher.utter_message(response="utter_booking_intro_baru")
             return [
-                SlotSet("booking_nama", nama), SlotSet("booking_nik", nik), SlotSet("booking_tgl_lahir", dob),
+                SlotSet("booking_nama", nama if nama else None),
+                SlotSet("booking_nik", nik if nik else None),
+                SlotSet("booking_tgl_lahir", dob if dob else None),
                 SlotSet("booking_step", "form_baru"),
-                ActiveLoop("booking_form_baru"), FollowupAction("booking_form_baru")
+                ActiveLoop("booking_form_baru"), 
+                FollowupAction("booking_form_baru")
             ]
         
-        # Untuk orang lain 
+        # Untuk orang lain (Handoff ke Admin)
         else:
             sender_id = tracker.sender_id
             dispatcher.utter_message(text=(
@@ -420,17 +434,16 @@ class ActionHandleUntukSiapa(Action):
                 "Tanggal Kunjungan:\n\n"
                 "Terima kasih 🙏"
             ))
-            # Sementara di hide dulu karena double respon
-            #dispatcher.utter_message(text=(
-               # "Halo! Admin kami akan segera membalas pesanmu. "
-                #"Mohon tunggu sebentar ya 🙏\n"
-                #"Bot sementara tidak aktif."
-           # ))
+            
+            
             api_post(f"/api/handoff/{sender_id}", {})
+            
+            # Return list dengan ConversationPaused dan reset full state pendaftaran
             return [
                 ActiveLoop(None),
-                SlotSet("requested_slot", None),
-                SlotSet("booking_step", None),
+                ConversationPaused(),             
+                SlotSet("booking_step", "selesai"), 
+                SlotSet("konteks_percakapan", None),
                 SlotSet("booking_nik", None),
                 SlotSet("booking_nama", None),
                 SlotSet("booking_tgl_lahir", None),
@@ -438,7 +451,6 @@ class ActionHandleUntukSiapa(Action):
                 SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("jadwalId", None)
             ]
-
 
 # ------------------------------------------------------
 #  Fungsi Validator Booking

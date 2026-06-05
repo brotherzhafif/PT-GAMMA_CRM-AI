@@ -55,12 +55,7 @@ slots:
       - diri sendiri
       - orang lain
     mappings:
-      - type: from_intent
-        intent: intent_diri_sendiri
-        value: diri sendiri
-      - type: from_intent
-        intent: intent_orang_lain
-        value: orang lain
+      - type: custom
 
   jadwalId:
     type: text
@@ -72,12 +67,7 @@ slots:
     type: text
     influence_conversation: true
     mappings:
-      - type: from_intent
-        intent: booking_pengguna_bpjs
-        value: "true"
-      - type: from_intent
-        intent: booking_pengguna_umum
-        value: "false"
+      - type: custom
 
   booking_nama:
     type: text
