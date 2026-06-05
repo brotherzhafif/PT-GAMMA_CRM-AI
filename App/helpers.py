@@ -31,14 +31,24 @@ from App.smartclinic_auth import get_smartclinic_token
 
 def normalize_phone_number(phone_number: str) -> str:
     """Normalize nomor HP ke format 62xxxxxxxxx."""
-    digits = re.sub(r"\D+", "", phone_number or "")
+    # Hapus suffix chat ID WhatsApp jika ada (e.g., @c.us, @g.us, @lid)
+    cleaned_phone = re.sub(r"@[cg]\.us$|@lid$", "", phone_number or "").strip()
+
+    digits = re.sub(r"\D+", "", cleaned_phone)
+
+    if not digits:
+        return "" # Mengembalikan string kosong jika tidak ada digit
 
     if digits.startswith("00"):
         digits = digits[2:]
 
     if digits.startswith("0"):
         digits = f"62{digits[1:]}"
-    elif digits.startswith("8"):
+    elif digits.startswith("8"): # Angka tanpa 0 didepan, dianggap nomor Indo (misal: 812xxxx)
+        digits = f"62{digits}"
+    elif digits.startswith("203"): # Prefix aneh seperti 203517176328348, anggap itu ID Fonnte yang bukan nomor HP
+        return "" # Kembalikan string kosong atau lakukan penanganan error lain jika ini bukan nomor HP valid
+    elif not digits.startswith("62"): # Jika tidak diawali 62 dan tidak diawali 0/8, tambahkan 62
         digits = f"62{digits}"
 
     return digits
