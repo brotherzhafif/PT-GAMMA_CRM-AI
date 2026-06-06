@@ -56,6 +56,9 @@ jobs:
               alpine sh -c "find /data -name 'SingletonLock' -o -name 'SingletonCookie' -o -name 'SingletonSocket' | xargs rm -f" \
               2>/dev/null || true
 
+            echo "🛠️  Registrasi emulator QEMU untuk multi-architecture build..."
+            docker run --rm --privileged tonistiigi/binfmt --install all
+
             echo "🐳 Build ulang image dan restart container..."
             docker compose down
             docker compose up -d --build
