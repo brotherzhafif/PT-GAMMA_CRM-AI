@@ -26,6 +26,7 @@ services:
     image: rasa/rasa:3.6.15-full
     container_name: rasa_server
     platform: linux/amd64
+    user: root
     ports:
       - "5005:5005"
     volumes:
@@ -40,7 +41,6 @@ services:
   action_server:
     image: rasa/rasa-sdk:3.6.2
     container_name: rasa_action_server
-    platform: linux/amd64
     ports:
       - "5055:5055"
     user: root

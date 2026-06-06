@@ -71,3 +71,7 @@ step_by_step_run_guide.md.resolved
 .bob
 AGENTS.md
 qr_new.html
+.playwright-mcp
+
+# Graphify
+graphify-out/
