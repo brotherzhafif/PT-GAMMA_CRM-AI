@@ -1,96 +1,98 @@
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fastapi_chatbot
-    environment:
-      - PYTHONPATH=/app
-    ports:
-      - "5000:5000"
-    volumes:
-      - .:/app
-      - chat_history:/app/chat_history
-      - chat_state:/app/chat_state
-      - handoff_state:/app/handoff_state
-    env_file:
-      - ./.env
-    networks:
-      - hana-network
-    depends_on:
-      - rasa
-      - wa-service
-    restart: unless-stopped
+  services:
+    app:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      container_name: fastapi_chatbot
+      environment:
+        - PYTHONPATH=/app
+      ports:
+        - "5000:5000"
+      volumes:
+        - .:/app
+        - chat_history:/app/chat_history
+        - chat_state:/app/chat_state
+        - handoff_state:/app/handoff_state
+      env_file:
+        - ./.env
+      networks:
+        - hana-network
+      depends_on:
+        - rasa
+        - wa-service
+      restart: unless-stopped
 
-  rasa:
-    image: rasa/rasa:3.6.15-full
-    container_name: rasa_server
-    platform: linux/amd64
-    user: root
-    ports:
-      - "5005:5005"
-    volumes:
-      - ./rasa:/app
-    command: run --enable-api --cors "*" --model models --response-timeout 60
-    networks:
-      - hana-network
-    depends_on:
-      - action_server
-    restart: unless-stopped
+    rasa:
+      image: rasa/rasa:3.6.15-full
+      container_name: rasa_server
+      platform: linux/amd64
+      user: root
+      ports:
+        - "5005:5005"
+      volumes:
+        - ./rasa:/app
+      command: run --enable-api --cors "*" --model models --response-timeout 60
+      networks:
+        - hana-network
+      depends_on:
+        - action_server
+      restart: unless-stopped
 
-  action_server:
-    image: rasa/rasa-sdk:3.6.2
-    container_name: rasa_action_server
-    platform: linux/amd64
-    ports:
-      - "5055:5055"
-    user: root
-    volumes:
-      - ./rasa/actions:/app/actions
-    env_file:
-      - ./.env
-    entrypoint: []
-    command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
-    networks:
-      - hana-network
-    restart: unless-stopped
+    action_server:
+      image: rasa/rasa-sdk:3.6.2
+      container_name: rasa_action_server
+      platform: linux/amd64
+      ports:
+        - "5055:5055"
+      user: root
+      volumes:
+        - ./rasa/actions:/app/actions
+      env_file:
+        - ./.env
+      entrypoint: []
+      command: sh -c "pip install requests && python -m rasa_sdk --actions actions"
+      networks:
+        - hana-network
+      restart: unless-stopped
 
-  wa-service:
-    build:
-      context: ./wa-service
-      dockerfile: Dockerfile
-    container_name: wa_service
-    environment:
-      - TZ=Asia/Jakarta
-      - PORT=3000
-    ports:
-      # Hanya expose ke localhost — tidak perlu akses dari luar
-      - "127.0.0.1:3001:3000"
-    volumes:
-      # Session WA disimpan persistent agar tidak perlu scan QR ulang setelah restart
-      - wa_session:/app/.wwebjs_auth
-      - chat_files:/app/chat_files
-    networks:
-      - hana-network
-    restart: unless-stopped
+    wa-service:
+      build:
+        context: ./wa-service
+        dockerfile: Dockerfile
+      container_name: wa_service
+      environment:
+        - TZ=Asia/Jakarta
+        - PORT=3000
+      ports:
+        # Hanya expose ke localhost — tidak perlu akses dari luar
+        - "127.0.0.1:3001:3000"
+      volumes:
+        # Session WA disimpan persistent agar tidak perlu scan QR ulang setelah restart
+        - wa_session:/app/.wwebjs_auth
+        - chat_files:/app/chat_files
+      networks:
+        - hana-network
+      restart: unless-stopped
 
-  dozzle:
-    image: amir20/dozzle:latest
-    container_name: dozzle_log_viewer
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    ports:
-      - "8080:8080"
-    networks:
-      - hana-network
+    dozzle:
+      image: amir20/dozzle:latest
+      container_name: dozzle_log_viewer
+      environment:
+        DOZZLE_FILTER: "label=com.docker.compose.project=smartclinic"
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+      ports:
+        - "8080:8080"
+      networks:
+        - hana-network
 
-networks:
-  hana-network:
-    driver: bridge
+  networks:
+    hana-network:
+      driver: bridge
 
-volumes:
-  chat_history:
-  chat_state:
-  handoff_state:
-  wa_session: # Persistent WA session
-  chat_files:
+  volumes:
+    chat_history:
+    chat_state:
+    handoff_state:
+    wa_session: # Persistent WA session
+    chat_files:
