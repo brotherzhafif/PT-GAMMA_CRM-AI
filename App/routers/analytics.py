@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -61,13 +61,15 @@ def _window(range_key: str) -> tuple[datetime, datetime, datetime]:
     return previous_start, current_start, now
 
 
-def _fetch_messages(start_at: datetime, end_at: datetime) -> list[dict]:
+def _fetch_messages(start_at: date, end_at: date) -> list[dict]:
     _require_supabase()
+    start_datetime = datetime.combine(start_at, datetime.min.time(), tzinfo=timezone.utc)
+    end_datetime = datetime.combine(end_at, datetime.min.time(), tzinfo=timezone.utc)
     response = (
         supabase.table("messages")
         .select("sender_number, message_text, direction, source, created_at")
-        .gte("created_at", _as_iso(start_at))
-        .lt("created_at", _as_iso(end_at))
+        .gte("created_at", _as_iso(start_datetime))
+        .lt("created_at", _as_iso(end_datetime))
         .order("created_at", desc=False)
         .execute()
     )

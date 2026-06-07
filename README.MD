@@ -57,6 +57,8 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
   - `users.py` - Manajemen user internal untuk admin (`/api/users`).
   - `activity.py` - Audit log, notifications, dan login history (`/api/activity`, `/api/activity/notifications`, `/api/activity/audit`, `/api/activity/logins`).
   - `status.py` - Helper endpoints menuju wa-service dan pengecekan status token SmartClinic.
+- `analytics.py` - Endpoint untuk mengambil data analitik pesan dengan filter tanggal.
+
 
 - **SmartClinic RME Integration** (lokasi: `App/smartclinic_auth.py`)
   - Semua request ke SmartClinic RME menggunakan Bearer token dari `get_smartclinic_token()`.
