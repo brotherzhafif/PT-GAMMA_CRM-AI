@@ -371,7 +371,7 @@ def webhook(
             
             if rasa_result["intent"] == "goodbye":
                 set_session_state(no_hp, "waiting_feedback")
-                reply += "\n\nDalam skala 1-5 bagaimana pelayanan kami?\nApakah ada ulasan atau komentar tambahan?"
+                reply += "\n\nDalam skala 1-5, bagaimana pelayanan kami? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas).\nApakah ada ulasan atau komentar tambahan?"
             
             # Rasa mendeteksi intent 'emergency' ATAU keyword terpicu
             if rasa_result["intent"] == "emergency" or (is_emergency_keyword and not rasa_form):

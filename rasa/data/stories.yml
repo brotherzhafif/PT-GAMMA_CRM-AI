@@ -10,7 +10,6 @@ stories:
       - action: action_fetch_schedule
       - intent: goodbye
       - action: utter_goodbye
-      - action: utter_minta_rating
 
   - story: greet and check queue
     steps:
@@ -20,7 +19,6 @@ stories:
       - action: action_fetch_queue
       - intent: goodbye
       - action: utter_goodbye
-      - action: utter_minta_rating
 
   - story: ask services then location
     steps:

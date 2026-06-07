@@ -236,9 +236,6 @@ responses:
   utter_default:
     - text: "Mohon maaf, saya kurang memahami pertanyaan Anda. Saya bisa membantu untuk:\n\n1. 📅 Cek jadwal dokter\n2. 🔢 Cek antrian\n3. 🏥 Info layanan klinik\n\nSilakan coba tanyakan kembali."
 
-  utter_minta_rating:
-    - text: "Seberapa puas Anda dengan pelayanan saya hari ini? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas)."
-
   utter_terima_kasih_rating:
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
 
