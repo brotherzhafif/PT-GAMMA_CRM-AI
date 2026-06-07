@@ -7,6 +7,7 @@
 # ======================================================
 
 import re
+import requests
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
@@ -291,6 +292,31 @@ def webhook(
             print(f"[Onboarding] {no_hp} selesai lengkap → data: {onboarding_data}")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
+        # ── Step 1.5: Feedback State ──────────────────────────────────────────
+        if session_state == "waiting_feedback":
+            match = re.search(r'(?<!\d)([1-5])(?!\d)[\s,.\-:]*(.*)', input_pesan, re.DOTALL)
+            if not match:
+                reply = "⚠️ Mohon berikan penilaian dengan angka *1 sampai 5*.\nSilakan balas kembali dengan angka penilaian Anda."
+                print(f"[Feedback] {no_hp} → Rating invalid '{input_pesan}'")
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+            
+            rating = int(match.group(1))
+            ulasan = match.group(2).strip()
+            
+            try:
+                requests.post(
+                    "https://ai-crm.brotherzhafif.my.id/api/feedback",
+                    json={"no_hp": no_hp, "rating": rating, "ulasan": ulasan},
+                    timeout=5
+                )
+                print(f"[Feedback] {no_hp} → API berhasil (Rating: {rating}, Ulasan: {ulasan})")
+            except Exception as e:
+                print(f"[Feedback] {no_hp} → API Error: {e}")
+            
+            set_session_state(no_hp, None)
+            reply = "Terima kasih atas penilaian dan ulasan yang Anda berikan! 🙏😊"
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+
         # ── Step 2: Cek keyword handoff ───────────────────────────────────────
         if is_handoff_keyword(input_pesan):
             start_handoff(no_hp)
@@ -342,6 +368,10 @@ def webhook(
             source = "rasa"
             reset_fallback(no_hp)
             print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_intent} | confidence={rasa_confidence:.4f})")
+            
+            if rasa_result["intent"] == "goodbye":
+                set_session_state(no_hp, "waiting_feedback")
+                reply += "\n\nDalam skala 1-5 bagaimana pelayanan kami?\nApakah ada ulasan atau komentar tambahan?"
             
             # Rasa mendeteksi intent 'emergency' ATAU keyword terpicu
             if rasa_result["intent"] == "emergency" or (is_emergency_keyword and not rasa_form):
