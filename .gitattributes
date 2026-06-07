@@ -1,2 +1,4 @@
 # 1. Reset: Anggap SEMUA file di repo ini tidak perlu dihitung
 * linguist-vendored
+
+App/** -linguist-vendored
