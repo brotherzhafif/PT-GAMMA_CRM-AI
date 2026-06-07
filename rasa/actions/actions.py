@@ -7,7 +7,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   03 Juni 2026
+# Last Change   :   07 Juni 2026
 # ======================================================
 
 import os
@@ -357,7 +357,8 @@ class ActionStartBooking(Action):
         return [
             SlotSet("booking_nama", None), SlotSet("booking_nik", None),
             SlotSet("booking_tgl_lahir", None), SlotSet("booking_keluhan", None),
-            SlotSet("booking_tgl_kunjungan", None), SlotSet("booking_is_bpjs", None),
+            SlotSet("booking_poli", None), SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_jam_praktik", None), SlotSet("booking_is_bpjs", None),
             SlotSet("booking_step", "tanya_bpjs"), SlotSet("booking_untuk_siapa", None)
         ]
 
@@ -498,12 +499,137 @@ class ValidateBookingFormBaru(FormValidationAction):
             pass
         return {"booking_tgl_lahir": parsed}
     
-    def validate_booking_keluhan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
+    def validate_booking_keluhan(
+        self,
+        slot_value: Any,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: Dict[Text, Any]
+    ) -> Dict[Text, Any]:
+        
         keluhan = str(slot_value).strip()
         if len(keluhan) < 3:
             dispatcher.utter_message(text="⚠️ Keluhan terlalu singkat. Mohon ceritakan sedikit lebih detail.")
             return {"booking_keluhan": None}
+        
+        # Fetch poli dari API dan tampilkan daftar
+        result = api_get("/api/schedules")
+        if isinstance(result, list):
+            schedules = result
+        elif isinstance(result, dict):
+            schedules = result.get("data", [])
+        else:
+            schedules = []
+
+        # Extract poli unik
+        poli_list = []
+        seen = set()
+        for s in schedules:
+            poli = s.get("spesialis") or s.get("dokter", {}).get("spesialis", "")
+            if poli and poli not in seen and s.get("isAktif", True) is True:
+                seen.add(poli)
+                poli_list.append(poli)
+
+        if not poli_list:
+            dispatcher.utter_message(text=(
+                "⚠️ Maaf, saat ini tidak ada poliklinik yang tersedia. "
+                "Silakan ketik *admin* untuk bantuan langsung. 🙏"
+            ))
+            return {"booking_keluhan": keluhan, "booking_poli": None}
+
+        daftar = "\n".join([f"{i+1}️⃣ {p}" for i, p in enumerate(poli_list)])
+        dispatcher.utter_message(text=(
+            f"🏥 *Pilih Poliklinik*\n\n"
+            f"Berikut poliklinik yang tersedia:\n{daftar}\n\n"
+            f"Balas dengan nomor atau nama poliklinik yang Anda tuju."
+        ))
         return {"booking_keluhan": keluhan}
+
+    def validate_booking_poli(
+        self,
+        slot_value: Any,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: Dict[Text, Any]
+    ) -> Dict[Text, Any]:
+        
+        input_user = str(slot_value).strip()
+
+        # Fetch schedules
+        result = api_get("/api/schedules")
+        if isinstance(result, list):
+            schedules = result
+        elif isinstance(result, dict):
+            schedules = result.get("data", [])
+        else:
+            schedules = []
+
+        # Extract poli unik dan jadwal per poli
+        poli_list = []
+        seen = set()
+        for s in schedules:
+            poli = s.get("spesialis") or s.get("dokter", {}).get("spesialis", "")
+            if poli and poli not in seen and s.get("isAktif", True) is True:
+                seen.add(poli)
+                poli_list.append(poli)
+
+        if not poli_list:
+            dispatcher.utter_message(text="⚠️ Maaf, tidak ada poliklinik tersedia saat ini. Ketik *admin* untuk bantuan. 🙏")
+            return {"booking_poli": None}
+
+        # Cocokkan nomor wa atau nama
+        poli_dipilih = None
+        if input_user.isdigit():
+            idx = int(input_user) - 1
+            if 0 <= idx < len(poli_list):
+                poli_dipilih = poli_list[idx]
+        else:
+            for p in poli_list:
+                if input_user.lower() in p.lower() or p.lower() in input_user.lower():
+                    poli_dipilih = p
+                    break
+
+        if not poli_dipilih:
+            daftar = "\n".join([f"{i+1}️⃣ {p}" for i, p in enumerate(poli_list)])
+            dispatcher.utter_message(text=(
+                f"⚠️ Poliklinik tidak dikenali. Silakan pilih dari daftar berikut:\n\n"
+                f"{daftar}\n\n"
+                f"Balas dengan nomor atau nama poliklinik yang Anda tuju."
+            ))
+            return {"booking_poli": None}
+
+        # Ambil jadwal hari untuk poli yang dipilih
+        HARI_MAP = {1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat", 6: "Sabtu", 7: "Minggu"}
+        jadwal_poli = {}
+        for s in schedules:
+            poli = s.get("spesialis") or s.get("dokter", {}).get("spesialis", "")
+            if poli != poli_dipilih or s.get("isAktif", True) is not True:
+                continue
+            hari_int = int(s.get("hari", 0))
+            hari_nama = HARI_MAP.get(hari_int, str(hari_int))
+            jam_mulai = s.get("jamMulai", "??")
+            jam_selesai = s.get("jamSelesai", "??")
+            jam = f"{jam_mulai} - {jam_selesai}"
+            if hari_nama not in jadwal_poli:
+                jadwal_poli[hari_nama] = jam
+
+        if not jadwal_poli:
+            dispatcher.utter_message(text=(
+                f"⚠️ Maaf, saat ini belum ada jadwal aktif untuk poliklinik *{poli_dipilih}*.\n"
+                f"Silakan pilih poliklinik lain atau ketik *admin* untuk bantuan langsung. 🙏"
+            ))
+            return {"booking_poli": None}
+
+        jadwal_display = "\n".join([f"📆 {hari} ({jam})" for hari, jam in jadwal_poli.items()])
+        dispatcher.utter_message(text=(
+            f"✅ Poliklinik dipilih: *{poli_dipilih}*\n\n"
+            f"📅 Dokter {poli_dipilih} praktek setiap:\n"
+            f"{jadwal_display}\n\n"
+            f"Balas dengan tanggal kunjungan yang Anda inginkan.\n"
+            f"_(Contoh: 08/06/2026)_"
+        ))
+        return {"booking_poli": poli_dipilih}
+
 
     def validate_booking_tgl_kunjungan(self, slot_value: Any, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> Dict[Text, Any]:
         parsed = parse_tanggal_kunjungan(str(slot_value))
@@ -514,12 +640,14 @@ class ValidateBookingFormBaru(FormValidationAction):
             ))
             return {"booking_tgl_kunjungan": None}
 
+        booking_poli = tracker.get_slot("booking_poli") or ""
+
         try:
             dt = datetime.strptime(parsed, "%Y-%m-%d")
             hari_kunjungan = dt.isoweekday()
+            tgl_display = format_tgl_indonesia(parsed)
 
             result = api_get("/api/schedules")
-            
             if isinstance(result, list):
                 schedules = result
             elif isinstance(result, dict):
@@ -527,37 +655,73 @@ class ValidateBookingFormBaru(FormValidationAction):
             else:
                 schedules = []
 
-            jadwal_id_ditemukan = None
+            jadwal_cocok = None
             for sched in schedules:
+                poli_sched = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "")
                 hari_sched = sched.get("hari")
                 if hari_sched is not None:
                     hari_sched = int(hari_sched)
-
                 is_aktif = sched.get("isAktif", True)
                 tanggal_libur = sched.get("tanggalLibur", [])
-
-                if (hari_sched == hari_kunjungan
+                if (poli_sched == booking_poli
+                        and hari_sched == hari_kunjungan
                         and is_aktif is True
                         and parsed not in tanggal_libur):
-                    jadwal_id_ditemukan = sched.get("id")
+                    jadwal_cocok = sched
                     break
 
-            if jadwal_id_ditemukan:
-                print(f"[DEBUG Form Baru] jadwalId={jadwal_id_ditemukan} (hari={hari_kunjungan})")
+            if jadwal_cocok:
+                jadwal_id = str(jadwal_cocok.get("id"))
+                jam_mulai = jadwal_cocok.get("jamMulai", "")
+                jam_selesai = jadwal_cocok.get("jamSelesai", "")
+                jam_praktik = f"{jam_mulai} - {jam_selesai}" if jam_mulai and jam_selesai else "-"
+                print(f"[DEBUG Form] jadwalId={jadwal_id}, poli={booking_poli}, hari={hari_kunjungan}")
                 return {
                     "booking_tgl_kunjungan": parsed,
-                    "jadwalId": str(jadwal_id_ditemukan)
+                    "jadwalId": jadwal_id,
+                    "booking_jam_praktik": jam_praktik
                 }
-            else:
+
+            HARI_MAP = {1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat", 6: "Sabtu", 7: "Minggu"}
+            hari_tersedia = {}
+            for sched in schedules:
+                poli_sched = sched.get("spesialis") or sched.get("dokter", {}).get("spesialis", "")
+                if poli_sched != booking_poli or sched.get("isAktif", True) is not True:
+                    continue
+                hari_int = int(sched.get("hari", 0))
+                jam_mulai = sched.get("jamMulai", "")
+                jam_selesai = sched.get("jamSelesai", "")
+                if hari_int not in hari_tersedia:
+                    hari_tersedia[hari_int] = f"{jam_mulai} - {jam_selesai}"
+
+            if not hari_tersedia:
                 dispatcher.utter_message(text=(
-                    "⚠️ Maaf, tidak ada dokter yang tersedia pada hari tersebut.\n\n"
-                    "📅 *Rencana Tanggal Kunjungan*:\nSilakan pilih hari lain _(Senin–Jumat)_."
+                    f"⚠️ Maaf, tidak ada jadwal aktif untuk poliklinik *{booking_poli}*.\n"
+                    f"Silakan ketik *admin* untuk bantuan langsung. 🙏"
                 ))
                 return {"booking_tgl_kunjungan": None}
-        except Exception as e:
-            print(f"[Exception Form Baru tgl_kunjungan]: {e}")
-            return {"booking_tgl_kunjungan": parsed}
 
+            rekomendasi = []
+            for hari_int, jam in sorted(hari_tersedia.items()):
+                days_ahead = (hari_int - dt.isoweekday()) % 7
+                if days_ahead == 0:
+                    days_ahead = 7
+                tgl_rekomendasi = (dt + timedelta(days=days_ahead)).strftime("%d/%m/%Y")
+                hari_nama = HARI_MAP.get(hari_int, str(hari_int))
+                rekomendasi.append(f"📆 {hari_nama} — terdekat: *{tgl_rekomendasi}*")
+
+            hari_kunjungan_nama = HARI_MAP.get(hari_kunjungan, str(hari_kunjungan))
+            rekomendasi_display = "\n".join(rekomendasi)
+            dispatcher.utter_message(text=(
+                f"⚠️ Maaf, tidak ada dokter *{booking_poli}* yang praktek "
+                f"pada tanggal {tgl_display}.\n\n"
+                f"Silakan pilih dari jadwal yang tersedia:\n{rekomendasi_display}"
+            ))
+            return {"booking_tgl_kunjungan": None}
+
+        except Exception as e:
+            print(f"[Exception validate_tgl_kunjungan]: {e}")
+            return {"booking_tgl_kunjungan": parsed}
 
 
 class ActionBookingReview(Action):
@@ -571,18 +735,22 @@ class ActionBookingReview(Action):
         if isinstance(tgl_lahir, str) and "T" in tgl_lahir:
             tgl_lahir = tgl_lahir.split("T")[0]
         keluhan = tracker.get_slot("booking_keluhan") or "-"
+        poli = tracker.get_slot("booking_poli") or "-"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or "-"
+        jam_praktik = tracker.get_slot("booking_jam_praktik") or "-"
 
         tgl_display = format_tgl_indonesia(tgl_kunjungan)
         nik_display = f"****-****-****-{nik[-4:]}" if len(nik) == 16 else nik
 
         msg = (
             "📋 *Ringkasan Data Pendaftaran*\n\n"
-            f"👤 Nama        : *{nama}*\n"
-            f"🪪 NIK         : `{nik_display}`\n"
-            f"🎂 Tgl Lahir  : {tgl_lahir}\n"
-            f"🩺 Keluhan    : {keluhan}\n"
-            f"📅 Kunjungan : {tgl_display}\n\n"
+            f"👤 Nama          : *{nama}*\n"
+            f"🪪 NIK            : `{nik_display}`\n"
+            f"🎂 Tgl Lahir    : {tgl_lahir}\n"
+            f"🩺 Keluhan      : {keluhan}\n"
+            f"🏥 Poliklinik   : *{poli}*\n"
+            f"📅 Kunjungan  : {tgl_display}\n"
+            f"🕐 Jam Praktik : {jam_praktik}\n\n"
             "Apakah data di atas sudah benar?\n"
             "Balas *ya* untuk melanjutkan\n"
             "Balas *ubah* untuk memperbaiki"
@@ -611,47 +779,57 @@ class ActionBookingConfirm(Action):
         nama = tracker.get_slot("booking_nama") or "Pasien"
         keluhan = tracker.get_slot("booking_keluhan") or "Pendaftaran via Bot"
         tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or ""
+        poli = tracker.get_slot("booking_poli") or ""
+        jam_praktik_slot = tracker.get_slot("booking_jam_praktik") or "-"
         no_hp = tracker.sender_id
- 
+
         dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
- 
-        # Auto-assign jadwalId dari hari kunjungan
-        jadwal_id = None
-        try:
-            dt = datetime.strptime(tgl_kunjungan, "%Y-%m-%d")
-            hari_kunjungan = dt.isoweekday()
- 
-            schedules_result = api_get("/api/schedules")
-            if schedules_result:
-                if isinstance(schedules_result, list):
-                    jadwal_list = schedules_result
-                else:
-                    jadwal_list = schedules_result.get("data", [])
- 
-                # Filter jadwal aktif di hari yang sama, tidak libur
-                tersedia = [
-                    j for j in jadwal_list
-                    if (j.get("hari") is not None and int(j.get("hari")) == hari_kunjungan)
-                    and j.get("isAktif", True) is True
-                    and tgl_kunjungan not in j.get("tanggalLibur", [])
-                ]
-                if tersedia:
-                    pagi = [j for j in tersedia if j.get("sesi") == "PAGI"]
-                    jadwal_id = (pagi[0] if pagi else tersedia[0]).get("id")
-                    print(f"[Booking] Auto-assign jadwalId={jadwal_id} (hari={hari_kunjungan})")
-        except Exception as e:
-            print(f"[Booking] Gagal auto-assign jadwal: {e}")
- 
+
+        # Gunakan jadwalId dari slot (sudah di-set saat validasi tgl_kunjungan)
+        jadwal_id = tracker.get_slot("jadwalId")
+
+        # Fallback: auto-assign jadwalId filter by poli + hari jika slot kosong
+        if not jadwal_id:
+            try:
+                dt = datetime.strptime(tgl_kunjungan, "%Y-%m-%d")
+                hari_kunjungan = dt.isoweekday()
+
+                schedules_result = api_get("/api/schedules")
+                if schedules_result:
+                    if isinstance(schedules_result, list):
+                        jadwal_list = schedules_result
+                    else:
+                        jadwal_list = schedules_result.get("data", [])
+
+                    tersedia = [
+                        j for j in jadwal_list
+                        if (j.get("hari") is not None and int(j.get("hari")) == hari_kunjungan)
+                        and (j.get("spesialis") or j.get("dokter", {}).get("spesialis", "")) == poli
+                        and j.get("isAktif", True) is True
+                        and tgl_kunjungan not in j.get("tanggalLibur", [])
+                    ]
+                    if tersedia:
+                        pagi = [j for j in tersedia if j.get("sesi") == "PAGI"]
+                        jadwal = pagi[0] if pagi else tersedia[0]
+                        jadwal_id = jadwal.get("id")
+                        jam_m = jadwal.get("jamMulai", "")
+                        jam_s = jadwal.get("jamSelesai", "")
+                        if jam_m and jam_s:
+                            jam_praktik_slot = f"{jam_m} - {jam_s}"
+                        print(f"[Booking] Fallback jadwalId={jadwal_id} (poli={poli}, hari={hari_kunjungan})")
+            except Exception as e:
+                print(f"[Booking] Gagal fallback jadwal: {e}")
+
         if not jadwal_id:
             dispatcher.utter_message(text=(
                 "⚠️ Maaf, tidak ada jadwal dokter yang tersedia pada tanggal tersebut.\n\n"
-                "Silakan pilih hari lain (Senin–Jumat) atau ketik *admin* untuk bantuan langsung. 🙏"
+                "Silakan pilih hari lain atau ketik *admin* untuk bantuan langsung. 🙏"
             ))
             return [
                 SlotSet("booking_tgl_kunjungan", None),
                 SlotSet("booking_step", "review"),
             ]
- 
+
         payload = {
             "phone_number": str(no_hp),
             "jadwalId": str(jadwal_id),
@@ -660,15 +838,14 @@ class ActionBookingConfirm(Action):
             "jenisKunjunganBpjs": "NORMAL",
             "noRujukanFktp": ""
         }
- 
+
         print(f"[DEBUG] Payload Booking: {payload}")
         result = api_post("/api/appointment/appointments", payload)
         print(f"[DEBUG] Respon API: {result}")
- 
+
         if result is not None:
-            # GET noAntrian dan jam praktik via by-phone endpoint
             nomor_antrian = "Akan diberikan di klinik"
-            jam_praktik = "-"
+            jam_praktik = jam_praktik_slot
             booking_id = f"SC-{datetime.now().strftime('%m%d%H%M')}"
             try:
                 antrian_result = api_get(
@@ -692,15 +869,17 @@ class ActionBookingConfirm(Action):
                             jam_praktik = f"{jam_mulai} - {jam_selesai}"
             except Exception as e:
                 print(f"[Booking] Gagal ambil noAntrian: {e}")
+
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
             tiket = (
                 "✅ *Pendaftaran Berhasil!* 🎉\n\n"
                 "🎫 *Konfirmasi Kunjungan*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 Nama Pasien         : *{nama}*\n"
-                f"📅 Waktu                   : {tgl_display}\n"
-                f"🔢 No. Antrian          : *{nomor_antrian}*\n"
-                f"🕐 Jam Praktik Dokter: {jam_praktik}\n"
+                f"👤 Nama Pasien            : *{nama}*\n"
+                f"🏥 Poliklinik                  : *{poli}*\n"
+                f"📅 Waktu                        : {tgl_display}\n"
+                f"🔢 No. Antrian             : *{nomor_antrian}*\n"
+                f"🕐 Jam Praktik Dokter : {jam_praktik}\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "📍 Jl. Magelang No. 88, Sinduadi, Sleman\n"
                 "⚠️ Admin akan memanggil anda *15 menit Sebelum Waktu Pemeriksaan*.\n"
@@ -717,22 +896,28 @@ class ActionBookingConfirm(Action):
                 "🎫 *Tiket Antrean Bot*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 Nama Pasien  : *{nama}*\n"
+                f"🏥 Poliklinik     : *{poli}*\n"
                 f"📅 Waktu           : {tgl_display}\n"
+                f"🕐 Jam Praktik  : {jam_praktik_slot}\n"
                 f"🔢 No. Antrian   : *S-01 (Konfirmasi Manual)*\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "⚠️ Data Anda sudah tercatat. Admin klinik akan segera menghubungi Anda via WhatsApp untuk konfirmasi. 🙏"
             ))
             api_post(f"/api/handoff/{no_hp}", {})
             booking_id_final = f"FALLBACK-{datetime.now().strftime('%H%M%S')}"
- 
+
         return [
             ActiveLoop(None),
             SlotSet("requested_slot", None),
             SlotSet("booking_step", "selesai"),
             SlotSet("booking_id_konfirmasi", booking_id_final),
-             SlotSet("booking_nik", None),
-            SlotSet("booking_nama", None), SlotSet("booking_tgl_lahir", None),
-            SlotSet("booking_keluhan", None), SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_nik", None),
+            SlotSet("booking_nama", None),
+            SlotSet("booking_tgl_lahir", None),
+            SlotSet("booking_keluhan", None),
+            SlotSet("booking_poli", None),
+            SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_jam_praktik", None),
             SlotSet("jadwalId", None),
             FollowupAction("action_listen"),
         ]
@@ -749,7 +934,9 @@ class ActionBookingCancel(Action):
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None),
+            SlotSet("booking_poli", None),
             SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_jam_praktik", None),
             SlotSet("jadwalId", None),
             SlotSet("booking_step", None),
             SlotSet("requested_slot", None),
@@ -769,7 +956,9 @@ class ActionSlotResetBooking(Action):
             SlotSet("booking_nama", None),
             SlotSet("booking_tgl_lahir", None),
             SlotSet("booking_keluhan", None),
+            SlotSet("booking_poli", None),
             SlotSet("booking_tgl_kunjungan", None),
+            SlotSet("booking_jam_praktik", None),
             SlotSet("jadwalId", None),
             SlotSet("booking_step", "tanya_untuk_siapa"),
             ActiveLoop(None),

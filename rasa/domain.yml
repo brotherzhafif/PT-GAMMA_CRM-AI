@@ -1,4 +1,4 @@
-# Log Last Change: 5 Juni 2026
+# Log Last Change: 7 Juni 2026
 version: "3.1"
 
 intents:
@@ -130,6 +130,22 @@ slots:
             requested_slot: booking_keluhan
         not_intent: booking_batalkan
 
+  booking_poli:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: from_text
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_poli
+        not_intent: booking_batalkan
+
+  booking_jam_praktik:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+
   booking_tgl_kunjungan:
     type: text
     influence_conversation: false
@@ -170,6 +186,7 @@ forms:
       - booking_nik
       - booking_tgl_lahir
       - booking_keluhan
+      - booking_poli
       - booking_tgl_kunjungan
 
 # Actions yang bisa dipanggil oleh rules/stories
@@ -245,6 +262,9 @@ responses:
 
   utter_ask_booking_keluhan:
     - text: "🩺 *Keluhan yang dirasakan*:\nCeritakan keluhan utama Anda saat ini."
+
+  utter_ask_booking_poli:
+    - text: ""
 
   utter_ask_booking_tgl_kunjungan:
     - text: "📅 *Rencana Tanggal Kunjungan*:\nKapan Anda berencana datang ke klinik?\n_(Contoh: 25/05/2026)_"
