@@ -36,6 +36,81 @@ WhatsApp (Patient)
 
 ## 📦 Modules & Major Components
 
+```
+.
+├── App/
+│   ├── auth/
+│   │   ├── __init__.py
+│   │   ├── dependencies.py
+│   │   └── router.py
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── activity.py
+│   │   ├── analytics.py
+│   │   ├── appointments.py
+│   │   ├── campaign.py
+│   │   ├── chatbot_settings.py
+│   │   ├── feedback.py
+│   │   ├── handoff.py
+│   │   ├── messages.py
+│   │   ├── patients.py
+│   │   ├── schedules.py
+│   │   ├── send.py
+│   │   ├── status.py
+│   │   ├── users.py
+│   │   └── webhook.py
+│   ├── __init__.py
+│   ├── activity_logger.py
+│   ├── app.py
+│   ├── campaign_scheduler.py
+│   ├── config.py
+│   ├── handoff_manager.py
+│   ├── helpers.py
+│   ├── models.py
+│   ├── queue_manager.py
+│   ├── seed_bootstrap_users.py
+│   ├── smartclinic_auth.py
+│   ├── wa_gateway.py
+│   └── wa_service_client.py
+├── chat_history/
+├── chat_state/
+│   └── campaign_uploads/
+├── handoff_state/
+├── LLM/
+│   ├── __init__.py
+│   ├── groq_service.py
+│   └── guardrail.py
+├── rasa/
+│   ├── actions/
+│   │   ├── __init__.py
+│   │   ├── actions.py
+│   │   └── smartclinic_auth.py
+│   ├── data/
+│   │   ├── nlu.yml
+│   │   ├── rules.yml
+│   │   └── stories.yml
+│   ├── models/
+│   │   └── 20260607-115850-calm-hotrod.tar.gz
+│   ├── config.yml
+│   ├── credentials.yml
+│   ├── domain.yml
+│   └── endpoints.yml
+├── wa-service/
+│   ├── Dockerfile
+│   ├── index.js
+│   └── package.json
+├── .env
+├── .env.example
+├── .gitattributes
+├── .gitignore
+├── docker-compose.yml
+├── Dockerfile
+├── openapi.json
+├── README.MD
+├── requirements.txt
+└── skills-lock.json
+```
+
 Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 - **FastAPI router (entrypoint)**
