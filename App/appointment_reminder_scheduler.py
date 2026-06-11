@@ -181,9 +181,10 @@ async def _send_pending_reminders():
             try:
                 result = await asyncio.to_thread(send_text_best_effort, phone_number, message)
                 
-                if result and result.get("status") in ["ok", "success", "queued", "process"]:
+                # Tambahkan pengecekan jika 'queued' bernilai True atau status-status sukses lainnya
+                if result and (result.get("queued") is True or result.get("status") in ["ok", "success"]):
                     await _mark_reminder_status(reminder_id, REMINDER_STATUS_SENT, send_time=True)
-                    print(f"[AppointmentReminder] Reminder sent/queued ke {phone_number}")
+                    print(f"[AppointmentReminder] Reminder sukses terkirim/antre ke {phone_number}")
                 else:
                     await _mark_reminder_status(reminder_id, REMINDER_STATUS_FAILED)
                     print(f"[AppointmentReminder] Gagal send reminder ke {phone_number}. Response gateway: {result}")
