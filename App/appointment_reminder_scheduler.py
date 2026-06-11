@@ -7,57 +7,41 @@
 # ======================================================
 
 import json
-import os
-import threading
-import time
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
 from App.config import supabase, SMARTCLINIC_BASE_URL
-from App.helpers import _require_supabase, proxy_smartclinic
+from App.helpers import _require_supabase
 from App.wa_gateway import send_text_best_effort
 
 _scheduler_started = False
-_scheduler_lock = threading.Lock()
+_scheduler_lock = asyncio.Lock()
 
-# Tipe reminder: H-1 (H minus 1, besok ada appointment), H-0 (hari ini ada appointment)
 REMINDER_TYPE_H_MINUS_1 = "H-1"
 REMINDER_TYPE_H_MINUS_0 = "H-0"
 
-# Status reminder
 REMINDER_STATUS_PENDING = "pending"
 REMINDER_STATUS_SENT = "sent"
 REMINDER_STATUS_FAILED = "failed"
 
 
 def _get_today_date() -> str:
-    """Get today's date in YYYY-MM-DD format (UTC)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 def _get_tomorrow_date() -> str:
-    """Get tomorrow's date in YYYY-MM-DD format (UTC)."""
     tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
     return tomorrow.strftime("%Y-%m-%d")
 
 
 async def _fetch_appointments(date: str) -> list[dict]:
-    """Fetch appointments dari endpoint lokal untuk tanggal tertentu.
-    
-    Args:
-        date: Tanggal dalam format YYYY-MM-DD
-    
-    Returns:
-        List appointment data dari endpoint lokal
-    """
+    """Fetch appointments dari endpoint lokal untuk tanggal tertentu."""
     try:
-        # Gunakan proxy_smartclinic untuk memanggil endpoint lokal
+        from App.helpers import proxy_smartclinic  # Lazy import jika dibutuhkan
         response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=[("tanggal", date)])
-        
-        # FastAPI response object, bukan httpx.Response, jadi perlu di-parse
-        # response.body adalah bytes, perlu decode lalu json.loads
         data = json.loads(response.body.decode("utf-8"))
 
         if isinstance(data, dict) and "data" in data:
@@ -73,11 +57,14 @@ async def _fetch_appointments(date: str) -> list[dict]:
         return []
 
 
-def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
-    """Ambil data patient dari Supabase berdasarkan rme_patient_id."""
-    try:
+async def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
+    """Ambil data patient menggunakan asyncio.to_thread agar tidak memblokir event loop."""
+    def _sync_fetch():
         response = supabase.table("patients").select("phone_number, name").eq("rme_patient_id", rme_patient_id).execute()
-        patients = response.data
+        return response.data
+
+    try:
+        patients = await asyncio.to_thread(_sync_fetch)
         if patients and len(patients) > 0:
             return patients[0]
         return None
@@ -86,9 +73,9 @@ def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
         return None
 
 
-def _reminder_already_exists(phone_number: str, appointment_date: str, reminder_type: str) -> bool:
-    """Check apakah reminder sudah ada untuk appointment ini."""
-    try:
+async def _reminder_already_exists(phone_number: str, appointment_date: str, reminder_type: str) -> bool:
+    """Check apakah reminder sudah ada untuk appointment ini (Non-blocking)."""
+    def _sync_check():
         response = (
             supabase.table("appointment_reminders")
             .select("id")
@@ -98,40 +85,43 @@ def _reminder_already_exists(phone_number: str, appointment_date: str, reminder_
             .eq("status", REMINDER_STATUS_PENDING)
             .execute()
         )
-        return len(response.data or []) > 0
+        return response.data
+
+    try:
+        data = await asyncio.to_thread(_sync_check)
+        return len(data or []) > 0
     except Exception as exc:
         print(f"[AppointmentReminder] Gagal check existing reminder: {exc}")
         return False
 
 
-def _create_reminder(
+async def _create_reminder(
     phone_number: str,
     appointment_date: str,
     reminder_type: str,
     patient_name: Optional[str] = None,
     appointment_time: Optional[str] = None,
 ) -> bool:
-    """Buat reminder baru di Supabase."""
+    """Buat reminder baru di Supabase (Non-blocking)."""
     try:
-        if appointment_time:
-            time_str = f" jam {appointment_time}"
-        else:
-            time_str = ""
+        time_str = f" jam {appointment_time}" if appointment_time else ""
 
         if reminder_type == REMINDER_TYPE_H_MINUS_1:
             message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu besok ({appointment_date}{time_str}). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
-        else:  # H-0
+        else:
             message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu HARI INI ({appointment_date}{time_str}). Harap datang tepat waktu. Terima kasih!"
         
-        supabase.table("appointment_reminders").insert({
-            "phone_number": phone_number,
-            "appointment_date": appointment_date,
-            "reminder_type": reminder_type,
-            "reminder_message": message,
-            "status": REMINDER_STATUS_PENDING,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
-        
+        def _sync_insert():
+            supabase.table("appointment_reminders").insert({
+                "phone_number": phone_number,
+                "appointment_date": appointment_date,
+                "reminder_type": reminder_type,
+                "reminder_message": message,
+                "status": REMINDER_STATUS_PENDING,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+
+        await asyncio.to_thread(_sync_insert)
         print(f"[AppointmentReminder] Reminder {reminder_type} created untuk {phone_number} on {appointment_date}")
         return True
     except Exception as exc:
@@ -139,60 +129,48 @@ def _create_reminder(
         return False
 
 
-def _mark_reminder_as_sent(reminder_id: str):
-    """Mark reminder as sent."""
+async def _mark_reminder_status(reminder_id: str, status: str, send_time: bool = False):
+    """Helper async untuk mengupdate status reminder."""
+    payload = {"status": status}
+    if send_time:
+        payload["sent_at"] = datetime.now(timezone.utc).isoformat()
+
+    def _sync_update():
+        supabase.table("appointment_reminders").update(payload).eq("id", reminder_id).execute()
+
     try:
-        supabase.table("appointment_reminders").update({
-            "status": REMINDER_STATUS_SENT,
-            "sent_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", reminder_id).execute()
+        await asyncio.to_thread(_sync_update)
     except Exception as exc:
-        print(f"[AppointmentReminder] Gagal update reminder {reminder_id}: {exc}")
+        print(f"[AppointmentReminder] Gagal update status reminder {reminder_id} ke {status}: {exc}")
 
 
-def _mark_reminder_as_failed(reminder_id: str):
-    """Mark reminder as failed."""
-    try:
-        supabase.table("appointment_reminders").update({
-            "status": REMINDER_STATUS_FAILED,
-        }).eq("id", reminder_id).execute()
-    except Exception as exc:
-        print(f"[AppointmentReminder] Gagal update reminder {reminder_id}: {exc}")
-
-
-def _send_pending_reminders():
-    """Send all pending reminders (scheduled untuk H-0 hari ini)."""
+async def _send_pending_reminders():
+    """Send all pending reminders (scheduled untuk H-0 hari ini) secara Async."""
     try:
         _require_supabase()
         
-        # Query pending reminders dengan reminder_type H-0 (hari ini)
-        response = (
-            supabase.table("appointment_reminders")
-            .select("id, phone_number, reminder_message")
-            .eq("status", REMINDER_STATUS_PENDING)
-            .eq("reminder_type", REMINDER_TYPE_H_MINUS_0)
-            .execute()
-        )
+        def _sync_get_pending():
+            return supabase.table("appointment_reminders").select("id, phone_number, reminder_message").eq("status", REMINDER_STATUS_PENDING).eq("reminder_type", REMINDER_TYPE_H_MINUS_0).execute().data
+
+        reminders = await asyncio.to_thread(_sync_get_pending) or []
         
-        reminders = response.data or []
         for reminder in reminders:
             reminder_id = reminder.get("id")
             phone_number = reminder.get("phone_number")
             message = reminder.get("reminder_message")
             
             try:
-                result = send_text_best_effort(phone_number, message)
+                # Bungkus pemanggilan WA gateway jika ia sinkronus
+                result = await asyncio.to_thread(send_text_best_effort, phone_number, message)
                 if result and result.get("status") in ["ok", "success"]:
-                    _mark_reminder_as_sent(reminder_id)
+                    await _mark_reminder_status(reminder_id, REMINDER_STATUS_SENT, send_time=True)
                     print(f"[AppointmentReminder] Reminder sent ke {phone_number}")
                 else:
-                    _mark_reminder_as_failed(reminder_id)
+                    await _mark_reminder_status(reminder_id, REMINDER_STATUS_FAILED)
                     print(f"[AppointmentReminder] Gagal send reminder ke {phone_number}")
             except Exception as exc:
-                _mark_reminder_as_failed(reminder_id)
+                await _mark_reminder_status(reminder_id, REMINDER_STATUS_FAILED)
                 print(f"[AppointmentReminder] Error send reminder {reminder_id}: {exc}")
-    except HTTPException:
-        pass
     except Exception as exc:
         print(f"[AppointmentReminder] Error sending reminders: {exc}")
 
@@ -205,14 +183,14 @@ async def _process_reminders():
         today_date = _get_today_date()
         tomorrow_date = _get_tomorrow_date()
         
-        # Fetch appointments untuk besok (H-1)
-        tomorrow_appointments = _fetch_appointments(tomorrow_date)
+        # 1. Fetch & Process H-1
+        tomorrow_appointments = await _fetch_appointments(tomorrow_date)
         for apt in tomorrow_appointments:
             patient_id = apt.get("pasienId") or apt.get("patient_id")
             if not patient_id:
                 continue
             
-            patient = _fetch_patient_by_rme_id(patient_id)
+            patient = await _fetch_patient_by_rme_id(patient_id)
             if not patient:
                 continue
             
@@ -220,18 +198,17 @@ async def _process_reminders():
             patient_name = patient.get("name")
             appointment_time = apt.get("jadwal", {}).get("jamMulai")
 
-            # Check dan buat reminder H-1
-            if not _reminder_already_exists(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1):
-                _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name, appointment_time)
+            if not await _reminder_already_exists(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1):
+                await _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name, appointment_time)
         
-        # Fetch appointments untuk hari ini (H-0)
-        today_appointments = _fetch_appointments(today_date)
+        # 2. Fetch & Process H-0
+        today_appointments = await _fetch_appointments(today_date)
         for apt in today_appointments:
             patient_id = apt.get("pasienId") or apt.get("patient_id")
             if not patient_id:
                 continue
             
-            patient = _fetch_patient_by_rme_id(patient_id)
+            patient = await _fetch_patient_by_rme_id(patient_id)
             if not patient:
                 continue
             
@@ -239,40 +216,34 @@ async def _process_reminders():
             patient_name = patient.get("name")
             appointment_time = apt.get("jadwal", {}).get("jamMulai")
 
-            # Check dan buat reminder H-0
-            if not _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_H_MINUS_0):
-                _create_reminder(phone_number, today_date, REMINDER_TYPE_H_MINUS_0, patient_name, appointment_time)
+            if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_H_MINUS_0):
+                await _create_reminder(phone_number, today_date, REMINDER_TYPE_H_MINUS_0, patient_name, appointment_time)
         
-        # Send semua pending H-0 reminders (appointment hari ini)
-        _send_pending_reminders()
+        # 3. Eksekusi pengiriman pesan pending
+        await _send_pending_reminders()
         
         print(f"[AppointmentReminder] Process completed for {today_date}")
-    except HTTPException:
-        pass
     except Exception as exc:
         print(f"[AppointmentReminder] Process error: {exc}")
 
 
 async def _worker_loop():
-    """Worker loop yang berjalan setiap N detik."""
+    """Worker loop yang berjalan setiap 30 menit dengan aman."""
     while True:
         try:
-            await _process_reminders()
+            async with _scheduler_lock:
+                await _process_reminders()
         except Exception as exc:
             print(f"[AppointmentReminder] Worker loop error: {exc}")
-        
-        # Check every 30 minutes (1800 detik)
-        time.sleep(1800)
+
+        await asyncio.sleep(1800) 
 
 
 def start_appointment_reminder_scheduler():
-    """Start appointment reminder scheduler worker thread."""
     global _scheduler_started
-    with _scheduler_lock:
-        if _scheduler_started:
-            return
-        _scheduler_started = True
-    
-    thread = threading.Thread(target=_worker_loop, name="AppointmentReminderScheduler", daemon=True)
-    thread.start()
-    print(f"[AppointmentReminder] Worker thread '{thread.name}' started")
+    if _scheduler_started:
+        return
+    _scheduler_started = True
+
+    asyncio.create_task(_worker_loop())
+    print("[AppointmentReminder] Scheduler task started")   

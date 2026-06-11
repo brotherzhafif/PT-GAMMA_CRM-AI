@@ -137,90 +137,46 @@ def get_reminder_statistics():
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.post(
     "/send-pending",
     summary="Kirim semua reminders yang masih pending (H-0)",
-    description="Trigger manual untuk mengirim reminder hari ini (H-0). Biasanya dijalankan otomatis scheduler.",
-    responses={
-        200: {
-            "description": "Reminders berhasil dikirim",
-            "content": {"application/json": {"example": {"status": "ok", "message": "Reminders sent successfully"}}},
-        },
-        500: {
-            "description": "Gagal mengirim reminders",
-            "content": {"application/json": {"example": {"detail": "..."}}},
-        },
-    },
+    responses={200: {"description": "Reminders berhasil dikirim"}},
 )
 async def send_pending_reminders(request: Request):
     try:
         _require_supabase()
-        _send_pending_reminders()
-        
-        await log_activity(
+        await _send_pending_reminders()  # Tambahkan await di sini
+
+        await log_activity(        
             category="reminders",
             action="SEND_PENDING_REMINDERS",
             from_actor=request.client.host if request.client else "system",
             message="Manual trigger kirim pending reminders",
         )
-        
         return {"status": "ok", "message": "Pending reminders sent successfully"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-def log_activity(*args, **kwargs):
-    """Async wrapper untuk log_activity (dijalankan secara sync)."""
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            return asyncio.create_task(log_activity(*args, **kwargs))
-        else:
-            return loop.run_until_complete(log_activity(*args, **kwargs))
-    except RuntimeError:
-        return None
-
-
 @router.post(
     "/process",
     summary="Trigger manual process reminders",
-    description="Trigger manual untuk proses dan cek reminders H-1 (besok) dan H-0 (hari ini). Biasanya dijalankan otomatis scheduler.",
-    responses={
-        200: {
-            "description": "Process berhasil dijalankan",
-            "content": {"application/json": {"example": {"status": "ok", "message": "Reminder process completed"}}},
-        },
-        500: {
-            "description": "Gagal jalankan process",
-            "content": {"application/json": {"example": {"detail": "..."}}},
-        },
-    },
+    responses={200: {"description": "Process berhasil dijalankan"}},
 )
-def process_reminders(request: Request):
+async def process_reminders(request: Request):
     try:
         _require_supabase()
-        _process_reminders()
-        
-        # Try to log activity (safe if fails)
-        try:
-            import asyncio
-            asyncio.create_task(
-                log_activity(
-                    category="reminders",
-                    action="PROCESS_REMINDERS",
-                    from_actor=request.client.host if request.client else "system",
-                    message="Manual trigger process reminders",
-                )
-            )
-        except:
-            pass
-        
+        await _process_reminders()  # Tambahkan await di sini
+
+        await log_activity(       
+            category="reminders",
+            action="PROCESS_REMINDERS",
+            from_actor=request.client.host if request.client else "system",
+            message="Manual trigger process reminders",
+        )
         return {"status": "ok", "message": "Reminder process completed"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
 
 @router.delete(
     "",
@@ -241,31 +197,26 @@ def process_reminders(request: Request):
         },
     },
 )
-def delete_reminders(
+async def delete_reminders(
     request: Request,
     phone_number: str = Query(..., description="Nomor WhatsApp pasien"),
     appointment_date: str = Query(..., description="Tanggal appointment (YYYY-MM-DD)"),
 ):
     try:
         _require_supabase()
-        
-        supabase.table("appointment_reminders").delete().eq("phone_number", phone_number).eq("appointment_date", appointment_date).execute()
-        
-        # Try to log activity (safe if fails)
-        try:
-            import asyncio
-            asyncio.create_task(
-                log_activity(
-                    category="reminders",
-                    action="DELETE_REMINDERS",
-                    from_actor=request.client.host if request.client else "system",
-                    message=f"Reminder dihapus untuk {phone_number} on {appointment_date}",
-                    metadata={"phone_number": phone_number, "appointment_date": appointment_date},
-                )
-            )
-        except:
-            pass
-        
+        supabase.table("appointment_reminders").delete()\
+            .eq("phone_number", phone_number)\
+            .eq("appointment_date", appointment_date)\
+            .execute()
+
+        await log_activity(
+            category="reminders",
+            action="DELETE_REMINDERS",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Reminder dihapus untuk {phone_number} on {appointment_date}",
+            metadata={"phone_number": phone_number, "appointment_date": appointment_date},
+        )
+
         return {"status": "ok", "message": "Reminders deleted successfully"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

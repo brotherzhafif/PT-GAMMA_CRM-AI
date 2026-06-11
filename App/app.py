@@ -3,7 +3,7 @@
 # FastAPI entry point — hanya inisialisasi app dan register router.
 # Logic masing-masing endpoint ada di App/routers/.
 #
-# Last Change   :   31 May 2026
+# Last Change   :   12 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 #                   MHD. Rafy Firdaus
 #                   Wahyu Hardiyantara
@@ -22,10 +22,28 @@ from App.campaign_scheduler import start_campaign_scheduler
 from App.appointment_reminder_scheduler import start_appointment_reminder_scheduler
 from App.seed_bootstrap_users import seed_bootstrap_users
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ================= STARTUP =================
+    print("[Lifespan] Running bootstrap user seeder...")
+    try:
+        seed_bootstrap_users() 
+        print("[Lifespan] Bootstrap user seeder finished successfully.")
+    except Exception as e:
+        print(f"[Lifespan] Bootstrap user seeder failed: {e}")
+        
+    start_campaign_scheduler()
+    start_appointment_reminder_scheduler()
+    yield
+    # shutdown (if any cleanup is needed, add here)
+
+
 app = FastAPI(
     title="SmartClinic CRM AI",
     description="Hybrid routing API untuk webhook Fonnte, Rasa, dan Groq LLM.",
     version="1.0.0",
+    lifespan=lifespan
 )
 
 # Allow CORS from any origin (use with caution in production)
@@ -54,28 +72,6 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(activity_router)
 app.include_router(analytics_router)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # ================= STARTUP =================
-    print("[Lifespan] Running bootstrap user seeder...")
-    try:
-        seed_bootstrap_users() 
-        print("[Lifespan] Bootstrap user seeder finished successfully.")
-    except Exception as e:
-        print(f"[Lifespan] Bootstrap user seeder failed: {e}")
-        # Jika Anda ingin aplikasi tetap jalan walau seeder gagal, biarkan saja.
-        # Jika ingin aplikasi crash sengaja saat gagal, biarkan error-nya raise.
-        
-    start_campaign_scheduler()
-    start_appointment_reminder_scheduler()
-    yield
-    # shutdown (if any cleanup is needed, add here)
-
-
-# register lifespan with app
-app.router.lifespan_context = lifespan
 
 
 # ======================================================
