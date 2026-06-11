@@ -5,7 +5,7 @@ import requests
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from App.config import SUPABASE_ANON_KEY, SUPABASE_URL, supabase_admin
+from App.config import SUPABASE_ANON_KEY, SUPABASE_URL, supabase
 
 
 http_bearer = HTTPBearer()
@@ -58,14 +58,14 @@ def _verify_supabase_jwt(token: str) -> dict[str, Any]:
 
 
 def _fetch_active_user_by_auth_id(auth_id: str) -> dict[str, Any] | None:
-    if supabase_admin is None:
+    if supabase is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Supabase admin belum dikonfigurasi",
         )
 
     response = (
-        supabase_admin.table("users")
+        supabase.table("users")
         .select("id, auth_id, name, email, role, is_active")
         .eq("auth_id", auth_id)
         .limit(1)

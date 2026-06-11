@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — config.py
 # Semua konfigurasi, konstanta, dan inisialisasi client
 #
-# Last Change   :   18 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 #                   MHD. Rafy Firdaus
 #                   Wahyu Hardiyantara
@@ -16,24 +16,33 @@ from supabase import Client, create_client
 
 load_dotenv()
 
-#  Supabase 
+#  Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+
+# Client utama — service role key, tidak pernah expired, untuk semua DB queries
 supabase: Optional[Client] = (
-    create_client(SUPABASE_URL, SUPABASE_ANON_KEY) if SUPABASE_URL and SUPABASE_ANON_KEY else None
-)
-supabase_admin: Optional[Client] = (
     create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
     else None
 )
 
-#  Fonnte 
+# Alias untuk backward compatibility (tidak perlu ganti semua file lama)
+supabase_admin = supabase
+
+# Client khusus auth operations (sign_in, sign_out, refresh) — butuh anon key
+supabase_auth: Optional[Client] = (
+    create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    if SUPABASE_URL and SUPABASE_ANON_KEY
+    else None
+)
+
+#  Fonnte
 FONNTE_TOKEN = os.getenv("FONNTE_TOKEN")
 
-#  SmartClinic RME API 
+#  SmartClinic RME API
 SMARTCLINIC_BASE_URL = os.getenv(
     "SMARTCLINIC_BASE_URL",
     "https://smartclinic-rekam-medis.onrender.com/api/v1",
@@ -41,7 +50,7 @@ SMARTCLINIC_BASE_URL = os.getenv(
 SMARTCLINIC_EMAIL = os.getenv("SMARTCLINIC_EMAIL")
 SMARTCLINIC_PASSWORD = os.getenv("SMARTCLINIC_PASSWORD")
 
-#  Rasa 
+#  Rasa
 RASA_URL = os.getenv("RASA_URL", "http://rasa:5005")
 RASA_CONFIDENCE_THRESHOLD = 0.75
 RASA_TRUSTED_INTENTS = {
@@ -70,14 +79,14 @@ EMERGENCY_KEYWORDS = [
     "overdosis", "bunuh diri", "darurat",
 ]
 
-#  Handoff 
+#  Handoff
 HANDOFF_KEYWORDS = {
     "admin", "cs", "manusia", "operator", "helpdesk",
     "bicara dengan admin", "mau ketemu admin", "hubungi admin",
     "tolong admin", "butuh bantuan manusia",
 }
 
-#  Storage Dirs 
+#  Storage Dirs
 HISTORY_DIR = "chat_history"
 STATE_DIR = "chat_state"
 

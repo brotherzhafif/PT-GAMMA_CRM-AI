@@ -2,7 +2,7 @@
 # SmartClinic CRM AI — routers/messages.py
 # Endpoint: /api/messages
 #
-# Last Change   :   21 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -13,10 +13,79 @@ from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from App.config import supabase
-from App.helpers import _require_supabase
+from App.helpers import _require_supabase, normalize_phone_number
 from App.wa_service_client import wa_service_request
 
 router = APIRouter(prefix="/api/messages", tags=["Unified Chat"])
+
+
+# Source yang dikirim oleh AI/bot
+AI_SOURCES = {"rasa", "groq", "system", "bot", "ai"}
+
+# Source yang dikirim oleh human agent
+HUMAN_SOURCES = {"agent", "admin", "human", "manual", "dashboard"}
+
+
+def _enrich_messages(wa_messages: list, phone_number: str) -> list:
+    """
+    Merge pesan dari wa-service dengan metadata dari Supabase.
+    Tambahkan field: sender, senderType, isEscalation, isBotReturn.
+    """
+    if not wa_messages:
+        return []
+
+    # Ambil data Supabase untuk nomor ini (source, direction, created_at)
+    supabase_map: dict = {}
+    if supabase:
+        try:
+            normalized = normalize_phone_number(phone_number)
+            result = (
+                supabase.table("messages")
+                .select("id, message_text, direction, source, created_at")
+                .eq("sender_number", normalized)
+                .order("created_at", desc=False)
+                .limit(200)
+                .execute()
+            )
+            # Index by message_text + direction untuk matching (wa-service tidak punya Supabase ID)
+            for row in (result.data or []):
+                key = (row.get("message_text", "").strip(), row.get("direction", ""))
+                # Simpan yang terbaru jika duplikat
+                supabase_map[key] = row
+        except Exception as e:
+            print(f"[enrich_messages] Gagal ambil data Supabase: {e}")
+
+    enriched = []
+    for msg in wa_messages:
+        body = (msg.get("body") or "").strip()
+        from_me = msg.get("fromMe", False)
+        direction = "outbound" if from_me else "inbound"
+
+        # Default values
+        sender = "agent" if from_me else "user"
+        sender_type = "ai"  # default outbound = ai
+
+        # Cari di Supabase untuk tahu source-nya
+        sb_row = supabase_map.get((body, direction))
+        if sb_row:
+            source = sb_row.get("source", "")
+            if direction == "outbound":
+                if source in HUMAN_SOURCES:
+                    sender_type = "human"
+                else:
+                    sender_type = "ai"
+        elif direction == "inbound":
+            sender_type = "user"
+
+        enriched.append({
+            **msg,
+            "sender": sender,
+            "senderType": sender_type,
+            "isEscalation": False,   # dihitung di FE via processedMessages
+            "isBotReturn": False,    # dihitung di FE via processedMessages
+        })
+
+    return enriched
 
 
 LATEST_MESSAGES_EXAMPLE = [
@@ -33,52 +102,22 @@ LATEST_MESSAGES_EXAMPLE = [
 MESSAGES_BY_NUMBER_EXAMPLE = [
     {
         "id": "d4b4e12a-91cd-4c8f-9f5f-31a9d0b21111",
-        "sender_number": "6281234567890",
-        "message_text": "Halo, saya ingin cek jadwal dokter.",
-        "direction": "inbound",
-        "source": "fonnte",
-        "created_at": "2026-05-22T10:00:00Z",
+        "body": "Halo, saya ingin cek jadwal dokter.",
+        "fromMe": False,
+        "sender": "user",
+        "senderType": "user",
     },
     {
         "id": "f0d2a1a7-4f71-4d35-bf23-2c0d62d51111",
-        "sender_number": "6281234567890",
-        "message_text": "Jadwal dokter hari ini pukul 09.00 - 17.00.",
-        "direction": "outbound",
-        "source": "rasa",
-        "created_at": "2026-05-22T10:00:05Z",
+        "body": "Jadwal dokter hari ini pukul 09.00 - 17.00.",
+        "fromMe": True,
+        "sender": "agent",
+        "senderType": "ai",
     },
 ]
 
 SSE_INITIAL_EVENT_EXAMPLE = "event: initial\ndata: [...]"
 SSE_UPDATE_EVENT_EXAMPLE = "event: update\ndata: [...]"
-
-
-# @router.get("", summary="Stream semua pesan via SSE")
-# async def get_all_messages(request: Request, limit: int = 100):
-#     _require_supabase()
-
-#     async def generator():
-#         result = supabase.table("messages").select("*") \
-#             .order("created_at", desc=True).limit(limit).execute()
-
-#         known_ids = {r["id"] for r in result.data}
-#         yield {"event": "initial", "data": __import__('json').dumps(result.data)}
-
-#         while True:
-#             if await request.is_disconnected():
-#                 break
-#             await asyncio.sleep(2)
-#             new = supabase.table("messages").select("*") \
-#                 .order("created_at", desc=True).limit(20).execute()
-#             new_msgs = [m for m in new.data if m["id"] not in known_ids]
-#             if new_msgs:
-#                 for m in new_msgs:
-#                     known_ids.add(m["id"])
-#                 yield {"event": "new_message", "data": __import__('json').dumps(new_msgs)}
-#             else:
-#                 yield {"event": "heartbeat", "data": "null"}
-
-#     return EventSourceResponse(generator())
 
 
 @router.get(
@@ -129,7 +168,7 @@ async def get_latest_messages(request: Request):
 @router.get(
     "/{phone_number}",
     summary="Stream pesan per nomor via SSE",
-    description="Mengirim riwayat pesan untuk satu nomor, lalu memperbarui stream jika ada pesan baru masuk.",
+    description="Mengirim riwayat pesan untuk satu nomor dengan metadata senderType (ai/human/user), lalu memperbarui stream jika ada pesan baru masuk.",
     responses={
         200: {
             "description": "Stream SSE aktif",
@@ -156,7 +195,7 @@ async def get_latest_messages(request: Request):
 )
 async def get_messages_by_number(request: Request, phone_number: str, limit: int = 50):
     async def generator():
-        # 1. Ambil data awal langsung dari wa-service (wwebjs)
+        # 1. Ambil data awal dari wa-service
         initial_data = []
         try:
             resp = wa_service_request(
@@ -167,19 +206,19 @@ async def get_messages_by_number(request: Request, phone_number: str, limit: int
         except Exception as e:
             print(f"[SSE] Error fetching initial messages from wwebjs: {e}")
 
-        # Kirim data awal ke frontend dengan event 'initial'
-        yield {"event": "initial", "data": json.dumps(initial_data)}
+        # 2. Enrich dengan senderType dari Supabase
+        enriched = await asyncio.to_thread(_enrich_messages, initial_data, phone_number)
 
-        # Simpan state ID pesan yang sudah diketahui
+        yield {"event": "initial", "data": json.dumps(enriched)}
+
         known_ids = {m["id"] for m in initial_data} if initial_data else set()
 
         while True:
             if await request.is_disconnected():
                 break
-                
+
             await asyncio.sleep(2)
-            
-            # Cek apakah ada pesan baru masuk via polling ke wa-service
+
             current_data = []
             try:
                 resp = wa_service_request(
@@ -191,16 +230,15 @@ async def get_messages_by_number(request: Request, phone_number: str, limit: int
                 print(f"[SSE] Error polling messages from wwebjs: {e}")
                 yield {"event": "heartbeat", "data": "null"}
                 continue
-                
+
             current_ids = {m["id"] for m in current_data} if current_data else set()
             has_new = not current_ids.issubset(known_ids) if current_ids else False
 
             if has_new:
-                # Update daftar known_ids
                 known_ids = current_ids
-                
-                # Kirim data utuh menggunakan event 'update' agar frontend merender ulang secara realtime
-                yield {"event": "update", "data": json.dumps(current_data)}
+                # Enrich ulang dengan data Supabase terbaru
+                enriched = await asyncio.to_thread(_enrich_messages, current_data, phone_number)
+                yield {"event": "update", "data": json.dumps(enriched)}
             else:
                 yield {"event": "heartbeat", "data": "null"}
 

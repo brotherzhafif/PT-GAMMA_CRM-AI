@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from App.activity_logger import log_activity
 from App.auth.dependencies import require_any_staff
-from App.config import supabase, supabase_admin
+from App.config import supabase, supabase_auth
 from App.models import AuthLoginResponse, AuthRefreshResponse, AuthSimpleMessage
 
 
@@ -90,14 +90,14 @@ def _user_id_from_auth_user(auth_user: Any) -> str | None:
 
 
 def _get_user_profile_by_auth_id(auth_id: str) -> dict[str, Any] | None:
-    if supabase_admin is None:
+    if supabase is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Supabase admin belum dikonfigurasi",
         )
 
     response = (
-        supabase_admin.table("users")
+        supabase.table("users")
         .select("id, auth_id, name, email, role, is_active")
         .eq("auth_id", auth_id)
         .limit(1)
@@ -152,7 +152,7 @@ async def login(
         },
     ),
 ):
-    if supabase is None:
+    if supabase_auth is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Supabase belum dikonfigurasi",
@@ -163,7 +163,7 @@ async def login(
 
     try:
         auth_response = await asyncio.to_thread(
-            supabase.auth.sign_in_with_password,
+            supabase_auth.auth.sign_in_with_password,
             {"email": payload.email, "password": payload.password},
         )
         session = _extract_session(auth_response)
@@ -216,13 +216,13 @@ async def login(
 
 @router.post("/logout")
 async def logout(request: Request, current_user: dict = require_any_staff):
-    if supabase is None:
+    if supabase_auth is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Supabase belum dikonfigurasi",
         )
 
-    await asyncio.to_thread(supabase.auth.sign_out)
+    await asyncio.to_thread(supabase_auth.auth.sign_out)
 
     await log_activity(
         category="auth",
@@ -263,14 +263,14 @@ async def refresh_token(
         },
     )
 ):
-    if supabase is None:
+    if supabase_auth is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Supabase belum dikonfigurasi",
         )
 
     try:
-        auth_response = await asyncio.to_thread(supabase.auth.refresh_session, payload.refresh_token)
+        auth_response = await asyncio.to_thread(supabase_auth.auth.refresh_session, payload.refresh_token)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token tidak valid") from exc
 

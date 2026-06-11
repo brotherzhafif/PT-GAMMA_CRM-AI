@@ -18,7 +18,7 @@ from App.config import SMARTCLINIC_BASE_URL, SMARTCLINIC_EMAIL, SMARTCLINIC_PASS
 
 
 SMARTCLINIC_TOKEN_CACHE_FILE = os.path.join(STATE_DIR, "smartclinic_token.json")
-SMARTCLINIC_TOKEN_TTL_SECONDS = 600
+SMARTCLINIC_TOKEN_TTL_SECONDS = 3000
 _SMARTCLINIC_TOKEN_LOCK = asyncio.Lock()
 
 
@@ -55,9 +55,10 @@ def _is_token_valid(cache: dict) -> bool:
         expires_at_dt = datetime.fromisoformat(expires_at)
     except Exception:
         return False
-
-    return datetime.now(timezone.utc) < expires_at_dt
-
+    
+    # Tambah buffer 5 menit sebelum expiry
+    BUFFER = timedelta(minutes=5)
+    return datetime.now(timezone.utc) < (expires_at_dt - BUFFER)
 
 def get_smartclinic_token_status() -> dict:
     """Baca status token cache dan refresh otomatis jika token sudah kedaluwarsa."""
