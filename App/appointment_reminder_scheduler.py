@@ -6,17 +6,17 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import json
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from App.config import supabase, SMARTCLINIC_BASE_URL
-from App.helpers import _require_supabase
-from App.smartclinic_auth import get_smartclinic_token_sync
+from App.helpers import _require_supabase, proxy_smartclinic
 from App.wa_gateway import send_text_best_effort
 
 _scheduler_started = False
@@ -43,37 +43,33 @@ def _get_tomorrow_date() -> str:
     return tomorrow.strftime("%Y-%m-%d")
 
 
-def _fetch_smartclinic_appointments(date: str) -> list[dict]:
-    """Fetch appointments dari SmartClinic untuk tanggal tertentu.
+async def _fetch_appointments(date: str) -> list[dict]:
+    """Fetch appointments dari endpoint lokal untuk tanggal tertentu.
     
     Args:
         date: Tanggal dalam format YYYY-MM-DD
     
     Returns:
-        List appointment data dari SmartClinic
+        List appointment data dari endpoint lokal
     """
     try:
-        token = get_smartclinic_token_sync()
-        headers = {"Authorization": f"Bearer {token}"}
+        # Gunakan proxy_smartclinic untuk memanggil endpoint lokal
+        response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=[("tanggal", date)])
         
-        # Query ke SmartClinic: /queues/appointments?tanggal={date}
-        with httpx.Client(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
-            response = client.get(
-                "/queues/appointments",
-                params={"tanggal": date},
-                headers=headers,
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            # SmartClinic returns {data: [...]} atau {[...]}
-            if isinstance(data, dict) and "data" in data:
-                return data.get("data", [])
-            elif isinstance(data, list):
-                return data
-            return []
+        # FastAPI response object, bukan httpx.Response, jadi perlu di-parse
+        # response.body adalah bytes, perlu decode lalu json.loads
+        data = json.loads(response.body.decode("utf-8"))
+
+        if isinstance(data, dict) and "data" in data:
+            return data.get("data", [])
+        elif isinstance(data, list):
+            return data
+        return []
+    except HTTPException as exc:
+        print(f"[AppointmentReminder] HTTP error fetching appointments for {date}: {exc.status_code} - {exc.detail}")
+        return []
     except Exception as exc:
-        print(f"[AppointmentReminder] Gagal fetch appointments dari SmartClinic untuk {date}: {exc}")
+        print(f"[AppointmentReminder] Gagal mengambil daftar appointment untuk {date}: {exc}")
         return []
 
 
@@ -201,7 +197,7 @@ def _send_pending_reminders():
         print(f"[AppointmentReminder] Error sending reminders: {exc}")
 
 
-def _process_reminders():
+async def _process_reminders():
     """Process reminders untuk H-1 (besok) dan H-0 (hari ini)."""
     try:
         _require_supabase()
@@ -210,7 +206,7 @@ def _process_reminders():
         tomorrow_date = _get_tomorrow_date()
         
         # Fetch appointments untuk besok (H-1)
-        tomorrow_appointments = _fetch_smartclinic_appointments(tomorrow_date)
+        tomorrow_appointments = _fetch_appointments(tomorrow_date)
         for apt in tomorrow_appointments:
             patient_id = apt.get("pasienId") or apt.get("patient_id")
             if not patient_id:
@@ -229,7 +225,7 @@ def _process_reminders():
                 _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name, appointment_time)
         
         # Fetch appointments untuk hari ini (H-0)
-        today_appointments = _fetch_smartclinic_appointments(today_date)
+        today_appointments = _fetch_appointments(today_date)
         for apt in today_appointments:
             patient_id = apt.get("pasienId") or apt.get("patient_id")
             if not patient_id:
@@ -257,11 +253,11 @@ def _process_reminders():
         print(f"[AppointmentReminder] Process error: {exc}")
 
 
-def _worker_loop():
+async def _worker_loop():
     """Worker loop yang berjalan setiap N detik."""
     while True:
         try:
-            _process_reminders()
+            await _process_reminders()
         except Exception as exc:
             print(f"[AppointmentReminder] Worker loop error: {exc}")
         
