@@ -38,16 +38,32 @@ def _get_tomorrow_date() -> str:
 
 
 async def _fetch_appointments(date: str) -> list[dict]:
-    """Fetch appointments dari endpoint lokal untuk tanggal tertentu."""
+    """Fetch appointments dari endpoint lokal untuk tanggal tertentu.
+    
+    Args:
+        date: Tanggal dalam format YYYY-MM-DD
+    
+    Returns:
+        List appointment data asli dari nested response data.data
+    """
     try:
-        from App.helpers import proxy_smartclinic  # Lazy import jika dibutuhkan
+        from App.helpers import proxy_smartclinic
         response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=[("tanggal", date)])
-        data = json.loads(response.body.decode("utf-8"))
+        
+        # Decode bytes ke json dict
+        res_json = json.loads(response.body.decode("utf-8"))
 
-        if isinstance(data, dict) and "data" in data:
-            return data.get("data", [])
-        elif isinstance(data, list):
-            return data
+        # Mengikuti struktur: res_json -> "data" (dict) -> "data" (list of appointments)
+        if isinstance(res_json, dict) and "data" in res_json:
+            inner_data = res_json.get("data")
+            if isinstance(inner_data, dict) and "data" in inner_data:
+                return inner_data.get("data", [])
+            elif isinstance(inner_data, list):
+                return inner_data
+                
+        if isinstance(res_json, list):
+            return res_json
+            
         return []
     except HTTPException as exc:
         print(f"[AppointmentReminder] HTTP error fetching appointments for {date}: {exc.status_code} - {exc.detail}")
@@ -55,7 +71,6 @@ async def _fetch_appointments(date: str) -> list[dict]:
     except Exception as exc:
         print(f"[AppointmentReminder] Gagal mengambil daftar appointment untuk {date}: {exc}")
         return []
-
 
 async def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
     """Ambil data patient menggunakan asyncio.to_thread agar tidak memblokir event loop."""
