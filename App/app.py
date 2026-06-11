@@ -17,8 +17,9 @@ from App.auth.router import router as auth_router
 from App.routers.activity import router as activity_router
 from App.routers.analytics import router as analytics_router
 from App.routers.users import router as users_router
-from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback
+from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback, reminder
 from App.campaign_scheduler import start_campaign_scheduler
+from App.appointment_reminder_scheduler import start_appointment_reminder_scheduler
 from App.seed_bootstrap_users import seed_bootstrap_users
 
 app = FastAPI(
@@ -46,6 +47,7 @@ app.include_router(status.router)
 app.include_router(schedules.router)
 app.include_router(patients.router)
 app.include_router(appointments.router)
+app.include_router(reminder.router)
 app.include_router(chatbot_settings.router)
 app.include_router(feedback.router)
 app.include_router(auth_router)
@@ -67,6 +69,7 @@ async def lifespan(app: FastAPI):
         # Jika ingin aplikasi crash sengaja saat gagal, biarkan error-nya raise.
         
     start_campaign_scheduler()
+    start_appointment_reminder_scheduler()
     yield
     # shutdown (if any cleanup is needed, add here)
 

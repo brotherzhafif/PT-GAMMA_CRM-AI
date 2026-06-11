@@ -358,3 +358,46 @@ class FeedbackDashboardRecord(BaseModel):
     total_survey_terkirim: int
     total_ngisi: int
     total_gak_ngisi: int
+
+
+# Appointment Reminders
+
+class AppointmentReminderRecord(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "phone_number": "6281234567890",
+                "appointment_date": "2026-06-15",
+                "reminder_type": "H-1",
+                "reminder_message": "Halo Budi Santoso! Ingatkan: Anda memiliki janji temu besok (2026-06-15). Pastikan tiba 15 menit lebih awal. Sampai jumpa!",
+                "status": "pending",
+                "created_at": "2026-06-14T10:00:00Z",
+                "sent_at": None,
+                "updated_at": "2026-06-14T10:00:00Z",
+            }
+        }
+    )
+
+    id: Optional[str] = Field(default=None)
+    phone_number: str = Field(..., description="Nomor WhatsApp pasien")
+    appointment_date: str = Field(..., description="Tanggal appointment (YYYY-MM-DD)")
+    reminder_type: Literal["H-1", "H-0"] = Field(..., description="Tipe reminder: H-1 (besok), H-0 (hari ini)")
+    reminder_message: str = Field(..., description="Isi pesan reminder")
+    status: Literal["pending", "sent", "failed"] = Field(default="pending", description="Status reminder")
+    created_at: Optional[str] = Field(default=None)
+    sent_at: Optional[str] = Field(default=None)
+    updated_at: Optional[str] = Field(default=None)
+
+
+class GetAppointmentRemindersResponse(BaseModel):
+    status: str
+    total: int
+    reminders: List[AppointmentReminderRecord]
+
+
+class AppointmentReminderStatistics(BaseModel):
+    total_pending: int
+    total_sent: int
+    total_failed: int
+    total_all: int
