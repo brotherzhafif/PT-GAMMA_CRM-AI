@@ -8,6 +8,7 @@
 
 import re
 import requests
+import time
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
@@ -49,6 +50,10 @@ def _groq_reply_text(result) -> tuple[str, dict | None]:
 #   KONSTANTA
 # ======================================================
 
+# State pelacakan duplikasi pesan (in-memory) untuk menghindari spam/retry webhook
+# Format: {no_hp: {"last_message": str, "last_timestamp": float, "repeat_count": int, "processing": bool, "last_reply": str, "last_source": str}}
+MESSAGE_STATES = {}
+
 ONBOARDING_STATES = {"waiting_name", "waiting_nik", "waiting_dob", "waiting_gender"}
 
 WEBHOOK_REQUEST_EXAMPLE = {
@@ -81,6 +86,12 @@ def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatRe
     # Gunakan channel dari send_result sebagai source
     actual_source = send_result.get("channel", source)
     save_to_supabase(no_hp, reply, direction="outbound", source=actual_source)
+    
+    # Update MESSAGE_STATES untuk status pemrosesan & cache reply
+    if no_hp in MESSAGE_STATES:
+        MESSAGE_STATES[no_hp]["processing"] = False
+        MESSAGE_STATES[no_hp]["last_reply"] = reply
+        MESSAGE_STATES[no_hp]["last_source"] = actual_source
     
     return ChatResponse(status="ok", source=actual_source, reply=reply)
 
@@ -156,6 +167,62 @@ def webhook(
         no_hp = normalize_phone_number(payload.sender)
         input_pesan = payload.message.strip()
         waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = time.time()
+
+        # ── Deduplikasi & Anti-Spam Check ──
+        state = MESSAGE_STATES.get(no_hp)
+        if state:
+            # 1. Lock selama pemrosesan (mencegah retry konkuren dari webhook gateway)
+            if state.get("processing") and state.get("last_message") == input_pesan:
+                if now - state.get("last_timestamp", 0) < 15:
+                    print(f"[DUPLICATE] Webhook retry konkuren terdeteksi untuk {no_hp}. Mengabaikan.")
+                    return ChatResponse(status="duplicate", source="system", reply=None)
+            
+            # 2. Pesan duplikat sangat cepat yang sudah selesai diproses (dalam waktu < 3 detik)
+            if not state.get("processing") and state.get("last_message") == input_pesan:
+                if now - state.get("last_timestamp", 0) < 3:
+                    print(f"[DUPLICATE] Pesan duplikat cepat terdeteksi untuk {no_hp}. Mengembalikan balasan ter-cache.")
+                    return ChatResponse(
+                        status="ok", 
+                        source=state.get("last_source", "system"), 
+                        reply=state.get("last_reply")
+                    )
+
+        # Hitung counter perulangan berturut-turut untuk pesan yang identik
+        repeat_count = 1
+        if state and state.get("last_message") == input_pesan:
+            repeat_count = state.get("repeat_count", 0) + 1
+        
+        # Update state awal (lock processing = True)
+        MESSAGE_STATES[no_hp] = {
+            "last_message": input_pesan,
+            "last_timestamp": now,
+            "repeat_count": repeat_count,
+            "processing": True,
+            "last_reply": None,
+            "last_source": None
+        }
+
+        # 3. Pencegahan spam jika user mengirim pesan yang sama >= 3 kali berturut-turut
+        if repeat_count >= 3:
+            print(f"[ANTI-SPAM] {no_hp} mengirim pesan yang sama {repeat_count}x berturut-turut. Intersepsi.")
+            # Simpan inbound message ke Supabase agar log tetap lengkap di dashboard admin
+            save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service")
+            
+            reply = (
+                "Mohon maaf, Anda telah mengirimkan permintaan yang sama beberapa kali. "
+                "Untuk menghindari kendala sistem, mohon tunggu sebentar atau "
+                "hubungi admin kami jika ada hal darurat. 🙏"
+            )
+            source = "system"
+            
+            # Update state akhir untuk spam intercept
+            MESSAGE_STATES[no_hp]["processing"] = False
+            MESSAGE_STATES[no_hp]["last_reply"] = reply
+            MESSAGE_STATES[no_hp]["last_source"] = source
+            
+            # Kirim balasan
+            return _send_reply(no_hp, input_pesan, reply, source=source)
 
         print(f"\n[{waktu}] [INCOMING] Dari: {no_hp} | Pesan: {input_pesan}")
         save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service")
@@ -164,6 +231,8 @@ def webhook(
         # Bot diam selama handoff aktif — admin yang balas dari dashboard.
         if is_in_handoff(no_hp):
             print(f"[Handoff] {no_hp} dalam mode handoff — bot diam")
+            if no_hp in MESSAGE_STATES:
+                MESSAGE_STATES[no_hp]["processing"] = False
             return ChatResponse(status="handoff", source="handoff", reply=None)
 
         # ── Step 1: Onboarding 
@@ -434,7 +503,11 @@ def webhook(
         return _send_reply(no_hp, input_pesan, reply, source=source)
 
     except HTTPException:
+        if "no_hp" in locals() and no_hp in MESSAGE_STATES:
+            MESSAGE_STATES[no_hp]["processing"] = False
         raise
     except Exception as e:
         print(f"--- ERROR WEBHOOK: {e} ---")
+        if "no_hp" in locals() and no_hp in MESSAGE_STATES:
+            MESSAGE_STATES[no_hp]["processing"] = False
         raise HTTPException(status_code=500, detail=str(e))
