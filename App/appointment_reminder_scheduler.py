@@ -9,6 +9,7 @@
 import json
 import asyncio
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 from fastapi import HTTPException
@@ -27,13 +28,16 @@ REMINDER_STATUS_PENDING = "pending"
 REMINDER_STATUS_SENT = "sent"
 REMINDER_STATUS_FAILED = "failed"
 
+LOCAL_TZ = ZoneInfo("Asia/Jakarta")
 
 def _get_today_date() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """Get today's date in YYYY-MM-DD format berdasarkan timezone lokal klinik (WIB)."""
+    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 
 
 def _get_tomorrow_date() -> str:
-    tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+    """Get tomorrow's date in YYYY-MM-DD format berdasarkan timezone lokal klinik (WIB)."""
+    tomorrow = datetime.now(LOCAL_TZ) + timedelta(days=1)
     return tomorrow.strftime("%Y-%m-%d")
 
 
