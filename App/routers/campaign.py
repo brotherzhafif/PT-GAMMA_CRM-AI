@@ -2,18 +2,20 @@
 # SmartClinic CRM AI — routers/campaign.py
 # Endpoint: /api/marketing/campaigns
 #
-# Last Change   :   22 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 import os
 import re
 import shutil
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, Path, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Path, UploadFile, Request
 
+from App.activity_logger import log_activity
 from App.config import supabase
 from App.helpers import _require_supabase
 from App.models import CampaignRecord, SaveCampaignPayload, UpdateCampaignPayload
@@ -248,7 +250,8 @@ def get_campaign_by_name(campaign_name: str = Path(..., description="Nama campai
         },
     },
 )
-def create_campaign(
+async def create_campaign(
+    request: Request,
     payload: SaveCampaignPayload = Body(
         ...,
         examples={
@@ -279,13 +282,35 @@ def create_campaign(
             "filename": payload.filename,
             "status": payload.status or "scheduled",
         }
-        response = supabase.table("campaigns").insert(insert_data).execute()
+        response = await asyncio.to_thread(
+            lambda: supabase.table("campaigns").insert(insert_data).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=500, detail="Campaign gagal disimpan")
+        
+        await log_activity(
+            category="marketing",
+            action="CREATE_CAMPAIGN",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Campaign baru dibuat: {payload.campaign_name}",
+            metadata={
+                "campaign_name": payload.campaign_name,
+                "status": payload.status or "scheduled",
+                "schedule_date": payload.schedule_date.isoformat() if payload.schedule_date else None,
+            },
+        )
+        
         return _campaign_row(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
+        await log_activity(
+            category="marketing",
+            action="CREATE_CAMPAIGN_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal buat campaign: {payload.campaign_name}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -312,7 +337,8 @@ def create_campaign(
         },
     },
 )
-def update_campaign(
+async def update_campaign(
+    request: Request,
     campaign_name: str = Path(..., description="Nama campaign yang akan diedit", examples=["Promo Cek Gigi Mei"]),
     payload: UpdateCampaignPayload = Body(
         ...,
@@ -341,18 +367,37 @@ def update_campaign(
         if not update_data:
             raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate")
 
-        response = (
-            supabase.table("campaigns")
+        response = await asyncio.to_thread(
+            lambda: supabase.table("campaigns")
             .update(update_data)
             .eq("campaign_name", campaign_name)
             .execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
+        
+        await log_activity(
+            category="marketing",
+            action="UPDATE_CAMPAIGN",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Campaign diperbarui: {campaign_name}",
+            metadata={
+                "campaign_name": campaign_name,
+                "updated_fields": list(update_data.keys()),
+            },
+        )
+        
         return _campaign_row(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
+        await log_activity(
+            category="marketing",
+            action="UPDATE_CAMPAIGN_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal update campaign: {campaign_name}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -375,7 +420,8 @@ def update_campaign(
         },
     },
 )
-def create_campaign_with_upload(
+async def create_campaign_with_upload(
+    request: Request,
     campaign_name: str = Form(..., description="Nama campaign", examples=["Promo Cek Gigi Mei"]),
     schedule_date: datetime = Form(..., description="Waktu campaign (ISO 8601)", examples=["2026-05-25T09:00:00Z"]),
     campaign_message: str = Form(..., description="Isi pesan campaign", examples=["Halo pasien SmartClinic, promo cek gigi bulan ini tersedia sampai akhir Mei."]),
@@ -402,13 +448,36 @@ def create_campaign_with_upload(
             "filename": resolved_filename,
             "status": status or "scheduled",
         }
-        response = supabase.table("campaigns").insert(insert_data).execute()
+        response = await asyncio.to_thread(
+            lambda: supabase.table("campaigns").insert(insert_data).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=500, detail="Campaign gagal disimpan")
+        
+        await log_activity(
+            category="marketing",
+            action="CREATE_CAMPAIGN_WITH_UPLOAD",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Campaign dengan file upload dibuat: {campaign_name}",
+            metadata={
+                "campaign_name": campaign_name,
+                "filename": resolved_filename,
+                "status": status or "scheduled",
+                "schedule_date": schedule_date.isoformat(),
+            },
+        )
+        
         return _campaign_row(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
+        await log_activity(
+            category="marketing",
+            action="CREATE_CAMPAIGN_WITH_UPLOAD_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal buat campaign dengan upload: {campaign_name}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 

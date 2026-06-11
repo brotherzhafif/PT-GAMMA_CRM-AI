@@ -2,13 +2,15 @@
 # SmartClinic CRM AI — routers/handoff.py
 # Endpoint: /api/handoff
 #
-# Last Change   :   16 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 from typing import List
-from fastapi import APIRouter, Body, HTTPException, Path
+from fastapi import APIRouter, Body, HTTPException, Path, Request
 
+from App.activity_logger import log_activity
 from App.models import AdminReplyPayload, HandoffSession
 from App.helpers import save_to_supabase
 from App.handoff_manager import (
@@ -82,7 +84,10 @@ def get_handoff_sessions():
         },
     },
 )
-def start_handoff_manual(phone_number: str = Path(..., description="Nomor HP yang akan di-handoff", examples=["6281234567890"])):
+async def start_handoff_manual(
+    request: Request,
+    phone_number: str = Path(..., description="Nomor HP yang akan di-handoff", examples=["6281234567890"])
+):
     try:
         if is_in_handoff(phone_number):
             return {"status": "ok", "message": f"{phone_number} sudah dalam mode handoff"}
@@ -94,8 +99,24 @@ def start_handoff_manual(phone_number: str = Path(..., description="Nomor HP yan
         )
         fonnte_queue.add_to_queue(phone_number, notif)
         save_to_supabase(phone_number, notif, direction="outbound", source="system")
+        
+        await log_activity(
+            category="handoff",
+            action="HANDOFF_STARTED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Handoff dimulai untuk {phone_number}",
+            metadata={"phone_number": phone_number},
+        )
+        
         return {"status": "ok", "message": f"Handoff untuk {phone_number} dimulai"}
     except Exception as e:
+        await log_activity(
+            category="handoff",
+            action="HANDOFF_START_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal mulai handoff untuk {phone_number}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -118,7 +139,10 @@ def start_handoff_manual(phone_number: str = Path(..., description="Nomor HP yan
         },
     },
 )
-def end_handoff_endpoint(phone_number: str = Path(..., description="Nomor HP yang akan dikembalikan ke bot", examples=["6281234567890"])):
+async def end_handoff_endpoint(
+    request: Request,
+    phone_number: str = Path(..., description="Nomor HP yang akan dikembalikan ke bot", examples=["6281234567890"])
+):
     try:
         if not is_in_handoff(phone_number):
             raise HTTPException(status_code=404, detail=f"{phone_number} tidak dalam mode handoff")
@@ -129,10 +153,26 @@ def end_handoff_endpoint(phone_number: str = Path(..., description="Nomor HP yan
         )
         fonnte_queue.add_to_queue(phone_number, notif)
         save_to_supabase(phone_number, notif, direction="outbound", source="system")
+        
+        await log_activity(
+            category="handoff",
+            action="HANDOFF_ENDED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Handoff diakhiri untuk {phone_number}",
+            metadata={"phone_number": phone_number},
+        )
+        
         return {"status": "ok", "message": f"Handoff untuk {phone_number} diakhiri, bot aktif kembali"}
     except HTTPException:
         raise
     except Exception as e:
+        await log_activity(
+            category="handoff",
+            action="HANDOFF_END_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal akhiri handoff untuk {phone_number}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -159,7 +199,8 @@ def end_handoff_endpoint(phone_number: str = Path(..., description="Nomor HP yan
         },
     },
 )
-def admin_reply(
+async def admin_reply(
+    request: Request,
     phone_number: str = Path(..., description="Nomor HP yang akan dibalas", examples=["6281234567890"]),
     payload: AdminReplyPayload = Body(
         ...,
@@ -181,8 +222,27 @@ def admin_reply(
         save_to_supabase(phone_number, payload.message, direction="outbound", source="admin")
         update_admin_reply_time(phone_number)
         print(f"[Handoff] Admin → {phone_number}: {payload.message[:60]}...")
+        
+        await log_activity(
+            category="handoff",
+            action="ADMIN_REPLY_SENT",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Admin membalas pesan untuk {phone_number}",
+            metadata={
+                "phone_number": phone_number,
+                "message_preview": payload.message[:100],
+            },
+        )
+        
         return {"status": "ok", "message": "Pesan admin terkirim ke pasien"}
     except HTTPException:
         raise
     except Exception as e:
+        await log_activity(
+            category="handoff",
+            action="ADMIN_REPLY_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal kirim balasan admin ke {phone_number}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))

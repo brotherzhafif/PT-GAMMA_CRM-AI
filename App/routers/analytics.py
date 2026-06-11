@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 
@@ -453,6 +454,213 @@ def get_analytics_insights(range: str = Query("day", description="day | week | m
                 "Insights dihitung dari messages dengan pendekatan heuristik.",
                 "Nilai low-confidence menggunakan proxy berbasis respons source=groq, bukan confidence asli model.",
             ],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get(
+    "/activities",
+    summary="Live activity feed dari activity logs",
+    description="Menampilkan daftar aktivitas terbaru dari seluruh sistem (messaging, appointments, feedback, handoff, config, dll). Tersortir descending by created_at.",
+)
+async def get_activities(
+    limit: int = Query(50, description="Jumlah aktivitas yang diambil", ge=1, le=500),
+    category: str | None = Query(None, description="Filter by category (auth, messaging, patients, appointments, feedback, handoff, marketing, system_config)"),
+    range: str = Query("day", description="day | week | month"),
+):
+    if range not in VALID_RANGES:
+        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
+
+    try:
+        _require_supabase()
+        _, current_start, now = _window(range)
+        
+        query = (
+            supabase.table("activity_logs")
+            .select("*")
+            .gte("created_at", _as_iso(current_start))
+            .lt("created_at", _as_iso(now))
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        
+        if category:
+            query = query.eq("category", category)
+        
+        response = await asyncio.to_thread(lambda: query.execute())
+        
+        activities = response.data or []
+        
+        # Format response
+        formatted = []
+        for activity in activities:
+            formatted.append({
+                "id": activity.get("id"),
+                "kategori": activity.get("category"),
+                "aksi": activity.get("action"),
+                "aktor": activity.get("from_actor"),
+                "pesan": activity.get("message"),
+                "alamat_ip": activity.get("ip_address"),
+                "perangkat": activity.get("device"),
+                "lokasi": activity.get("location"),
+                "metadata": activity.get("metadata"),
+                "dibuat_saat": activity.get("created_at"),
+            })
+        
+        return {
+            "rentang": range,
+            "kategori_filter": category,
+            "total": len(formatted),
+            "aktivitas": formatted,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get(
+    "/dashboard",
+    summary="Ringkasan dashboard dengan activity logs",
+    description="Dashboard overview yang menggabungkan data dari messages dan activity_logs. Includes messaging stats, appointments, feedback, handoff, dan campaign data.",
+)
+async def get_dashboard_summary(range: str = Query("day", description="day | week | month")):
+    if range not in VALID_RANGES:
+        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
+
+    try:
+        _require_supabase()
+        previous_start, current_start, now = _window(range)
+        
+        # Fetch messages data (existing logic)
+        messages_rows = _fetch_messages(previous_start, now)
+        previous_msg_rows = [r for r in messages_rows if _parse_ts(r.get("created_at")) and _parse_ts(r.get("created_at")) < current_start]
+        current_msg_rows = [r for r in messages_rows if _parse_ts(r.get("created_at")) and _parse_ts(r.get("created_at")) >= current_start]
+        
+        current_msg_kpi = _kpi_from_rows(current_msg_rows)
+        previous_msg_kpi = _kpi_from_rows(previous_msg_rows)
+        
+        # Fetch activity logs for current period
+        activities_query = await asyncio.to_thread(
+            lambda: supabase.table("activity_logs")
+            .select("category, action, created_at")
+            .gte("created_at", _as_iso(current_start))
+            .lt("created_at", _as_iso(now))
+            .execute()
+        )
+        current_activities = activities_query.data or []
+        
+        # Fetch activity logs for previous period
+        prev_activities_query = await asyncio.to_thread(
+            lambda: supabase.table("activity_logs")
+            .select("category, action, created_at")
+            .gte("created_at", _as_iso(previous_start))
+            .lt("created_at", _as_iso(current_start))
+            .execute()
+        )
+        previous_activities = prev_activities_query.data or []
+        
+        # Count activities by category
+        def count_activities(activities, category, action=None):
+            count = 0
+            for a in activities:
+                if a.get("category") == category:
+                    if action is None or a.get("action") == action:
+                        count += 1
+            return count
+        
+        # Current period activity counts
+        current_feedback = count_activities(current_activities, "feedback", "CREATE_FEEDBACK")
+        current_patients = count_activities(current_activities, "patients", "CREATE_PATIENT")
+        current_appointments = count_activities(current_activities, "appointments", "CREATE_APPOINTMENT")
+        current_handoff = count_activities(current_activities, "handoff", "HANDOFF_STARTED")
+        current_campaigns = count_activities(current_activities, "marketing") or count_activities(current_activities, "marketing", "CREATE_CAMPAIGN")
+        
+        # Previous period activity counts
+        previous_feedback = count_activities(previous_activities, "feedback", "CREATE_FEEDBACK")
+        previous_patients = count_activities(previous_activities, "patients", "CREATE_PATIENT")
+        previous_appointments = count_activities(previous_activities, "appointments", "CREATE_APPOINTMENT")
+        previous_handoff = count_activities(previous_activities, "handoff", "HANDOFF_STARTED")
+        previous_campaigns = count_activities(previous_activities, "marketing") or count_activities(previous_activities, "marketing", "CREATE_CAMPAIGN")
+        
+        period_label = _period_label(range)
+        
+        # Build response
+        cards = [
+            {
+                "kunci": "total_percakapan",
+                "judul": "Total Percakapan",
+                "nilai": int(current_msg_kpi["total_conversations"]),
+                "sebelumnya": int(previous_msg_kpi["total_conversations"]),
+                "label_tren": f"{_calc_delta(current_msg_kpi['total_conversations'], previous_msg_kpi['total_conversations']):.0f}% {period_label}",
+            },
+            {
+                "kunci": "respons_chatbot",
+                "judul": "Respons Chatbot",
+                "nilai": int(current_msg_kpi["total_chatbot_response"]),
+                "sebelumnya": int(previous_msg_kpi["total_chatbot_response"]),
+            },
+            {
+                "kunci": "respons_admin",
+                "judul": "Respons Admin",
+                "nilai": int(current_msg_kpi["total_human_response"]),
+                "sebelumnya": int(previous_msg_kpi["total_human_response"]),
+            },
+            {
+                "kunci": "konversi_booking",
+                "judul": "Konversi Booking",
+                "nilai": round(current_msg_kpi["booking_conversion"], 2),
+                "satuan": "%",
+            },
+            {
+                "kunci": "feedback_baru",
+                "judul": "Feedback Baru",
+                "nilai": current_feedback,
+                "sebelumnya": previous_feedback,
+                "kategori": "feedback",
+            },
+            {
+                "kunci": "pasien_baru",
+                "judul": "Pasien Baru",
+                "nilai": current_patients,
+                "sebelumnya": previous_patients,
+                "kategori": "patients",
+            },
+            {
+                "kunci": "janji_baru",
+                "judul": "Janji Temu Baru",
+                "nilai": current_appointments,
+                "sebelumnya": previous_appointments,
+                "kategori": "appointments",
+            },
+            {
+                "kunci": "handoff_aktif",
+                "judul": "Handoff Aktif",
+                "nilai": current_handoff,
+                "sebelumnya": previous_handoff,
+                "kategori": "handoff",
+            },
+            {
+                "kunci": "kampanye",
+                "judul": "Kampanye Dikirim",
+                "nilai": current_campaigns,
+                "sebelumnya": previous_campaigns,
+                "kategori": "marketing",
+            },
+        ]
+        
+        return {
+            "rentang": range,
+            "periode": period_label,
+            "jendela_waktu": {
+                "mulai": _as_iso(current_start),
+                "selesai": _as_iso(now),
+            },
+            "kartu": cards,
+            "sumber_data": ["messages", "activity_logs"],
         }
     except HTTPException:
         raise

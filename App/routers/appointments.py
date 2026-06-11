@@ -2,15 +2,17 @@
 # SmartClinic CRM AI — routers/appointments.py
 # Endpoint: /api/appointment
 #
-# Last Change   :   31 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
+from App.activity_logger import log_activity
 from App.config import SMARTCLINIC_BASE_URL
 from App.helpers import get_rme_patient_id_by_phone, proxy_smartclinic
 
@@ -144,6 +146,7 @@ async def cancel_appointment(id: str = Path(..., description="ID janji temu")):
     },
 )
 async def create_appointment(
+    request: Request,
     payload: CreateAppointmentPayload = Body(
         ...,
         examples={
@@ -161,21 +164,45 @@ async def create_appointment(
         },
     )
 ):
-    rme_patient_id = get_rme_patient_id_by_phone(payload.phone_number)
+    try:
+        rme_patient_id = get_rme_patient_id_by_phone(payload.phone_number)
 
-    query_params = [("pasienId", rme_patient_id)]
-    body = {
-        "jadwalId": payload.jadwalId,
-        "tanggalKunjungan": payload.tanggalKunjungan,
-        "catatan": payload.catatan,
-        "jenisKunjunganBpjs": payload.jenisKunjunganBpjs,
-        "noRujukanFktp": payload.noRujukanFktp,
-    }
+        query_params = [("pasienId", rme_patient_id)]
+        body = {
+            "jadwalId": payload.jadwalId,
+            "tanggalKunjungan": payload.tanggalKunjungan,
+            "catatan": payload.catatan,
+            "jenisKunjunganBpjs": payload.jenisKunjunganBpjs,
+            "noRujukanFktp": payload.noRujukanFktp,
+        }
 
-    return await proxy_smartclinic(
-        "POST",
-        SMARTCLINIC_BASE_URL,
-        SMARTCLINIC_APPOINTMENTS_PATH,
-        params=query_params,
-        json=body,
-    )
+        result = await proxy_smartclinic(
+            "POST",
+            SMARTCLINIC_BASE_URL,
+            SMARTCLINIC_APPOINTMENTS_PATH,
+            params=query_params,
+            json=body,
+        )
+        
+        await log_activity(
+            category="appointments",
+            action="CREATE_APPOINTMENT",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Janji temu dibuat untuk {payload.phone_number} pada {payload.tanggalKunjungan}",
+            metadata={
+                "phone_number": payload.phone_number,
+                "tanggal": payload.tanggalKunjungan,
+                "jadwal_id": payload.jadwalId,
+            },
+        )
+        
+        return result
+    except Exception as exc:
+        await log_activity(
+            category="appointments",
+            action="CREATE_APPOINTMENT_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal buat janji temu untuk {payload.phone_number}",
+            metadata={"error": str(exc)},
+        )
+        raise exc
