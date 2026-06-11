@@ -2,10 +2,11 @@
 # SmartClinic CRM AI — routers/patients.py
 # Endpoint: /api/patients
 #
-# Last Change   :   25 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 import json
 from typing import Literal, Optional
 
@@ -13,6 +14,7 @@ import httpx
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field
 
+from App.activity_logger import log_activity
 from App.config import supabase
 from App.helpers import get_rme_patient_id_by_phone, normalize_phone_number
 from App.models import PatientPayload
@@ -117,6 +119,7 @@ async def get_all_patients(request: Request):
     },
 )
 async def create_patient(
+    request: Request,
     payload: PatientPayload = Body(
         ...,
         examples={
@@ -133,48 +136,71 @@ async def create_patient(
         },
     )
 ):
-    response = await _smartclinic_request(
-        "POST",
-        SMARTCLINIC_PATIENTS_PATH,
-        json_body=payload.model_dump(exclude_none=True),
-    )
-    if response.status_code >= 400:
-        return response
-
     try:
-        upstream_payload = json.loads(response.body.decode("utf-8"))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Respons SmartClinic tidak valid") from exc
+        response = await _smartclinic_request(
+            "POST",
+            SMARTCLINIC_PATIENTS_PATH,
+            json_body=payload.model_dump(exclude_none=True),
+        )
+        if response.status_code >= 400:
+            return response
 
-    rme_patient_id = (upstream_payload.get("data") or {}).get("id") if isinstance(upstream_payload, dict) else None
-    if not rme_patient_id:
-        raise HTTPException(status_code=502, detail="SmartClinic tidak mengembalikan data.id")
-
-    try:
-        _upsert_patient_to_supabase(rme_patient_id, payload)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        rollback_error = None
         try:
-            await _delete_patient_in_smartclinic(rme_patient_id)
-        except Exception as rollback_exc:
-            rollback_error = rollback_exc
+            upstream_payload = json.loads(response.body.decode("utf-8"))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Respons SmartClinic tidak valid") from exc
 
-        if rollback_error is not None:
+        rme_patient_id = (upstream_payload.get("data") or {}).get("id") if isinstance(upstream_payload, dict) else None
+        if not rme_patient_id:
+            raise HTTPException(status_code=502, detail="SmartClinic tidak mengembalikan data.id")
+
+        try:
+            _upsert_patient_to_supabase(rme_patient_id, payload)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            rollback_error = None
+            try:
+                await _delete_patient_in_smartclinic(rme_patient_id)
+            except Exception as rollback_exc:
+                rollback_error = rollback_exc
+
+            if rollback_error is not None:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "Gagal menyimpan mapping pasien ke Supabase dan gagal rollback data RME: "
+                        f"{exc}; rollback: {rollback_error}"
+                    ),
+                ) from exc
+
             raise HTTPException(
                 status_code=500,
-                detail=(
-                    "Gagal menyimpan mapping pasien ke Supabase dan gagal rollback data RME: "
-                    f"{exc}; rollback: {rollback_error}"
-                ),
+                detail=f"Gagal menyimpan mapping pasien ke Supabase, data RME sudah dihapus lagi: {exc}",
             ) from exc
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gagal menyimpan mapping pasien ke Supabase, data RME sudah dihapus lagi: {exc}",
-        ) from exc
-    return response
+        
+        await log_activity(
+            category="patients",
+            action="CREATE_PATIENT",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Pasien baru terdaftar: {payload.namaLengkap}",
+            metadata={
+                "phone": normalize_phone_number(payload.telepon),
+                "name": payload.namaLengkap,
+                "nik": payload.nik,
+            },
+        )
+        
+        return response
+    except Exception as exc:
+        await log_activity(
+            category="patients",
+            action="CREATE_PATIENT_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal terdaftar pasien: {payload.namaLengkap}",
+            metadata={"error": str(exc)},
+        )
+        raise exc
 
 
 @router.get(

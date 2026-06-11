@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 
+from App.activity_logger import log_activity
 from App.config import supabase
 from App.helpers import _require_supabase
 from App.models import ChatbotSettingsRecord, UpdateChatbotSettingsPayload
@@ -181,7 +183,8 @@ def get_chatbot_settings():
         },
     },
 )
-def update_chatbot_settings(
+async def update_chatbot_settings(
+    request: Request,
     payload: UpdateChatbotSettingsPayload = Body(
         ...,
         examples={
@@ -215,8 +218,8 @@ def update_chatbot_settings(
             return _chatbot_settings_row(current_row)
 
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        response = (
-            supabase.table("chatbot_settings")
+        response = await asyncio.to_thread(
+            lambda: supabase.table("chatbot_settings")
             .update(update_data)
             .eq("id", current_row["id"])
             .select(_chatbot_settings_columns())
@@ -226,8 +229,27 @@ def update_chatbot_settings(
         if not response.data:
             raise HTTPException(status_code=500, detail="Gagal memperbarui chatbot settings")
 
+        await log_activity(
+            category="system_config",
+            action="UPDATE_CHATBOT_SETTINGS",
+            from_actor=request.client.host if request.client else "system",
+            message="Chatbot settings diperbarui",
+            metadata={
+                "updated_fields": list(update_data.keys()),
+                "ai_name": update_data.get("ai_name"),
+                "handoff_threshold": update_data.get("handoff_threshold"),
+            },
+        )
+
         return _chatbot_settings_row(response.data[0])
     except HTTPException:
         raise
     except Exception as exc:
+        await log_activity(
+            category="system_config",
+            action="UPDATE_CHATBOT_SETTINGS_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal update chatbot settings: {str(exc)}",
+            metadata={"error": str(exc)},
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc

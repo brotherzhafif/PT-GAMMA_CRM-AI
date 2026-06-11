@@ -2,16 +2,18 @@
 # SmartClinic CRM AI — routers/feedback.py
 # Endpoint: /api/feedback
 #
-# Last Change   :   30 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahp
 # ======================================================
 
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 
+from App.activity_logger import log_activity
 from App.config import supabase
 from App.helpers import _require_supabase, normalize_phone_number
 from App.models import FeedbackDashboardRecord, FeedbackPayload, FeedbackRecord
@@ -115,7 +117,8 @@ def get_all_feedback():
         },
     },
 )
-def create_feedback(
+async def create_feedback(
+    request: Request,
     payload: FeedbackPayload = Body(
         ...,
         examples={
@@ -139,11 +142,19 @@ def create_feedback(
             "ulasan": payload.ulasan or "",
         }
 
-        response = (
-            supabase.table("feedback")
+        response = await asyncio.to_thread(
+            lambda: supabase.table("feedback")
             .upsert(feedback_data, on_conflict="id_user")
             .select(_feedback_columns())
             .execute()
+        )
+
+        await log_activity(
+            category="feedback",
+            action="CREATE_FEEDBACK",
+            from_actor=normalized_phone,
+            message=f"Feedback dari {normalized_phone}: rating {payload.rating}/5",
+            metadata={"rating": payload.rating, "phone": normalized_phone},
         )
 
         row = (response.data or [feedback_data])[0]
@@ -151,6 +162,13 @@ def create_feedback(
     except HTTPException:
         raise
     except Exception as exc:
+        await log_activity(
+            category="feedback",
+            action="CREATE_FEEDBACK_FAILED",
+            from_actor=payload.no_hp,
+            message=f"Gagal simpan feedback: {str(exc)}",
+            metadata={"error": str(exc)},
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -170,12 +188,12 @@ def create_feedback(
         },
     },
 )
-def get_feedback_dashboard():
+async def get_feedback_dashboard():
     try:
         _require_supabase()
 
-        feedback_rows = _get_feedback_rows()
-        patient_rows = supabase.table("patients").select("phone_number").execute().data or []
+        feedback_rows = await asyncio.to_thread(_get_feedback_rows)
+        patient_rows = await asyncio.to_thread(lambda: supabase.table("patients").select("phone_number").execute().data or [])
 
         total_feedback = len(feedback_rows)
         rata_rating = None

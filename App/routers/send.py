@@ -2,16 +2,18 @@
 # SmartClinic CRM AI — routers/send.py
 # Endpoint: /api/send
 #
-# Last Change   :   16 May 2026
+# Last Change   :   11 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 import os
 import io
 import mimetypes
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
 
+from App.activity_logger import log_activity
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult, SendInteractiveTargetPayload
 from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number, normalize_whatsapp_target
@@ -115,7 +117,8 @@ def _send_media_to_target(
         },
     },
 )
-def send_message(
+async def send_message(
+    request: Request,
     payload: SendMessagePayload = Body(
         ...,
         examples={
@@ -156,6 +159,15 @@ def send_message(
             delivery = send_result
 
         save_to_supabase(target, payload.message, direction="outbound", source=source)
+        
+        await log_activity(
+            category="messaging",
+            action="SEND_MESSAGE",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Pesan dikirim ke {target} via {source}",
+            metadata={"target": target, "source": source, "message_preview": payload.message[:100]},
+        )
+        
         print(f"[SEND] {source} → {target}: {payload.message[:60]}...")
         return {
             "status": "ok",
@@ -165,6 +177,13 @@ def send_message(
         }
 
     except Exception as e:
+        await log_activity(
+            category="messaging",
+            action="SEND_MESSAGE_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal mengirim pesan ke {payload.target}",
+            metadata={"target": payload.target, "error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -190,7 +209,8 @@ def send_message(
         },
     },
 )
-def send_media(
+async def send_media(
+    request: Request,
     target: str = Form(..., description="Nomor WhatsApp tujuan"),
     message: str = Form(default="", description="Caption/pesan pendamping"),
     file: UploadFile = File(..., description="File media yang akan dikirim"),
@@ -209,6 +229,15 @@ def send_media(
         response.raise_for_status()
 
         save_to_supabase(normalized_target, message or file.filename or "media", direction="outbound", source="wa-service")
+        
+        await log_activity(
+            category="messaging",
+            action="SEND_MEDIA",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Media dikirim ke {normalized_target}",
+            metadata={"target": normalized_target, "filename": file.filename, "content_type": file.content_type},
+        )
+        
         print(f"[SEND] wa-service/media → {normalized_target}: {file.filename or 'upload'}")
         return {
             "status": "ok",
@@ -217,106 +246,113 @@ def send_media(
         }
 
     except Exception as e:
+        await log_activity(
+            category="messaging",
+            action="SEND_MEDIA_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Gagal mengirim media ke {target}",
+            metadata={"target": target, "filename": file.filename, "error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post(
-    "/interactive/booking",
-    summary="Kirim menu booking ke nomor tertentu",
-    description="Mengirim menu booking interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
-    responses={
-        200: {"description": "Menu booking berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
-        500: {"description": "Gagal mengirim menu booking", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
-    },
-)
-def send_interactive_booking(
-    payload: SendInteractiveTargetPayload = Body(
-        ...,
-        examples={
-            "interactiveBookingExample": {
-                "summary": "Contoh request menu booking",
-                "value": {"target": "6281234567890"},
-            }
-        },
-    ),
-):
-    try:
-        target = normalize_whatsapp_target(payload.target)
-        result = buat_menu_booking(target)
-        save_to_supabase(target, "[interactive] booking menu", direction="outbound", source=result.get("channel", "interactive"))
-        return {
-            "status": "ok",
-            "message": f"Menu booking untuk {target} masuk antrian",
-            "result": result,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.post(
+#     "/interactive/booking",
+#     summary="Kirim menu booking ke nomor tertentu",
+#     description="Mengirim menu booking interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+#     responses={
+#         200: {"description": "Menu booking berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+#         500: {"description": "Gagal mengirim menu booking", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+#     },
+# )
+# def send_interactive_booking(
+#     payload: SendInteractiveTargetPayload = Body(
+#         ...,
+#         examples={
+#             "interactiveBookingExample": {
+#                 "summary": "Contoh request menu booking",
+#                 "value": {"target": "6281234567890"},
+#             }
+#         },
+#     ),
+# ):
+#     try:
+#         target = normalize_whatsapp_target(payload.target)
+#         result = buat_menu_booking(target)
+#         save_to_supabase(target, "[interactive] booking menu", direction="outbound", source=result.get("channel", "interactive"))
+#         return {
+#             "status": "ok",
+#             "message": f"Menu booking untuk {target} masuk antrian",
+#             "result": result,
+#         }
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post(
-    "/interactive/services",
-    summary="Kirim menu layanan ke nomor tertentu",
-    description="Mengirim menu layanan interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
-    responses={
-        200: {"description": "Menu layanan berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
-        500: {"description": "Gagal mengirim menu layanan", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
-    },
-)
-def send_interactive_services(
-    payload: SendInteractiveTargetPayload = Body(
-        ...,
-        examples={
-            "interactiveServicesExample": {
-                "summary": "Contoh request menu layanan",
-                "value": {"target": "6281234567890"},
-            }
-        },
-    ),
-):
-    try:
-        target = normalize_whatsapp_target(payload.target)
-        result = buat_menu_layanan(target)
-        save_to_supabase(target, "[interactive] layanan menu", direction="outbound", source=result.get("channel", "interactive"))
-        return {
-            "status": "ok",
-            "message": f"Menu layanan untuk {target} masuk antrian",
-            "result": result,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.post(
+#     "/interactive/services",
+#     summary="Kirim menu layanan ke nomor tertentu",
+#     description="Mengirim menu layanan interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+#     responses={
+#         200: {"description": "Menu layanan berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+#         500: {"description": "Gagal mengirim menu layanan", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+#     },
+# )
+# def send_interactive_services(
+#     payload: SendInteractiveTargetPayload = Body(
+#         ...,
+#         examples={
+#             "interactiveServicesExample": {
+#                 "summary": "Contoh request menu layanan",
+#                 "value": {"target": "6281234567890"},
+#             }
+#         },
+#     ),
+# ):
+#     try:
+#         target = normalize_whatsapp_target(payload.target)
+#         result = buat_menu_layanan(target)
+#         save_to_supabase(target, "[interactive] layanan menu", direction="outbound", source=result.get("channel", "interactive"))
+#         return {
+#             "status": "ok",
+#             "message": f"Menu layanan untuk {target} masuk antrian",
+#             "result": result,
+#         }
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post(
-    "/interactive/poll-feedback",
-    summary="Kirim polling feedback ke nomor tertentu",
-    description="Mengirim poll interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
-    responses={
-        200: {"description": "Polling berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
-        500: {"description": "Gagal mengirim polling", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
-    },
-)
-def send_interactive_poll(
-    payload: SendInteractiveTargetPayload = Body(
-        ...,
-        examples={
-            "interactivePollExample": {
-                "summary": "Contoh request polling",
-                "value": {"target": "6281234567890"},
-            }
-        },
-    ),
-):
-    try:
-        target = normalize_whatsapp_target(payload.target)
-        result = buat_poll_feedback(target)
-        save_to_supabase(target, "[interactive] poll feedback", direction="outbound", source=result.get("channel", "interactive"))
-        return {
-            "status": "ok",
-            "message": f"Polling feedback untuk {target} masuk antrian",
-            "result": result,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.post(
+#     "/interactive/poll-feedback",
+#     summary="Kirim polling feedback ke nomor tertentu",
+#     description="Mengirim poll interaktif ke satu nomor. Jika wa-service tidak ready, otomatis fallback ke teks biasa.",
+#     responses={
+#         200: {"description": "Polling berhasil dikirim", "content": {"application/json": {"example": SEND_INTERACTIVE_EXAMPLE}}},
+#         500: {"description": "Gagal mengirim polling", "content": {"application/json": {"example": SEND_ERROR_EXAMPLE}}},
+#     },
+# )
+# def send_interactive_poll(
+#     payload: SendInteractiveTargetPayload = Body(
+#         ...,
+#         examples={
+#             "interactivePollExample": {
+#                 "summary": "Contoh request polling",
+#                 "value": {"target": "6281234567890"},
+#             }
+#         },
+#     ),
+# ):
+#     try:
+#         target = normalize_whatsapp_target(payload.target)
+#         result = buat_poll_feedback(target)
+#         save_to_supabase(target, "[interactive] poll feedback", direction="outbound", source=result.get("channel", "interactive"))
+#         return {
+#             "status": "ok",
+#             "message": f"Polling feedback untuk {target} masuk antrian",
+#             "result": result,
+#         }
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 def broadcast_to_patients(
@@ -414,16 +450,39 @@ def broadcast_to_patients(
         },
     },
 )
-def broadcast_message(
+async def broadcast_message(
+    request: Request,
     message: str = Form(..., description="Isi pesan yang akan dikirim ke semua pasien"),
     file: UploadFile | None = File(default=None, description="Attachment upload langsung (opsional)"),
 ):
     try:
-        result = broadcast_to_patients(message, file=file)
+        result = await asyncio.to_thread(broadcast_to_patients, message, None, None, file, None)
+        
+        await log_activity(
+            category="messaging",
+            action="BROADCAST_MESSAGE",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Broadcast dikirim ke {result.total_sent} pasien",
+            metadata={"total_sent": result.total_sent, "message_preview": message[:100]},
+        )
+        
         print(f"[BROADCAST] {result.total_sent} pesan masuk antrian")
         return result
 
     except HTTPException:
+        await log_activity(
+            category="messaging",
+            action="BROADCAST_MESSAGE_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message="Broadcast gagal - tidak ada pasien",
+        )
         raise
     except Exception as e:
+        await log_activity(
+            category="messaging",
+            action="BROADCAST_MESSAGE_FAILED",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Broadcast gagal: {str(e)}",
+            metadata={"error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))

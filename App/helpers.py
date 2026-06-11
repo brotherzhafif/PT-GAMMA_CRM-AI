@@ -27,6 +27,44 @@ from App.config import (
 from App.smartclinic_auth import get_smartclinic_token
 
 
+def _get_smartclinic_token_with_retry() -> str:
+    """Get SmartClinic token dengan auto-refresh jika login gagal.
+    
+    Ini adalah wrapper sinkron untuk menangani token refresh dan retry.
+    """
+    from App.smartclinic_auth import get_smartclinic_token_sync
+    return get_smartclinic_token_sync()
+
+
+def _smartclinic_request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
+    """Buat request ke SmartClinic dengan auto-retry pada 401.
+    
+    Jika mendapat 401, otomatis refresh token dan retry sekali.
+    """
+    from App.smartclinic_auth import _refresh_token_sync, _login_sync
+    
+    token = _get_smartclinic_token_with_retry()
+    headers = kwargs.get("headers", {})
+    headers["Authorization"] = f"Bearer {token}"
+    kwargs["headers"] = headers
+    
+    response = requests.request(method, url, **kwargs)
+    
+    # Handle 401 — token kemungkinan sudah expired
+    if response.status_code == 401:
+        print(f"[SmartClinic] Mendapat 401 untuk {method} {url}, refresh token dan retry...")
+        try:
+            refreshed = _refresh_token_sync()
+            if not refreshed:
+                refreshed = _login_sync()
+            headers["Authorization"] = f"Bearer {refreshed}"
+            response = requests.request(method, url, **kwargs)
+        except Exception as e:
+            print(f"[SmartClinic] Force refresh gagal: {e}")
+    
+    return response
+
+
 # Supabase 
 
 def normalize_phone_number(phone_number: str) -> str:
@@ -83,7 +121,10 @@ async def proxy_smartclinic(
     params: Optional[list[tuple[str, str]]] = None,
     json: Optional[dict[str, Any]] = None,
 ) -> Response:
-    """Proxy request ke SmartClinic dengan token auth yang sudah di-cache."""
+    """Proxy request ke SmartClinic dengan token auth yang sudah di-cache.
+    
+    Jika mendapat 401, otomatis refresh token dan retry sekali.
+    """
     token = await get_smartclinic_token()
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -92,6 +133,33 @@ async def proxy_smartclinic(
             upstream = await client.request(method, path, params=params, json=json, headers=headers)
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
+
+        # Handle 401 Unauthorized — token kemungkinan sudah expired di server
+        if upstream.status_code == 401:
+            print(f"[SmartClinic] Mendapat 401 untuk {method} {path}, refresh token dan retry...")
+            from App.smartclinic_auth import _refresh_token_sync, _login_sync, _load_token_cache
+            
+            # Force refresh atau login ulang
+            try:
+                refreshed = _refresh_token_sync()
+                if not refreshed:
+                    refreshed = _login_sync()
+                token = refreshed
+                headers = {"Authorization": f"Bearer {token}"}
+            except Exception as e:
+                print(f"[SmartClinic] Force refresh gagal: {e}")
+                # Jika refresh gagal, langsung raise 401
+                return Response(
+                    content=upstream.content,
+                    status_code=upstream.status_code,
+                    media_type=upstream.headers.get("content-type"),
+                )
+            
+            # Retry request dengan token baru
+            try:
+                upstream = await client.request(method, path, params=params, json=json, headers=headers)
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic saat retry") from exc
 
     return Response(
         content=upstream.content,
@@ -129,7 +197,6 @@ def upsert_patient(
       3. Simpan phone_number + name + rme_patient_id ke Supabase
     """
     from App.config import SMARTCLINIC_BASE_URL
-    from App.smartclinic_auth import get_smartclinic_token_sync
 
     normalized_phone = normalize_phone_number(no_hp)
 
@@ -145,7 +212,7 @@ def upsert_patient(
         patient_body["jenisKelamin"] = jenisKelamin
     
     # Dapatkan token secara sinkron
-    token = get_smartclinic_token_sync()
+    token = _get_smartclinic_token_with_retry()
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
@@ -154,7 +221,8 @@ def upsert_patient(
     # POST ke endpoint patient SmartClinic
     rme_patient_id = None
     try:
-        resp = requests.post(
+        resp = _smartclinic_request_with_retry(
+            "POST",
             f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
             headers=headers,
             json=patient_body,
@@ -167,7 +235,8 @@ def upsert_patient(
         elif resp.status_code == 409:
             # Pasien sudah ada — ambil ID via GET by NIK
             lookup_param = {"nik": nik} if nik else {"telepon": normalized_phone}
-            get_resp = requests.get(
+            get_resp = _smartclinic_request_with_retry(
+                "GET",
                 f"{SMARTCLINIC_BASE_URL.rstrip('/')}/patients",
                 params=lookup_param,
                 headers={"Authorization": f"Bearer {token}"},
