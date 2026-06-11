@@ -113,13 +113,19 @@ def _create_reminder(
     appointment_date: str,
     reminder_type: str,
     patient_name: Optional[str] = None,
+    appointment_time: Optional[str] = None,
 ) -> bool:
     """Buat reminder baru di Supabase."""
     try:
+        if appointment_time:
+            time_str = f" jam {appointment_time}"
+        else:
+            time_str = ""
+
         if reminder_type == REMINDER_TYPE_H_MINUS_1:
-            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu besok ({appointment_date}). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
+            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu besok ({appointment_date}{time_str}). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
         else:  # H-0
-            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu HARI INI ({appointment_date}). Harap datang tepat waktu. Terima kasih!"
+            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu HARI INI ({appointment_date}{time_str}). Harap datang tepat waktu. Terima kasih!"
         
         supabase.table("appointment_reminders").insert({
             "phone_number": phone_number,
@@ -216,10 +222,11 @@ def _process_reminders():
             
             phone_number = patient.get("phone_number")
             patient_name = patient.get("name")
-            
+            appointment_time = apt.get("jadwal", {}).get("jamMulai")
+
             # Check dan buat reminder H-1
             if not _reminder_already_exists(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1):
-                _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name)
+                _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name, appointment_time)
         
         # Fetch appointments untuk hari ini (H-0)
         today_appointments = _fetch_smartclinic_appointments(today_date)
@@ -234,10 +241,11 @@ def _process_reminders():
             
             phone_number = patient.get("phone_number")
             patient_name = patient.get("name")
-            
+            appointment_time = apt.get("jadwal", {}).get("jamMulai")
+
             # Check dan buat reminder H-0
             if not _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_H_MINUS_0):
-                _create_reminder(phone_number, today_date, REMINDER_TYPE_H_MINUS_0, patient_name)
+                _create_reminder(phone_number, today_date, REMINDER_TYPE_H_MINUS_0, patient_name, appointment_time)
         
         # Send semua pending H-0 reminders (appointment hari ini)
         _send_pending_reminders()
