@@ -374,11 +374,26 @@ def set_session_state(no_hp: str, state: Optional[str], data: Optional[dict] = N
         if os.path.exists(file_path):
             os.remove(file_path)
         return
-    payload = {"state": state}
+    payload = {
+        "state": state,
+        "updated_at": datetime.utcnow().isoformat()
+    }
     if data is not None:
         payload["data"] = data
     with open(file_path, "w") as f:
         json.dump(payload, f)
+
+
+def get_session_updated_at(no_hp: str) -> Optional[str]:
+    """Ambil waktu update sesi terakhir untuk nomor tertentu. Return None jika tidak ada."""
+    file_path = os.path.join(STATE_DIR, f"{no_hp}.json")
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f).get("updated_at")
+    except Exception:
+        return None
 
 
 def get_onboarding_data(no_hp: str) -> dict:

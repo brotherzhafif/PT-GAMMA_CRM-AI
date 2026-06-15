@@ -86,6 +86,9 @@ HANDOFF_KEYWORDS = {
     "tolong admin", "butuh bantuan manusia",
 }
 
+#  Onboarding Timeout
+ONBOARDING_TIMEOUT_MINUTES = int(os.getenv("ONBOARDING_TIMEOUT_MINUTES", "30"))
+
 #  Storage Dirs
 HISTORY_DIR = "chat_history"
 STATE_DIR = "chat_state"

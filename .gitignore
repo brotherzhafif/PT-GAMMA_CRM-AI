@@ -74,4 +74,5 @@ qr_new.html
 .playwright-mcp
 
 # Graphify
-graphify-out/
+graphify-out/
+docs

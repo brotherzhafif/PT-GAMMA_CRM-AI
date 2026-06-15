@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
-from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS
+from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, ONBOARDING_TIMEOUT_MINUTES
 from App.models import WebhookPayload, ChatResponse
 from App.helpers import (
     save_to_supabase,
@@ -20,6 +20,7 @@ from App.helpers import (
     get_chat_history_json,
     get_session_state,
     set_session_state,
+    get_session_updated_at,
     get_onboarding_data,
     is_patient_registered,
     upsert_patient,
@@ -239,6 +240,33 @@ def webhook(
         # Ambil session_state SEKALI di sini — tidak diambil ulang di bawah.
         session_state = get_session_state(no_hp)
         is_registered = is_patient_registered(no_hp)
+
+        # Cek idle timeout untuk onboarding state
+        if session_state in ONBOARDING_STATES:
+            updated_at_str = get_session_updated_at(no_hp)
+            if updated_at_str:
+                try:
+                    updated_at = datetime.fromisoformat(updated_at_str)
+                    diff_minutes = (datetime.utcnow() - updated_at).total_seconds() / 60.0
+                    if diff_minutes > ONBOARDING_TIMEOUT_MINUTES:
+                        print(f"[Onboarding] Timeout terdeteksi untuk {no_hp} (state: {session_state}, idle: {diff_minutes:.2f}m)")
+                        if session_state == "waiting_name":
+                            # Silently wipe state jika pesan baru adalah greeting. Jika bukan, anggap itu nama mereka.
+                            greetings = {"halo", "hi", "hello", "p", "pagi", "siang", "sore", "malam", "assalamualaikum", "tanya", "mau", "daftar"}
+                            if input_pesan.lower() in greetings:
+                                set_session_state(no_hp, None)
+                                session_state = None
+                        else:
+                            # Notice reset: reset ke waiting_name, bersihkan data parsial, kirim pesan penjelasan
+                            set_session_state(no_hp, "waiting_name")
+                            session_state = "waiting_name"
+                            reply = (
+                                "Maaf, pendaftaran Anda sebelumnya kedaluwarsa karena terlalu lama tidak merespons. "
+                                "Mari kita ulangi dari awal. Boleh kami tahu nama lengkap kamu?"
+                            )
+                            return _send_reply(no_hp, input_pesan, reply, source="system")
+                except Exception as e:
+                    print(f"[Onboarding] Gagal cek timeout: {e}")
 
         # Nomor baru yang belum masuk alur onboarding sama sekali
         if not is_registered and session_state not in ONBOARDING_STATES:
