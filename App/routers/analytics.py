@@ -1,288 +1,247 @@
+# ======================================================
+# SmartClinic CRM AI — routers/analytics.py
+# Endpoint: /api/analytics
+#
+# Menyediakan data analytics dashboard dari tabel Supabase:
+#   messages, patients, feedback, campaigns,
+#   appointment_reminders, activity_logs
+#
+# Last Change   :   17 Jun 2026
+# Developer     :   Raja Zhafif Raditya Harahap
+# ======================================================
+
 from __future__ import annotations
 
 import asyncio
-from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 
 from App.config import supabase
 from App.helpers import _require_supabase
 
-
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
+# ──────────────────────────────────────────────────────────
+#  Constants & Helpers
+# ──────────────────────────────────────────────────────────
 
-VALID_RANGES = {"day", "week", "month"}
-VALID_BUCKETS = {"hour", "day", "week"}
+LOCAL_TZ = ZoneInfo("Asia/Jakarta")
 
-TOPIC_KEYWORDS = {
-    "Book Appointment": ["booking", "book", "janji", "appointment", "reservasi", "daftar"],
-    "Operating Hours": ["jam buka", "jam operasional", "operasional", "buka", "tutup"],
-    "Pricing Inquiry": ["harga", "biaya", "tarif", "price"],
-    "Insurance Claims": ["bpjs", "asuransi", "insurance", "klaim", "rujukan"],
-    "Complex Symptoms": ["nyeri", "sakit", "demam", "mual", "sesak", "pusing", "batuk", "diare"],
-    "Billing Dispute": ["tagihan", "billing", "invoice", "kwitansi", "pembayaran", "bayar"],
-    "Reschedule Request": ["reschedule", "jadwal ulang", "ubah jadwal", "ganti jadwal", "pindah jadwal"],
-}
-
-BOOKING_KEYWORDS = TOPIC_KEYWORDS["Book Appointment"]
+VALID_RANGES = {"today", "7d", "30d"}
 
 
-def _parse_ts(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
-    except Exception:
-        return None
+def _resolve_range(range_key: str) -> tuple[datetime, datetime]:
+    """Return (start, end) as UTC-aware datetimes for the given range key."""
+    if range_key not in VALID_RANGES:
+        raise HTTPException(status_code=422, detail="range harus salah satu dari: today, 7d, 30d")
+
+    now_local = datetime.now(LOCAL_TZ)
+
+    if range_key == "today":
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif range_key == "7d":
+        start_local = (now_local - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:  # 30d
+        start_local = (now_local - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    return start_local, now_local
 
 
-def _as_iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat()
+def _iso(dt: datetime) -> str:
+    return dt.isoformat()
 
 
-def _current_period_start(now: datetime, range_key: str) -> datetime:
-    if range_key == "day":
-        return now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if range_key == "week":
-        start = now - timedelta(days=now.weekday())
-        return start.replace(hour=0, minute=0, second=0, microsecond=0)
-    if range_key == "month":
-        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
+# ──────────────────────────────────────────────────────────
+#  Data Fetchers (sync — wrapped with asyncio.to_thread)
+# ──────────────────────────────────────────────────────────
 
-
-def _window(range_key: str) -> tuple[datetime, datetime, datetime]:
-    now = datetime.now(timezone.utc)
-    current_start = _current_period_start(now, range_key)
-    elapsed = now - current_start
-    previous_end = current_start
-    previous_start = previous_end - elapsed
-    return previous_start, current_start, now
-
-
-def _fetch_messages(start_at: date, end_at: date) -> list[dict]:
-    _require_supabase()
-    start_datetime = datetime.combine(start_at, datetime.min.time(), tzinfo=timezone.utc)
-    end_datetime = datetime.combine(end_at, datetime.min.time(), tzinfo=timezone.utc)
-    response = (
+def _fetch_messages_in_range(start: datetime, end: datetime) -> list[dict]:
+    """Fetch messages dari Supabase dengan filter created_at."""
+    return (
         supabase.table("messages")
-        .select("sender_number, message_text, direction, source, created_at")
-        .gte("created_at", _as_iso(start_datetime))
-        .lt("created_at", _as_iso(end_datetime))
+        .select("sender_number, direction, source, created_at")
+        .gte("created_at", _iso(start))
+        .lte("created_at", _iso(end))
         .order("created_at", desc=False)
         .execute()
-    )
-    return response.data or []
+    ).data or []
 
 
-def _topic_from_text(text: str | None) -> str:
-    payload = (text or "").lower()
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        if any(keyword in payload for keyword in keywords):
-            return topic
-    return "Other"
+def _fetch_all_patients() -> list[dict]:
+    return (supabase.table("patients").select("id, created_at").execute()).data or []
 
 
-def _is_chatbot_response(row: dict) -> bool:
-    return (row.get("direction") == "outbound") and (row.get("source") != "admin")
+def _fetch_patients_in_range(start: datetime, end: datetime) -> int:
+    rows = (
+        supabase.table("patients")
+        .select("id")
+        .gte("created_at", _iso(start))
+        .lte("created_at", _iso(end))
+        .execute()
+    ).data or []
+    return len(rows)
 
 
-def _is_human_response(row: dict) -> bool:
-    return (row.get("direction") == "outbound") and (row.get("source") == "admin")
+def _fetch_all_feedback() -> list[dict]:
+    return (supabase.table("feedback").select("rating").execute()).data or []
 
 
-def _calc_delta(current: float, previous: float) -> float:
-    if previous == 0:
-        return 100.0 if current > 0 else 0.0
-    return round(((current - previous) / previous) * 100, 2)
+def _fetch_campaigns_in_range(start: datetime, end: datetime) -> list[dict]:
+    return (
+        supabase.table("campaigns")
+        .select("status")
+        .gte("created_at", _iso(start))
+        .lte("created_at", _iso(end))
+        .execute()
+    ).data or []
 
 
-def _period_label(range_key: str) -> str:
-    if range_key == "day":
-        return "dibanding kemarin"
-    if range_key == "week":
-        return "dibanding minggu lalu"
-    return "dibanding bulan lalu"
+def _fetch_reminders_in_range(start: datetime, end: datetime) -> list[dict]:
+    return (
+        supabase.table("appointment_reminders")
+        .select("status")
+        .gte("created_at", _iso(start))
+        .lte("created_at", _iso(end))
+        .execute()
+    ).data or []
 
 
-def _trend_payload(current: float, previous: float, *, as_percent_value: bool = False) -> dict:
-    delta = _calc_delta(current, previous)
-    direction = "naik" if delta > 0 else ("turun" if delta < 0 else "stabil")
-    symbol = "+" if delta > 0 else ("-" if delta < 0 else "")
-    value = round(current, 2) if as_percent_value else int(current)
-    previous_value = round(previous, 2) if as_percent_value else int(previous)
-    return {
-        "nilai": value,
-        "sebelumnya": previous_value,
-        "perubahan_persen": delta,
-        "arah_tren": direction,
-        "simbol_tren": symbol,
-    }
+def _fetch_handoff_started_count(start: datetime, end: datetime) -> int:
+    rows = (
+        supabase.table("activity_logs")
+        .select("id")
+        .eq("category", "handoff")
+        .eq("action", "HANDOFF_STARTED")
+        .gte("created_at", _iso(start))
+        .lte("created_at", _iso(end))
+        .execute()
+    ).data or []
+    return len(rows)
 
 
-def _kpi_from_rows(rows: list[dict]) -> dict[str, float]:
-    senders = {row.get("sender_number") for row in rows if row.get("sender_number")}
-    outbound_rows = [row for row in rows if row.get("direction") == "outbound"]
-
-    chatbot_count = sum(1 for row in outbound_rows if _is_chatbot_response(row))
-    human_count = sum(1 for row in outbound_rows if _is_human_response(row))
-
-    booking_senders = set()
-    for row in rows:
-        sender = row.get("sender_number")
-        text = (row.get("message_text") or "").lower()
-        if sender and any(keyword in text for keyword in BOOKING_KEYWORDS):
-            booking_senders.add(sender)
-
-    total_conversations = len(senders)
-    booking_conversion = round((len(booking_senders) / total_conversations) * 100, 2) if total_conversations else 0.0
-
-    return {
-        "total_conversations": float(total_conversations),
-        "total_chatbot_response": float(chatbot_count),
-        "total_human_response": float(human_count),
-        "booking_conversion": booking_conversion,
-    }
-
-
-def _bucket_start(value: datetime, bucket: str) -> datetime:
-    if bucket == "hour":
-        return value.replace(minute=0, second=0, microsecond=0)
-    if bucket == "day":
-        return value.replace(hour=0, minute=0, second=0, microsecond=0)
-    if bucket == "week":
-        start = value - timedelta(days=value.weekday())
-        return start.replace(hour=0, minute=0, second=0, microsecond=0)
-    raise HTTPException(status_code=422, detail="bucket harus salah satu dari hour|day|week")
-
-
-def _bucket_step(bucket: str) -> timedelta:
-    if bucket == "hour":
-        return timedelta(hours=1)
-    if bucket == "day":
-        return timedelta(days=1)
-    if bucket == "week":
-        return timedelta(days=7)
-    raise HTTPException(status_code=422, detail="bucket harus salah satu dari hour|day|week")
-
-
-def _validate_bucket(range_key: str, bucket: str) -> None:
-    if range_key == "day" and bucket not in {"hour", "day"}:
-        raise HTTPException(status_code=422, detail="range=day hanya mendukung bucket=hour|day")
-    if range_key == "week" and bucket not in {"day", "week"}:
-        raise HTTPException(status_code=422, detail="range=week hanya mendukung bucket=day|week")
-
+# ──────────────────────────────────────────────────────────
+#  Endpoint 1: Overview
+# ──────────────────────────────────────────────────────────
 
 @router.get(
-    "/summary",
-    summary="Ringkasan KPI dari messages",
+    "/overview",
+    summary="Dashboard overview — semua KPI dalam 1 panggilan",
     description=(
-        "Menyediakan 4 KPI utama (total conversation, chatbot response, human response, booking conversion) "
-        "dengan delta persen terhadap periode sebelumnya. Sumber data: tabel messages saja."
+        "Mengembalikan ringkasan lengkap: messaging stats, patients, feedback, "
+        "campaigns, reminders, dan handoff. Sumber data: semua tabel Supabase."
     ),
 )
-def get_analytics_summary(range: str = Query("day", description="day | week | month")):
-    if range not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
-
+async def get_overview(range: str = Query("today", description="today | 7d | 30d")):
     try:
-        previous_start, current_start, now = _window(range)
-        rows = _fetch_messages(previous_start, now)
+        _require_supabase()
+        start, end = _resolve_range(range)
 
-        previous_rows: list[dict] = []
-        current_rows: list[dict] = []
-        for row in rows:
-            created_at = _parse_ts(row.get("created_at"))
-            if not created_at:
-                continue
-            if created_at < current_start:
-                previous_rows.append(row)
-            else:
-                current_rows.append(row)
-
-        current_kpi = _kpi_from_rows(current_rows)
-        previous_kpi = _kpi_from_rows(previous_rows)
-
-        total_conversations = _trend_payload(
-            current_kpi["total_conversations"],
-            previous_kpi["total_conversations"],
-        )
-        total_chatbot_response = _trend_payload(
-            current_kpi["total_chatbot_response"],
-            previous_kpi["total_chatbot_response"],
-        )
-        total_human_response = _trend_payload(
-            current_kpi["total_human_response"],
-            previous_kpi["total_human_response"],
-        )
-        booking_conversion = _trend_payload(
-            current_kpi["booking_conversion"],
-            previous_kpi["booking_conversion"],
-            as_percent_value=True,
+        # Fetch semua data secara paralel
+        (
+            messages,
+            all_patients,
+            new_patients_count,
+            all_feedback,
+            campaigns,
+            reminders,
+            handoff_started,
+        ) = await asyncio.gather(
+            asyncio.to_thread(_fetch_messages_in_range, start, end),
+            asyncio.to_thread(_fetch_all_patients),
+            asyncio.to_thread(_fetch_patients_in_range, start, end),
+            asyncio.to_thread(_fetch_all_feedback),
+            asyncio.to_thread(_fetch_campaigns_in_range, start, end),
+            asyncio.to_thread(_fetch_reminders_in_range, start, end),
+            asyncio.to_thread(_fetch_handoff_started_count, start, end),
         )
 
-        period_label = _period_label(range)
+        # ── Messaging stats ──
+        inbound_count = 0
+        outbound_count = 0
+        source_counter: dict[str, int] = defaultdict(int)
+        unique_senders: set[str] = set()
 
-        cards = [
-            {
-                "kunci": "total_percakapan",
-                "judul": "Total Percakapan",
-                "nilai": total_conversations["nilai"],
-                "sebelumnya": total_conversations["sebelumnya"],
-                "perubahan_persen": total_conversations["perubahan_persen"],
-                "arah_tren": total_conversations["arah_tren"],
-                "simbol_tren": total_conversations["simbol_tren"],
-                "label_tren": f"{total_conversations['simbol_tren']}{abs(total_conversations['perubahan_persen'])}% {period_label}",
-            },
-            {
-                "kunci": "total_respons_chatbot",
-                "judul": "Total Respons Chatbot",
-                "nilai": total_chatbot_response["nilai"],
-                "sebelumnya": total_chatbot_response["sebelumnya"],
-                "perubahan_persen": total_chatbot_response["perubahan_persen"],
-                "arah_tren": total_chatbot_response["arah_tren"],
-                "simbol_tren": total_chatbot_response["simbol_tren"],
-                "label_tren": f"{total_chatbot_response['simbol_tren']}{abs(total_chatbot_response['perubahan_persen'])}% {period_label}",
-            },
-            {
-                "kunci": "total_respons_admin",
-                "judul": "Total Respons Admin",
-                "nilai": total_human_response["nilai"],
-                "sebelumnya": total_human_response["sebelumnya"],
-                "perubahan_persen": total_human_response["perubahan_persen"],
-                "arah_tren": total_human_response["arah_tren"],
-                "simbol_tren": total_human_response["simbol_tren"],
-                "label_tren": f"{total_human_response['simbol_tren']}{abs(total_human_response['perubahan_persen'])}% {period_label}",
-            },
-            {
-                "kunci": "konversi_booking",
-                "judul": "Konversi Booking",
-                "nilai": booking_conversion["nilai"],
-                "sebelumnya": booking_conversion["sebelumnya"],
-                "perubahan_persen": booking_conversion["perubahan_persen"],
-                "arah_tren": booking_conversion["arah_tren"],
-                "simbol_tren": booking_conversion["simbol_tren"],
-                "label_tren": f"{booking_conversion['simbol_tren']}{abs(booking_conversion['perubahan_persen'])}% {period_label}",
-                "satuan": "%",
-            },
-        ]
+        for msg in messages:
+            direction = msg.get("direction")
+            if direction == "inbound":
+                inbound_count += 1
+                sender = msg.get("sender_number")
+                if sender:
+                    unique_senders.add(sender)
+            elif direction == "outbound":
+                outbound_count += 1
+                source = msg.get("source") or "unknown"
+                source_counter[source] += 1
+
+        unique_conversations = len(unique_senders)
+        avg_response = round(outbound_count / unique_conversations, 1) if unique_conversations else 0
+
+        # ── Feedback stats (kumulatif, semua waktu) ──
+        total_feedback = len(all_feedback)
+        avg_rating = None
+        rating_dist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+
+        if total_feedback:
+            rating_sum = 0
+            for fb in all_feedback:
+                r = fb.get("rating")
+                if r is not None:
+                    rating_sum += int(r)
+                    rating_dist[str(int(r))] = rating_dist.get(str(int(r)), 0) + 1
+            avg_rating = round(rating_sum / total_feedback, 1)
+
+        # ── Campaign stats ──
+        campaign_status_counter: dict[str, int] = defaultdict(int)
+        for c in campaigns:
+            status = c.get("status") or "unknown"
+            campaign_status_counter[status] += 1
+
+        # ── Reminder stats ──
+        reminder_status_counter: dict[str, int] = defaultdict(int)
+        for r in reminders:
+            status = r.get("status") or "unknown"
+            reminder_status_counter[status] += 1
+
+        # ── Handoff stats ──
+        from App.handoff_manager import get_all_handoff_sessions
+        active_handoffs = len(get_all_handoff_sessions())
 
         return {
-            "rentang": range,
-            "jendela_waktu": {
-                "mulai_saat_ini": _as_iso(current_start),
-                "selesai_saat_ini": _as_iso(now),
-                "mulai_sebelumnya": _as_iso(previous_start),
-                "selesai_sebelumnya": _as_iso(current_start),
+            "range": range,
+            "period": {
+                "start": _iso(start),
+                "end": _iso(end),
             },
-            "kartu": cards,
-            "ringkasan_kpi": {
-                "total_percakapan": total_conversations,
-                "total_respons_chatbot": total_chatbot_response,
-                "total_respons_admin": total_human_response,
-                "konversi_booking": booking_conversion,
+            "messaging": {
+                "total_inbound": inbound_count,
+                "total_outbound": outbound_count,
+                "unique_conversations": unique_conversations,
+                "by_source": dict(source_counter),
+                "avg_response_per_conversation": avg_response,
+            },
+            "patients": {
+                "total_registered": len(all_patients),
+                "new_in_period": new_patients_count,
+            },
+            "feedback": {
+                "total_responses": total_feedback,
+                "average_rating": avg_rating,
+                "rating_distribution": rating_dist,
+            },
+            "campaigns": {
+                "total": len(campaigns),
+                "by_status": dict(campaign_status_counter),
+            },
+            "reminders": {
+                "total": len(reminders),
+                "by_status": dict(reminder_status_counter),
+            },
+            "handoff": {
+                "active_sessions": active_handoffs,
+                "total_started_in_period": handoff_started,
             },
         }
     except HTTPException:
@@ -291,230 +250,105 @@ def get_analytics_summary(range: str = Query("day", description="day | week | mo
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+# ──────────────────────────────────────────────────────────
+#  Endpoint 2: Messages Chart (Time-Series)
+# ──────────────────────────────────────────────────────────
+
+def _auto_group_by(range_key: str) -> str:
+    """Pilih granularity otomatis berdasarkan range."""
+    return "hour" if range_key == "today" else "day"
+
+
+def _bucket_label(dt: datetime, group_by: str) -> str:
+    """Format label bucket sesuai granularity."""
+    if group_by == "hour":
+        return dt.strftime("%H:%M")
+    return dt.strftime("%Y-%m-%d")
+
+
+def _bucket_key(dt: datetime, group_by: str) -> datetime:
+    """Truncate datetime ke awal bucket."""
+    local_dt = dt.astimezone(LOCAL_TZ) if dt.tzinfo else dt.replace(tzinfo=LOCAL_TZ)
+    if group_by == "hour":
+        return local_dt.replace(minute=0, second=0, microsecond=0)
+    return local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 @router.get(
-    "/timeseries",
-    summary="Tren conversations dan handling per waktu",
+    "/messages/chart",
+    summary="Time-series data untuk chart messages",
     description=(
-        "Endpoint khusus grouping waktu. Mengembalikan conversation count serta handling chatbot vs human "
-        "dalam bucket waktu (hour/day/week). Sumber data: tabel messages saja."
+        "Mengembalikan data inbound/outbound/unique_senders per bucket waktu. "
+        "Cocok untuk line chart atau bar chart di dashboard."
     ),
 )
-def get_analytics_timeseries(
-    range: str = Query("day", description="day | week | month"),
-    bucket: str = Query("hour", description="hour | day | week"),
+async def get_messages_chart(
+    range: str = Query("today", description="today | 7d | 30d"),
+    group_by: str = Query(None, description="hour | day (default: otomatis)"),
 ):
-    if range not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
-    if bucket not in VALID_BUCKETS:
-        raise HTTPException(status_code=422, detail="bucket harus salah satu dari hour|day|week")
-    _validate_bucket(range, bucket)
-
     try:
-        _, current_start, now = _window(range)
-        rows = _fetch_messages(current_start, now)
+        _require_supabase()
+        start, end = _resolve_range(range)
 
-        aggregate: dict[datetime, dict] = defaultdict(
-            lambda: {"senders": set(), "chatbot_response": 0, "human_response": 0}
+        if group_by is None:
+            group_by = _auto_group_by(range)
+
+        if group_by not in {"hour", "day"}:
+            raise HTTPException(status_code=422, detail="group_by harus hour atau day")
+
+        messages = await asyncio.to_thread(_fetch_messages_in_range, start, end)
+
+        # Aggregate per bucket
+        buckets: dict[datetime, dict] = defaultdict(
+            lambda: {"inbound": 0, "outbound": 0, "senders": set()}
         )
 
-        for row in rows:
-            created_at = _parse_ts(row.get("created_at"))
-            if not created_at:
+        for msg in messages:
+            created_at_str = msg.get("created_at")
+            if not created_at_str:
                 continue
 
-            slot = _bucket_start(created_at, bucket)
-            sender = row.get("sender_number")
-            if sender:
-                aggregate[slot]["senders"].add(sender)
-
-            if _is_chatbot_response(row):
-                aggregate[slot]["chatbot_response"] += 1
-            if _is_human_response(row):
-                aggregate[slot]["human_response"] += 1
-
-        step = _bucket_step(bucket)
-        cursor = _bucket_start(current_start, bucket)
-        end_slot = _bucket_start(now, bucket)
-
-        points = []
-        while cursor <= end_slot:
-            item = aggregate.get(cursor, {"senders": set(), "chatbot_response": 0, "human_response": 0})
-            points.append(
-                {
-                    "mulai_bucket": _as_iso(cursor),
-                    "total_percakapan": len(item["senders"]),
-                    "total_respons_chatbot": item["chatbot_response"],
-                    "total_respons_admin": item["human_response"],
-                }
-            )
-            cursor = cursor + step
-
-        return {
-            "rentang": range,
-            "kelompok_waktu": bucket,
-            "jendela_waktu": {"mulai": _as_iso(current_start), "selesai": _as_iso(now)},
-            "seri": {
-                "kunci_percakapan": "total_percakapan",
-                "kunci_penanganan": ["total_respons_chatbot", "total_respons_admin"],
-            },
-            "titik": points,
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@router.get(
-    "/insights",
-    summary="AI chatbot insights berbasis messages",
-    description=(
-        "Mengembalikan top detected intents, low-confidence intents (proxy), dan frequently escalated topics. "
-        "Semua dihitung heuristik dari tabel messages tanpa tabel tambahan."
-    ),
-)
-def get_analytics_insights(range: str = Query("day", description="day | week | month")):
-    if range not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
-
-    try:
-        _, current_start, now = _window(range)
-        rows = _fetch_messages(current_start, now)
-
-        inbound_topic_counter: Counter[str] = Counter()
-        groq_topic_counter: Counter[str] = Counter()
-        escalated_topic_counter: Counter[str] = Counter()
-        last_inbound_topic_by_sender: dict[str, tuple[str, datetime]] = {}
-
-        for row in rows:
-            created_at = _parse_ts(row.get("created_at"))
-            if not created_at:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+            except Exception:
                 continue
 
-            sender = row.get("sender_number") or ""
-            direction = row.get("direction")
-            source = row.get("source")
-            topic = _topic_from_text(row.get("message_text"))
+            key = _bucket_key(created_at, group_by)
+            direction = msg.get("direction")
 
             if direction == "inbound":
-                inbound_topic_counter[topic] += 1
+                buckets[key]["inbound"] += 1
+                sender = msg.get("sender_number")
                 if sender:
-                    last_inbound_topic_by_sender[sender] = (topic, created_at)
-                continue
+                    buckets[key]["senders"].add(sender)
+            elif direction == "outbound":
+                buckets[key]["outbound"] += 1
 
-            if direction == "outbound" and sender in last_inbound_topic_by_sender:
-                last_topic, last_time = last_inbound_topic_by_sender[sender]
-                if (created_at - last_time) > timedelta(minutes=15):
-                    continue
+        # Generate semua bucket dalam range (termasuk yang kosong)
+        step = timedelta(hours=1) if group_by == "hour" else timedelta(days=1)
+        cursor = _bucket_key(start, group_by)
+        end_bucket = _bucket_key(end, group_by)
 
-                if source == "groq":
-                    groq_topic_counter[last_topic] += 1
-                if source == "admin":
-                    escalated_topic_counter[last_topic] += 1
-
-        top_detected = [
-            {"intent": topic, "jumlah": count}
-            for topic, count in inbound_topic_counter.most_common(3)
-            if topic != "Other"
-        ]
-
-        low_confidence_candidates = []
-        for topic, total in inbound_topic_counter.items():
-            if topic == "Other" or total < 3:
-                continue
-            groq_hits = groq_topic_counter.get(topic, 0)
-            estimated_conf = round(max(0.0, 100.0 * (1.0 - (groq_hits / total))), 1)
-            if groq_hits > 0:
-                low_confidence_candidates.append(
-                    {
-                        "intent": topic,
-                        "estimasi_persen_kepercayaan": estimated_conf,
-                        "jumlah": groq_hits,
-                    }
-                )
-
-        low_confidence = sorted(
-            low_confidence_candidates,
-            key=lambda x: (x["estimasi_persen_kepercayaan"], -x["jumlah"]),
-        )[:3]
-
-        frequently_escalated = [
-            {"topik": topic, "jumlah_handoff": count}
-            for topic, count in escalated_topic_counter.most_common(3)
-            if topic != "Other"
-        ]
-
-        return {
-            "rentang": range,
-            "jendela_waktu": {"mulai": _as_iso(current_start), "selesai": _as_iso(now)},
-            "intent_terdeteksi_teratas": top_detected,
-            "intent_kepercayaan_rendah": low_confidence,
-            "sering_dieskalasi": frequently_escalated,
-            "catatan": [
-                "Insights dihitung dari messages dengan pendekatan heuristik.",
-                "Nilai low-confidence menggunakan proxy berbasis respons source=groq, bukan confidence asli model.",
-            ],
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@router.get(
-    "/activities",
-    summary="Live activity feed dari activity logs",
-    description="Menampilkan daftar aktivitas terbaru dari seluruh sistem (messaging, appointments, feedback, handoff, config, dll). Tersortir descending by created_at.",
-)
-async def get_activities(
-    limit: int = Query(50, description="Jumlah aktivitas yang diambil", ge=1, le=500),
-    category: str | None = Query(None, description="Filter by category (auth, messaging, patients, appointments, feedback, handoff, marketing, system_config)"),
-    range: str = Query("day", description="day | week | month"),
-):
-    if range not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
-
-    try:
-        _require_supabase()
-        _, current_start, now = _window(range)
-        
-        query = (
-            supabase.table("activity_logs")
-            .select("*")
-            .gte("created_at", _as_iso(current_start))
-            .lt("created_at", _as_iso(now))
-            .order("created_at", desc=True)
-            .limit(limit)
-        )
-        
-        if category:
-            query = query.eq("category", category)
-        
-        response = await asyncio.to_thread(lambda: query.execute())
-        
-        activities = response.data or []
-        
-        # Format response
-        formatted = []
-        for activity in activities:
-            formatted.append({
-                "id": activity.get("id"),
-                "kategori": activity.get("category"),
-                "aksi": activity.get("action"),
-                "aktor": activity.get("from_actor"),
-                "pesan": activity.get("message"),
-                "alamat_ip": activity.get("ip_address"),
-                "perangkat": activity.get("device"),
-                "lokasi": activity.get("location"),
-                "metadata": activity.get("metadata"),
-                "dibuat_saat": activity.get("created_at"),
+        series = []
+        while cursor <= end_bucket:
+            data = buckets.get(cursor, {"inbound": 0, "outbound": 0, "senders": set()})
+            series.append({
+                "label": _bucket_label(cursor, group_by),
+                "timestamp": _iso(cursor),
+                "inbound": data["inbound"],
+                "outbound": data["outbound"],
+                "unique_senders": len(data["senders"]),
             })
-        
+            cursor += step
+
         return {
-            "rentang": range,
-            "kategori_filter": category,
-            "total": len(formatted),
-            "aktivitas": formatted,
+            "range": range,
+            "group_by": group_by,
+            "period": {
+                "start": _iso(start),
+                "end": _iso(end),
+            },
+            "series": series,
         }
     except HTTPException:
         raise
@@ -522,145 +356,53 @@ async def get_activities(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get(
-    "/dashboard",
-    summary="Ringkasan dashboard dengan activity logs",
-    description="Dashboard overview yang menggabungkan data dari messages dan activity_logs. Includes messaging stats, appointments, feedback, handoff, dan campaign data.",
-)
-async def get_dashboard_summary(range: str = Query("day", description="day | week | month")):
-    if range not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari day|week|month")
+# ──────────────────────────────────────────────────────────
+#  Endpoint 3: Source Breakdown (Pie Chart)
+# ──────────────────────────────────────────────────────────
 
+@router.get(
+    "/source-breakdown",
+    summary="Breakdown sumber respons (Rasa vs Groq vs Admin)",
+    description=(
+        "Mengembalikan distribusi outbound messages berdasarkan source. "
+        "Cocok untuk pie chart atau donut chart."
+    ),
+)
+async def get_source_breakdown(range: str = Query("today", description="today | 7d | 30d")):
     try:
         _require_supabase()
-        previous_start, current_start, now = _window(range)
-        
-        # Fetch messages data (existing logic)
-        messages_rows = _fetch_messages(previous_start, now)
-        previous_msg_rows = [r for r in messages_rows if _parse_ts(r.get("created_at")) and _parse_ts(r.get("created_at")) < current_start]
-        current_msg_rows = [r for r in messages_rows if _parse_ts(r.get("created_at")) and _parse_ts(r.get("created_at")) >= current_start]
-        
-        current_msg_kpi = _kpi_from_rows(current_msg_rows)
-        previous_msg_kpi = _kpi_from_rows(previous_msg_rows)
-        
-        # Fetch activity logs for current period
-        activities_query = await asyncio.to_thread(
-            lambda: supabase.table("activity_logs")
-            .select("category, action, created_at")
-            .gte("created_at", _as_iso(current_start))
-            .lt("created_at", _as_iso(now))
-            .execute()
-        )
-        current_activities = activities_query.data or []
-        
-        # Fetch activity logs for previous period
-        prev_activities_query = await asyncio.to_thread(
-            lambda: supabase.table("activity_logs")
-            .select("category, action, created_at")
-            .gte("created_at", _as_iso(previous_start))
-            .lt("created_at", _as_iso(current_start))
-            .execute()
-        )
-        previous_activities = prev_activities_query.data or []
-        
-        # Count activities by category
-        def count_activities(activities, category, action=None):
-            count = 0
-            for a in activities:
-                if a.get("category") == category:
-                    if action is None or a.get("action") == action:
-                        count += 1
-            return count
-        
-        # Current period activity counts
-        current_feedback = count_activities(current_activities, "feedback", "CREATE_FEEDBACK")
-        current_patients = count_activities(current_activities, "patients", "CREATE_PATIENT")
-        current_appointments = count_activities(current_activities, "appointments", "CREATE_APPOINTMENT")
-        current_handoff = count_activities(current_activities, "handoff", "HANDOFF_STARTED")
-        current_campaigns = count_activities(current_activities, "marketing") or count_activities(current_activities, "marketing", "CREATE_CAMPAIGN")
-        
-        # Previous period activity counts
-        previous_feedback = count_activities(previous_activities, "feedback", "CREATE_FEEDBACK")
-        previous_patients = count_activities(previous_activities, "patients", "CREATE_PATIENT")
-        previous_appointments = count_activities(previous_activities, "appointments", "CREATE_APPOINTMENT")
-        previous_handoff = count_activities(previous_activities, "handoff", "HANDOFF_STARTED")
-        previous_campaigns = count_activities(previous_activities, "marketing") or count_activities(previous_activities, "marketing", "CREATE_CAMPAIGN")
-        
-        period_label = _period_label(range)
-        
-        # Build response
-        cards = [
-            {
-                "kunci": "total_percakapan",
-                "judul": "Total Percakapan",
-                "nilai": int(current_msg_kpi["total_conversations"]),
-                "sebelumnya": int(previous_msg_kpi["total_conversations"]),
-                "label_tren": f"{_calc_delta(current_msg_kpi['total_conversations'], previous_msg_kpi['total_conversations']):.0f}% {period_label}",
-            },
-            {
-                "kunci": "respons_chatbot",
-                "judul": "Respons Chatbot",
-                "nilai": int(current_msg_kpi["total_chatbot_response"]),
-                "sebelumnya": int(previous_msg_kpi["total_chatbot_response"]),
-            },
-            {
-                "kunci": "respons_admin",
-                "judul": "Respons Admin",
-                "nilai": int(current_msg_kpi["total_human_response"]),
-                "sebelumnya": int(previous_msg_kpi["total_human_response"]),
-            },
-            {
-                "kunci": "konversi_booking",
-                "judul": "Konversi Booking",
-                "nilai": round(current_msg_kpi["booking_conversion"], 2),
-                "satuan": "%",
-            },
-            {
-                "kunci": "feedback_baru",
-                "judul": "Feedback Baru",
-                "nilai": current_feedback,
-                "sebelumnya": previous_feedback,
-                "kategori": "feedback",
-            },
-            {
-                "kunci": "pasien_baru",
-                "judul": "Pasien Baru",
-                "nilai": current_patients,
-                "sebelumnya": previous_patients,
-                "kategori": "patients",
-            },
-            {
-                "kunci": "janji_baru",
-                "judul": "Janji Temu Baru",
-                "nilai": current_appointments,
-                "sebelumnya": previous_appointments,
-                "kategori": "appointments",
-            },
-            {
-                "kunci": "handoff_aktif",
-                "judul": "Handoff Aktif",
-                "nilai": current_handoff,
-                "sebelumnya": previous_handoff,
-                "kategori": "handoff",
-            },
-            {
-                "kunci": "kampanye",
-                "judul": "Kampanye Dikirim",
-                "nilai": current_campaigns,
-                "sebelumnya": previous_campaigns,
-                "kategori": "marketing",
-            },
-        ]
-        
+        start, end = _resolve_range(range)
+
+        messages = await asyncio.to_thread(_fetch_messages_in_range, start, end)
+
+        source_counter: dict[str, int] = defaultdict(int)
+        total_outbound = 0
+
+        for msg in messages:
+            if msg.get("direction") != "outbound":
+                continue
+            total_outbound += 1
+            source = msg.get("source") or "unknown"
+            source_counter[source] += 1
+
+        # Sort by count descending
+        breakdown = []
+        for source, count in sorted(source_counter.items(), key=lambda x: x[1], reverse=True):
+            percentage = round((count / total_outbound) * 100, 1) if total_outbound else 0
+            breakdown.append({
+                "source": source,
+                "count": count,
+                "percentage": percentage,
+            })
+
         return {
-            "rentang": range,
-            "periode": period_label,
-            "jendela_waktu": {
-                "mulai": _as_iso(current_start),
-                "selesai": _as_iso(now),
+            "range": range,
+            "period": {
+                "start": _iso(start),
+                "end": _iso(end),
             },
-            "kartu": cards,
-            "sumber_data": ["messages", "activity_logs"],
+            "total_outbound": total_outbound,
+            "breakdown": breakdown,
         }
     except HTTPException:
         raise
