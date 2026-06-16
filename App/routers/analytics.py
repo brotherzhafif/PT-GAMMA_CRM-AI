@@ -6,6 +6,9 @@
 #   messages, patients, feedback, campaigns,
 #   appointment_reminders, activity_logs
 #
+# Filter: start_date & end_date (ISO 8601 datetime)
+# Contoh: ?start_date=2026-06-01T00:00:00&end_date=2026-06-17T23:59:59
+#
 # Last Change   :   17 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
@@ -14,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
@@ -30,24 +33,35 @@ router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
 LOCAL_TZ = ZoneInfo("Asia/Jakarta")
 
-VALID_RANGES = {"today", "7d", "30d"}
+
+def _parse_date_param(value: str, param_name: str) -> datetime:
+    """Parse ISO 8601 datetime string ke timezone-aware datetime (WIB)."""
+    try:
+        dt = datetime.fromisoformat(value)
+        # Jika user tidak kasih timezone, anggap WIB
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=LOCAL_TZ)
+        return dt
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{param_name} format tidak valid. Gunakan ISO 8601, contoh: 2026-06-01T00:00:00",
+        )
 
 
-def _resolve_range(range_key: str) -> tuple[datetime, datetime]:
-    """Return (start, end) as UTC-aware datetimes for the given range key."""
-    if range_key not in VALID_RANGES:
-        raise HTTPException(status_code=422, detail="range harus salah satu dari: today, 7d, 30d")
+def _default_start() -> datetime:
+    """Default start: awal hari ini WIB."""
+    return datetime.now(LOCAL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    now_local = datetime.now(LOCAL_TZ)
 
-    if range_key == "today":
-        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif range_key == "7d":
-        start_local = (now_local - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
-    else:  # 30d
-        start_local = (now_local - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+def _default_end() -> datetime:
+    """Default end: sekarang WIB."""
+    return datetime.now(LOCAL_TZ)
 
-    return start_local, now_local
+
+def _validate_range(start: datetime, end: datetime) -> None:
+    if start >= end:
+        raise HTTPException(status_code=422, detail="start_date harus sebelum end_date")
 
 
 def _iso(dt: datetime) -> str:
@@ -131,13 +145,22 @@ def _fetch_handoff_started_count(start: datetime, end: datetime) -> int:
     summary="Dashboard overview — semua KPI dalam 1 panggilan",
     description=(
         "Mengembalikan ringkasan lengkap: messaging stats, patients, feedback, "
-        "campaigns, reminders, dan handoff. Sumber data: semua tabel Supabase."
+        "campaigns, reminders, dan handoff.\n\n"
+        "**Filter:** `start_date` dan `end_date` dalam format ISO 8601.\n"
+        "Contoh: `?start_date=2026-06-01T00:00:00&end_date=2026-06-17T23:59:59`\n\n"
+        "Jika tidak diisi, default = hari ini (00:00 WIB sampai sekarang)."
     ),
 )
-async def get_overview(range: str = Query("today", description="today | 7d | 30d")):
+async def get_overview(
+    start_date: str = Query(None, description="Mulai dari (ISO 8601). Default: awal hari ini WIB", examples=["2026-06-01T00:00:00"]),
+    end_date: str = Query(None, description="Sampai (ISO 8601). Default: sekarang WIB", examples=["2026-06-17T23:59:59"]),
+):
     try:
         _require_supabase()
-        start, end = _resolve_range(range)
+
+        start = _parse_date_param(start_date, "start_date") if start_date else _default_start()
+        end = _parse_date_param(end_date, "end_date") if end_date else _default_end()
+        _validate_range(start, end)
 
         # Fetch semua data secara paralel
         (
@@ -190,7 +213,9 @@ async def get_overview(range: str = Query("today", description="today | 7d | 30d
                 r = fb.get("rating")
                 if r is not None:
                     rating_sum += int(r)
-                    rating_dist[str(int(r))] = rating_dist.get(str(int(r)), 0) + 1
+                    key = str(int(r))
+                    if key in rating_dist:
+                        rating_dist[key] += 1
             avg_rating = round(rating_sum / total_feedback, 1)
 
         # ── Campaign stats ──
@@ -210,7 +235,6 @@ async def get_overview(range: str = Query("today", description="today | 7d | 30d
         active_handoffs = len(get_all_handoff_sessions())
 
         return {
-            "range": range,
             "period": {
                 "start": _iso(start),
                 "end": _iso(end),
@@ -254,11 +278,6 @@ async def get_overview(range: str = Query("today", description="today | 7d | 30d
 #  Endpoint 2: Messages Chart (Time-Series)
 # ──────────────────────────────────────────────────────────
 
-def _auto_group_by(range_key: str) -> str:
-    """Pilih granularity otomatis berdasarkan range."""
-    return "hour" if range_key == "today" else "day"
-
-
 def _bucket_label(dt: datetime, group_by: str) -> str:
     """Format label bucket sesuai granularity."""
     if group_by == "hour":
@@ -278,20 +297,22 @@ def _bucket_key(dt: datetime, group_by: str) -> datetime:
     "/messages/chart",
     summary="Time-series data untuk chart messages",
     description=(
-        "Mengembalikan data inbound/outbound/unique_senders per bucket waktu. "
-        "Cocok untuk line chart atau bar chart di dashboard."
+        "Mengembalikan data inbound/outbound/unique_senders per bucket waktu.\n\n"
+        "**Filter:** `start_date`, `end_date` (ISO 8601), dan `group_by` (hour/day).\n"
+        "Contoh: `?start_date=2026-06-10T00:00:00&end_date=2026-06-17T23:59:59&group_by=day`"
     ),
 )
 async def get_messages_chart(
-    range: str = Query("today", description="today | 7d | 30d"),
-    group_by: str = Query(None, description="hour | day (default: otomatis)"),
+    start_date: str = Query(None, description="Mulai dari (ISO 8601). Default: awal hari ini WIB", examples=["2026-06-01T00:00:00"]),
+    end_date: str = Query(None, description="Sampai (ISO 8601). Default: sekarang WIB", examples=["2026-06-17T23:59:59"]),
+    group_by: str = Query("hour", description="Granularity bucket: hour | day"),
 ):
     try:
         _require_supabase()
-        start, end = _resolve_range(range)
 
-        if group_by is None:
-            group_by = _auto_group_by(range)
+        start = _parse_date_param(start_date, "start_date") if start_date else _default_start()
+        end = _parse_date_param(end_date, "end_date") if end_date else _default_end()
+        _validate_range(start, end)
 
         if group_by not in {"hour", "day"}:
             raise HTTPException(status_code=422, detail="group_by harus hour atau day")
@@ -342,7 +363,6 @@ async def get_messages_chart(
             cursor += step
 
         return {
-            "range": range,
             "group_by": group_by,
             "period": {
                 "start": _iso(start),
@@ -364,14 +384,21 @@ async def get_messages_chart(
     "/source-breakdown",
     summary="Breakdown sumber respons (Rasa vs Groq vs Admin)",
     description=(
-        "Mengembalikan distribusi outbound messages berdasarkan source. "
-        "Cocok untuk pie chart atau donut chart."
+        "Mengembalikan distribusi outbound messages berdasarkan source.\n\n"
+        "**Filter:** `start_date` dan `end_date` (ISO 8601).\n"
+        "Contoh: `?start_date=2026-06-01T00:00:00&end_date=2026-06-17T23:59:59`"
     ),
 )
-async def get_source_breakdown(range: str = Query("today", description="today | 7d | 30d")):
+async def get_source_breakdown(
+    start_date: str = Query(None, description="Mulai dari (ISO 8601). Default: awal hari ini WIB", examples=["2026-06-01T00:00:00"]),
+    end_date: str = Query(None, description="Sampai (ISO 8601). Default: sekarang WIB", examples=["2026-06-17T23:59:59"]),
+):
     try:
         _require_supabase()
-        start, end = _resolve_range(range)
+
+        start = _parse_date_param(start_date, "start_date") if start_date else _default_start()
+        end = _parse_date_param(end_date, "end_date") if end_date else _default_end()
+        _validate_range(start, end)
 
         messages = await asyncio.to_thread(_fetch_messages_in_range, start, end)
 
@@ -396,7 +423,6 @@ async def get_source_breakdown(range: str = Query("today", description="today | 
             })
 
         return {
-            "range": range,
             "period": {
                 "start": _iso(start),
                 "end": _iso(end),
