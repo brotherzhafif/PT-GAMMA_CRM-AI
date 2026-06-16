@@ -675,6 +675,19 @@ class ValidateBookingFormBaru(FormValidationAction):
                 jam_mulai = jadwal_cocok.get("jamMulai", "")
                 jam_selesai = jadwal_cocok.get("jamSelesai", "")
                 jam_praktik = f"{jam_mulai} - {jam_selesai}" if jam_mulai and jam_selesai else "-"
+
+                # Jika tanggal kunjungan adalah hari ini, cek apakah jam praktik sudah lewat
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                if parsed == today_str and jam_selesai:
+                    try:
+                        jam_selesai_dt = datetime.strptime(jam_selesai, "%H:%M").time()
+                        now_time = datetime.now().time()
+                        if now_time > jam_selesai_dt:
+                            jadwal_cocok = None
+                    except Exception:
+                        pass
+
+            if jadwal_cocok:
                 print(f"[DEBUG Form] jadwalId={jadwal_id}, poli={booking_poli}, hari={hari_kunjungan}")
                 return {
                     "booking_tgl_kunjungan": parsed,
@@ -723,53 +736,6 @@ class ValidateBookingFormBaru(FormValidationAction):
             print(f"[Exception validate_tgl_kunjungan]: {e}")
             return {"booking_tgl_kunjungan": parsed}
 
-
-class ActionBookingReview(Action):
-    def name(self) -> Text:
-        return "action_booking_review"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        nama = tracker.get_slot("booking_nama") or "-"
-        nik = tracker.get_slot("booking_nik") or "-"
-        tgl_lahir = tracker.get_slot("booking_tgl_lahir") or "-"
-        if isinstance(tgl_lahir, str) and "T" in tgl_lahir:
-            tgl_lahir = tgl_lahir.split("T")[0]
-        keluhan = tracker.get_slot("booking_keluhan") or "-"
-        poli = tracker.get_slot("booking_poli") or "-"
-        tgl_kunjungan = tracker.get_slot("booking_tgl_kunjungan") or "-"
-        jam_praktik = tracker.get_slot("booking_jam_praktik") or "-"
-
-        tgl_display = format_tgl_indonesia(tgl_kunjungan)
-        nik_display = f"****-****-****-{nik[-4:]}" if len(nik) == 16 else nik
-
-        msg = (
-            "📋 *Ringkasan Data Pendaftaran*\n\n"
-            f"👤 Nama          : *{nama}*\n"
-            f"🪪 NIK            : `{nik_display}`\n"
-            f"🎂 Tgl Lahir    : {tgl_lahir}\n"
-            f"🩺 Keluhan      : {keluhan}\n"
-            f"🏥 Poliklinik   : *{poli}*\n"
-            f"📅 Kunjungan  : {tgl_display}\n"
-            f"🕐 Jam Praktik : {jam_praktik}\n\n"
-            "Apakah data di atas sudah benar?\n"
-            "Balas *ya* untuk melanjutkan\n"
-            "Balas *ubah* untuk memperbaiki"
-        )
-
-        dispatcher.utter_message(text=msg)
-        return [SlotSet("booking_step", "review")]
-    
-    
-class ActionBookingFormBaruSubmit(Action):
-    def name(self) -> Text:
-        return "action_booking_form_baru_submit"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        # Form selesai diisi → arahkan ke review
-        return [
-            SlotSet("booking_step", "review"),
-            FollowupAction("action_booking_review")
-        ]
 
 class ActionBookingConfirm(Action):
     def name(self) -> Text:
