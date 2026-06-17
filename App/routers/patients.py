@@ -19,7 +19,7 @@ from App.models import PatientPayload
 
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
-SMARTCLINIC_PATIENTS_PATH = "/api/v1/patients"
+SMARTCLINIC_PATIENTS_PATH = "/patients"
 
 PATIENT_EXAMPLE = {
     "id": "rme_patient_uuid_from_smartclinic",
