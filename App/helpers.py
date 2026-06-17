@@ -24,7 +24,7 @@ from App.config import (
     RASA_CONFIDENCE_THRESHOLD,
     HANDOFF_KEYWORDS,
 )
-from App.smartclinic_auth import get_smartclinic_token
+from App.smartclinic_auth import get_smartclinic_token, force_refresh_smartclinic_token
 
 
 def _get_smartclinic_token_with_retry() -> str:
@@ -37,31 +37,38 @@ def _get_smartclinic_token_with_retry() -> str:
 
 
 def _smartclinic_request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
-    """Buat request ke SmartClinic dengan auto-retry pada 401.
-    
-    Jika mendapat 401, otomatis refresh token dan retry sekali.
+    """Buat request ke SmartClinic dengan auto-retry pada 401 (sync version).
+
+    Jika mendapat 401:
+      1. Coba refresh via refreshToken
+      2. Jika gagal, login ulang
+      3. Retry request satu kali dengan token baru
     """
     from App.smartclinic_auth import _refresh_token_sync, _login_sync
-    
+
     token = _get_smartclinic_token_with_retry()
     headers = kwargs.get("headers", {})
     headers["Authorization"] = f"Bearer {token}"
     kwargs["headers"] = headers
-    
+
     response = requests.request(method, url, **kwargs)
-    
-    # Handle 401 — token kemungkinan sudah expired
+
+    # Handle 401 — token sudah di-reject RME, force refresh lalu retry
     if response.status_code == 401:
-        print(f"[SmartClinic] Mendapat 401 untuk {method} {url}, refresh token dan retry...")
+        print(f"[SmartClinic] 401 pada {method} {url} — force refresh token dan retry...")
         try:
             refreshed = _refresh_token_sync()
             if not refreshed:
+                print("[SmartClinic] refreshToken gagal, fallback ke login ulang...")
                 refreshed = _login_sync()
             headers["Authorization"] = f"Bearer {refreshed}"
+            kwargs["headers"] = headers
             response = requests.request(method, url, **kwargs)
-        except Exception as e:
-            print(f"[SmartClinic] Force refresh gagal: {e}")
-    
+            if response.status_code == 401:
+                print(f"[SmartClinic] Masih 401 setelah force refresh pada {method} {url}.")
+        except Exception as exc:
+            print(f"[SmartClinic] Force refresh gagal: {exc}")
+
     return response
 
 
@@ -121,11 +128,16 @@ async def proxy_smartclinic(
     params: Optional[list[tuple[str, str]]] = None,
     json: Optional[dict[str, Any]] = None,
 ) -> Response:
-    """Proxy request ke SmartClinic dengan token auth yang sudah di-cache.
-    
-    Jika mendapat 401, otomatis refresh token dan retry sekali.
+    """Proxy async request ke SmartClinic dengan auto-retry pada 401.
+
+    Flow:
+      1. Ambil token dari cache (atau refresh jika hampir expired).
+      2. Kirim request ke RME.
+      3. Jika dapat 401 → force_refresh_smartclinic_token() (async-safe, berlock)
+         lalu retry sekali.
+      4. Jika masih 401 setelah retry → return response 401 apa adanya.
     """
-    token = await get_smartclinic_token()
+    token   = await get_smartclinic_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
@@ -134,32 +146,30 @@ async def proxy_smartclinic(
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
 
-        # Handle 401 Unauthorized — token kemungkinan sudah expired di server
+        # Handle 401 — RME sudah reject token, force refresh lalu retry
         if upstream.status_code == 401:
-            print(f"[SmartClinic] Mendapat 401 untuk {method} {path}, refresh token dan retry...")
-            from App.smartclinic_auth import _refresh_token_sync, _login_sync, _load_token_cache
-            
-            # Force refresh atau login ulang
+            print(f"[SmartClinic] 401 pada {method} {path} — force refresh token dan retry...")
             try:
-                refreshed = _refresh_token_sync()
-                if not refreshed:
-                    refreshed = _login_sync()
-                token = refreshed
-                headers = {"Authorization": f"Bearer {token}"}
-            except Exception as e:
-                print(f"[SmartClinic] Force refresh gagal: {e}")
-                # Jika refresh gagal, langsung raise 401
+                # force_refresh_smartclinic_token() sudah membawa async lock;
+                # aman dipanggil concurrent dari banyak endpoint sekaligus.
+                new_token = await force_refresh_smartclinic_token()
+                headers   = {"Authorization": f"Bearer {new_token}"}
+            except Exception as exc:
+                print(f"[SmartClinic] Force refresh gagal: {exc}")
                 return Response(
                     content=upstream.content,
                     status_code=upstream.status_code,
                     media_type=upstream.headers.get("content-type"),
                 )
-            
-            # Retry request dengan token baru
+
+            # Retry dengan token baru
             try:
                 upstream = await client.request(method, path, params=params, json=json, headers=headers)
             except httpx.HTTPError as exc:
                 raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic saat retry") from exc
+
+            if upstream.status_code == 401:
+                print(f"[SmartClinic] Masih 401 setelah force refresh pada {method} {path}.")
 
     return Response(
         content=upstream.content,

@@ -21,6 +21,7 @@ from App.routers import status, webhook, patients, messages, send, handoff, camp
 from App.campaign_scheduler import start_campaign_scheduler
 from App.appointment_reminder_scheduler import start_appointment_reminder_scheduler
 from App.seed_bootstrap_users import seed_bootstrap_users
+from App.smartclinic_auth import start_token_refresher
 
 
 @asynccontextmanager
@@ -35,6 +36,11 @@ async def lifespan(app: FastAPI):
         
     start_campaign_scheduler()
     start_appointment_reminder_scheduler()
+
+    # Proactive token refresher — jaga token RME selalu fresh sebelum expired
+    start_token_refresher()
+    print("[Lifespan] SmartClinic proactive token refresher started.")
+
     yield
     # shutdown (if any cleanup is needed, add here)
 
