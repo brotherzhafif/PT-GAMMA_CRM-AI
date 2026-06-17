@@ -824,27 +824,28 @@ class ActionBookingConfirm(Action):
         poli = tracker.get_slot("booking_poli") or ""
         jam_praktik_slot = tracker.get_slot("booking_jam_praktik") or "-"
         no_hp = tracker.sender_id
-        reschedule_id = tracker.get_slot("reschedule_booking_id")
+        # reschedule_id = tracker.get_slot("reschedule_booking_id")
 
-        if reschedule_id:
-            dispatcher.utter_message(text="⏳ Sedang memproses reschedule janji temu Anda, mohon tunggu sebentar...")
-        else:
-            dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
+        # if reschedule_id:
+        #     dispatcher.utter_message(text="⏳ Sedang memproses reschedule janji temu Anda, mohon tunggu sebentar...")
+        # else:
+        #     dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
+        dispatcher.utter_message(text="⏳ Sedang memproses janji temu Anda, mohon tunggu sebentar...")
 
         # --- Reschedule: Delete old booking first ---
-        if reschedule_id:
-            delete_ok = api_delete(f"/api/appointment/appointments/{reschedule_id}")
-            if not delete_ok:
-                dispatcher.utter_message(text=(
-                    "⚠️ Maaf, gagal membatalkan janji temu lama Anda. "
-                    "Jadwal lama tetap aktif.\n\n"
-                    "Silakan ketik *admin* untuk bantuan langsung. 🙏"
-                ))
-                return [
-                    SlotSet("reschedule_booking_id", None),
-                    SlotSet("booking_step", "selesai"),
-                ]
-            print(f"[Reschedule] Old booking {reschedule_id} deleted successfully")
+        # if reschedule_id:
+        #     delete_ok = api_delete(f"/api/appointment/appointments/{reschedule_id}")
+        #     if not delete_ok:
+        #         dispatcher.utter_message(text=(
+        #             "⚠️ Maaf, gagal membatalkan janji temu lama Anda. "
+        #             "Jadwal lama tetap aktif.\n\n"
+        #             "Silakan ketik *admin* untuk bantuan langsung. 🙏"
+        #         ))
+        #         return [
+        #             SlotSet("reschedule_booking_id", None),
+        #             SlotSet("booking_step", "selesai"),
+        #         ]
+        #     print(f"[Reschedule] Old booking {reschedule_id} deleted successfully")
 
         # Gunakan jadwalId dari slot (sudah di-set saat validasi tgl_kunjungan)
         jadwal_id = tracker.get_slot("jadwalId")
@@ -883,16 +884,16 @@ class ActionBookingConfirm(Action):
 
         if not jadwal_id:
             # ponytail: if reschedule already deleted old booking but no jadwal found, trigger handoff
-            if reschedule_id:
-                dispatcher.utter_message(text=(
-                    "⚠️ Janji temu lama sudah dibatalkan, tapi gagal membuat yang baru.\n"
-                    "Admin akan segera menghubungi Anda untuk membantu. 🙏"
-                ))
-                api_post(f"/api/handoff/{no_hp}", {})
-                return [
-                    SlotSet("reschedule_booking_id", None),
-                    SlotSet("booking_step", "selesai"),
-                ]
+            # if reschedule_id:
+            #     dispatcher.utter_message(text=(
+            #         "⚠️ Janji temu lama sudah dibatalkan, tapi gagal membuat yang baru.\n"
+            #         "Admin akan segera menghubungi Anda untuk membantu. 🙏"
+            #     ))
+            #     api_post(f"/api/handoff/{no_hp}", {})
+            #     return [
+            #         SlotSet("reschedule_booking_id", None),
+            #         SlotSet("booking_step", "selesai"),
+            #     ]
             dispatcher.utter_message(text=(
                 "⚠️ Maaf, tidak ada jadwal dokter yang tersedia pada tanggal tersebut.\n\n"
                 "Silakan pilih hari lain atau ketik *admin* untuk bantuan langsung. 🙏"
@@ -943,7 +944,7 @@ class ActionBookingConfirm(Action):
                 print(f"[Booking] Gagal ambil noAntrian: {e}")
 
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
-            label = "Reschedule Berhasil!" if reschedule_id else "Pendaftaran Berhasil!"
+            label = "Pendaftaran Berhasil!"
             tiket = (
                 f"✅ *{label}* 🎉\n\n"
                 "🎫 *Konfirmasi Kunjungan*\n"
@@ -963,31 +964,32 @@ class ActionBookingConfirm(Action):
             booking_id_final = str(booking_id)
         else:
             # POST failed
-            if reschedule_id:
-                # ponytail: critical path — old booking already deleted, new one failed → handoff
-                print(f"[Reschedule CRITICAL] POST failed after DELETE of {reschedule_id}")
-                dispatcher.utter_message(text=(
-                    "⚠️ *Perhatian:* Janji temu lama sudah dibatalkan, "
-                    "tetapi gagal membuat jadwal baru.\n\n"
-                    "Admin klinik akan segera menghubungi Anda untuk "
-                    "membantu menjadwalkan ulang. Mohon tunggu sebentar. 🙏"
-                ))
-                api_post(f"/api/handoff/{no_hp}", {})
-                return [
-                    ActiveLoop(None),
-                    SlotSet("requested_slot", None),
-                    SlotSet("reschedule_booking_id", None),
-                    SlotSet("booking_step", "selesai"),
-                    SlotSet("booking_nik", None),
-                    SlotSet("booking_nama", None),
-                    SlotSet("booking_tgl_lahir", None),
-                    SlotSet("booking_keluhan", None),
-                    SlotSet("booking_poli", None),
-                    SlotSet("booking_tgl_kunjungan", None),
-                    SlotSet("booking_jam_praktik", None),
-                    SlotSet("jadwalId", None),
-                    FollowupAction("action_listen"),
-                ]
+            # # ponytail: commented out due to RME RBAC constraints
+            # if reschedule_id:
+            #     # ponytail: critical path — old booking already deleted, new one failed → handoff
+            #     print(f"[Reschedule CRITICAL] POST failed after DELETE of {reschedule_id}")
+            #     dispatcher.utter_message(text=(
+            #         "⚠️ *Perhatian:* Janji temu lama sudah dibatalkan, "
+            #         "tetapi gagal membuat jadwal baru.\n\n"
+            #         "Admin klinik akan segera menghubungi Anda untuk "
+            #         "membantu menjadwalkan ulang. Mohon tunggu sebentar. 🙏"
+            #     ))
+            #     api_post(f"/api/handoff/{no_hp}", {})
+            #     return [
+            #         ActiveLoop(None),
+            #         SlotSet("requested_slot", None),
+            #         SlotSet("reschedule_booking_id", None),
+            #         SlotSet("booking_step", "selesai"),
+            #         SlotSet("booking_nik", None),
+            #         SlotSet("booking_nama", None),
+            #         SlotSet("booking_tgl_lahir", None),
+            #         SlotSet("booking_keluhan", None),
+            #         SlotSet("booking_poli", None),
+            #         SlotSet("booking_tgl_kunjungan", None),
+            #         SlotSet("booking_jam_praktik", None),
+            #         SlotSet("jadwalId", None),
+            #         FollowupAction("action_listen"),
+            #     ]
 
             print(f"[Booking Warning] API gagal, masuk fallback. Result: {result}")
             tgl_display = format_tgl_indonesia(tgl_kunjungan)
@@ -1028,6 +1030,29 @@ class ActionBookingCancel(Action):
         return "action_booking_cancel"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        # ponytail: if booking already finalized, handoff to admin (do not touch form)
+        booking_id = tracker.get_slot("booking_id_konfirmasi")
+        if booking_id:
+            no_hp = tracker.sender_id
+            api_post(f"/api/handoff/{no_hp}", {})
+            return [
+                SlotSet("booking_id_konfirmasi", None),
+                SlotSet("reschedule_booking_id", None),
+                SlotSet("booking_is_bpjs", None),
+                SlotSet("booking_nik", None),
+                SlotSet("booking_nama", None),
+                SlotSet("booking_tgl_lahir", None),
+                SlotSet("booking_keluhan", None),
+                SlotSet("booking_poli", None),
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("booking_jam_praktik", None),
+                SlotSet("jadwalId", None),
+                SlotSet("booking_step", None),
+                SlotSet("requested_slot", None),
+                ActiveLoop(None),
+            ]
+
+        # mid-form cancel: just reset form
         dispatcher.utter_message(response="utter_booking_batalkan")
         return [
             SlotSet("booking_is_bpjs", None),
@@ -1073,91 +1098,125 @@ class ActionBookingReschedule(Action):
         return "action_booking_reschedule"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        no_hp = tracker.sender_id
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        # ponytail: if booking already finalized, handoff to admin
+        booking_id = tracker.get_slot("booking_id_konfirmasi")
+        if booking_id:
+            no_hp = tracker.sender_id
+            api_post(f"/api/handoff/{no_hp}", {})
+            return [
+                SlotSet("booking_id_konfirmasi", None),
+                SlotSet("reschedule_booking_id", None),
+                SlotSet("booking_is_bpjs", None),
+                SlotSet("booking_nik", None),
+                SlotSet("booking_nama", None),
+                SlotSet("booking_tgl_lahir", None),
+                SlotSet("booking_keluhan", None),
+                SlotSet("booking_poli", None),
+                SlotSet("booking_tgl_kunjungan", None),
+                SlotSet("booking_jam_praktik", None),
+                SlotSet("jadwalId", None),
+                SlotSet("booking_step", None),
+                SlotSet("requested_slot", None),
+                ActiveLoop(None),
+            ]
 
-        # Fetch active bookings
-        result = api_get("/api/appointment/appointments/by-phone", params={"phone_number": no_hp})
-        bookings = []
-        if result:
-            raw = result.get("data", result) if isinstance(result, dict) else result
-            if isinstance(raw, list):
-                bookings = [
-                    b for b in raw
-                    if b.get("tanggalKunjungan", "")[:10] >= today_str
-                ]
+        # no active booking: just inform
+        # ponytail: deactivated due to RME RBAC constraints
+        dispatcher.utter_message(response="utter_booking_reschedule_info")
+        return []
 
-        # Case 0: no active bookings
-        if not bookings:
-            dispatcher.utter_message(text=(
-                "📋 Tidak ada janji temu aktif yang bisa di-reschedule.\n\n"
-                "Ketik *booking* untuk membuat janji temu baru. 😊"
-            ))
-            return []
-
-        # Case 1: exactly one booking → auto-select
-        if len(bookings) == 1:
-            return self._prefill_and_start(dispatcher, tracker, bookings[0])
-
-        # Case N: multiple bookings → show list, save to slot for selection
-        # ponytail: store list in reschedule_booking_id as JSON for simple selection
-        import json
-        msg = "📋 *Anda memiliki beberapa janji temu aktif:*\n\n"
-        options = []
-        for i, b in enumerate(bookings, 1):
-            jadwal = b.get("jadwal", {})
-            dokter = jadwal.get("dokter", {})
-            poli = dokter.get("spesialis", "")
-            tgl = format_tgl_indonesia(b.get("tanggalKunjungan", "")[:10])
-            msg += f"{i}. 🏥 {poli} — {tgl}\n"
-            options.append({"id": b.get("id"), "idx": i})
-
-        msg += "\nBalas dengan *nomor* janji temu yang ingin di-reschedule."
-        dispatcher.utter_message(text=msg)
-
-        # ponytail: save options + full bookings as JSON in reschedule_booking_id
-        # booking_step=reschedule_select signals webhook to route next message back here
-        return [
-            SlotSet("reschedule_booking_id", json.dumps({"options": options, "bookings": bookings})),
-            SlotSet("booking_step", "reschedule_select"),
-        ]
-
-    def _prefill_and_start(self, dispatcher, tracker, booking):
-        """Pre-fill patient slots from existing booking, clear date, launch form."""
-        booking_id = booking.get("id")
-        jadwal = booking.get("jadwal", {})
-        dokter = jadwal.get("dokter", {})
-        poli = dokter.get("spesialis", "")
-        catatan = booking.get("catatan", "")
-
-        # Get patient profile for name/nik/dob
-        no_hp = tracker.sender_id
-        patient = get_patient_by_phone(no_hp)
-        nama = patient.get("nama") or patient.get("namaLengkap", "")
-        nik = patient.get("nik", "")
-        dob = patient.get("date_of_birth") or patient.get("tanggalLahir", "")
-        if isinstance(dob, str) and "T" in dob:
-            dob = dob.split("T")[0]
-
-        old_tgl = format_tgl_indonesia(booking.get("tanggalKunjungan", "")[:10])
-        dispatcher.utter_message(text=(
-            f"🔄 *Reschedule Janji Temu*\n\n"
-            f"Jadwal lama: {old_tgl} — {poli}\n\n"
-            f"Silakan masukkan *tanggal baru* untuk kunjungan Anda."
-        ))
-
-        return [
-            SlotSet("reschedule_booking_id", str(booking_id)),
-            SlotSet("booking_nama", nama if nama else None),
-            SlotSet("booking_nik", nik if nik else None),
-            SlotSet("booking_tgl_lahir", dob if dob else None),
-            SlotSet("booking_keluhan", catatan if catatan else None),
-            SlotSet("booking_poli", poli if poli else None),
-            SlotSet("booking_tgl_kunjungan", None),  # force form to ask
-            SlotSet("jadwalId", None),  # force form to ask
-            SlotSet("booking_jam_praktik", None),
-            SlotSet("booking_is_bpjs", "false"),
-            SlotSet("booking_step", "form_baru"),
-            ActiveLoop("booking_form_baru"),
-            FollowupAction("booking_form_baru"),
-        ]
+# class ActionBookingRescheduleOptimized(Action):
+#     """Fetch active bookings, pre-fill patient slots, launch booking_form_baru for new date only."""
+#
+#     def name(self) -> Text:
+#         return "action_booking_reschedule"
+#
+#     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+#         no_hp = tracker.sender_id
+#         today_str = datetime.now().strftime("%Y-%m-%d")
+#
+#         # Fetch active bookings
+#         result = api_get("/api/appointment/appointments/by-phone", params={"phone_number": no_hp})
+#         bookings = []
+#         if result:
+#             raw = result.get("data", result) if isinstance(result, dict) else result
+#             if isinstance(raw, list):
+#                 bookings = [
+#                     b for b in raw
+#                     if b.get("tanggalKunjungan", "")[:10] >= today_str
+#                 ]
+#
+#         # Case 0: no active bookings
+#         if not bookings:
+#             dispatcher.utter_message(text=(
+#                 "📋 Tidak ada janji temu aktif yang bisa di-reschedule.\n\n"
+#                 "Ketik *booking* untuk membuat janji temu baru. 😊"
+#             ))
+#             return []
+#
+#         # Case 1: exactly one booking → auto-select
+#         if len(bookings) == 1:
+#             return self._prefill_and_start(dispatcher, tracker, bookings[0])
+#
+#         # Case N: multiple bookings → show list, save to slot for selection
+#         # ponytail: store list in reschedule_booking_id as JSON for simple selection
+#         import json
+#         msg = "📋 *Anda memiliki beberapa janji temu aktif:*\n\n"
+#         options = []
+#         for i, b in enumerate(bookings, 1):
+#             jadwal = b.get("jadwal", {})
+#             dokter = jadwal.get("dokter", {})
+#             poli = dokter.get("spesialis", "")
+#             tgl = format_tgl_indonesia(b.get("tanggalKunjungan", "")[:10])
+#             msg += f"{i}. 🏥 {poli} — {tgl}\n"
+#             options.append({"id": b.get("id"), "idx": i})
+#
+#         msg += "\nBalas dengan *nomor* janji temu yang ingin di-reschedule."
+#         dispatcher.utter_message(text=msg)
+#
+#         # ponytail: save options + full bookings as JSON in reschedule_booking_id
+#         # booking_step=reschedule_select signals webhook to route next message back here
+#         return [
+#             SlotSet("reschedule_booking_id", json.dumps({"options": options, "bookings": bookings})),
+#             SlotSet("booking_step", "reschedule_select"),
+#         ]
+#
+#     def _prefill_and_start(self, dispatcher, tracker, booking):
+#         """Pre-fill patient slots from existing booking, clear date, launch form."""
+#         booking_id = booking.get("id")
+#         jadwal = booking.get("jadwal", {})
+#         dokter = jadwal.get("dokter", {})
+#         poli = dokter.get("spesialis", "")
+#         catatan = booking.get("catatan", "")
+#
+#         # Get patient profile for name/nik/dob
+#         no_hp = tracker.sender_id
+#         patient = get_patient_by_phone(no_hp)
+#         nama = patient.get("nama") or patient.get("namaLengkap", "")
+#         nik = patient.get("nik", "")
+#         dob = patient.get("date_of_birth") or patient.get("tanggalLahir", "")
+#         if isinstance(dob, str) and "T" in dob:
+#             dob = dob.split("T")[0]
+#
+#         old_tgl = format_tgl_indonesia(booking.get("tanggalKunjungan", "")[:10])
+#         dispatcher.utter_message(text=(
+#             f"🔄 *Reschedule Janji Temu*\n\n"
+#             f"Jadwal lama: {old_tgl} — {poli}\n\n"
+#             f"Silakan masukkan *tanggal baru* untuk kunjungan Anda."
+#         ))
+#
+#         return [
+#             SlotSet("reschedule_booking_id", str(booking_id)),
+#             SlotSet("booking_nama", nama if nama else None),
+#             SlotSet("booking_nik", nik if nik else None),
+#             SlotSet("booking_tgl_lahir", dob if dob else None),
+#             SlotSet("booking_keluhan", catatan if catatan else None),
+#             SlotSet("booking_poli", poli if poli else None),
+#             SlotSet("booking_tgl_kunjungan", None),  # force form to ask
+#             SlotSet("jadwalId", None),  # force form to ask
+#             SlotSet("booking_jam_praktik", None),
+#             SlotSet("booking_is_bpjs", "false"),
+#             SlotSet("booking_step", "form_baru"),
+#             ActiveLoop("booking_form_baru"),
+#             FollowupAction("booking_form_baru"),
+#         ]
