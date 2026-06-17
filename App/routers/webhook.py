@@ -77,7 +77,13 @@ def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatRe
     """Kirim reply via wa-service (pattern dari /send), simpan ke JSON dan Supabase."""
     # Hardening: hindari mengirim reply kosong ke wa-service
     if reply is None or (isinstance(reply, str) and reply.strip() == ""):
+        # ponytail: skip sending date prompt if handoff was activated during this request
+        if is_in_handoff(no_hp):
+            if no_hp in MESSAGE_STATES:
+                MESSAGE_STATES[no_hp]["processing"] = False
+            return ChatResponse(status="handoff", source="handoff", reply=None)
         reply = "📅 Silakan balas dengan tanggal kunjungan (DD/MM/YYYY)"
+
 
     # Pattern dari /api/send endpoint - normalize target dulu
     target = normalize_whatsapp_target(no_hp)

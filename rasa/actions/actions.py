@@ -1036,7 +1036,6 @@ class ActionBookingCancel(Action):
             no_hp = tracker.sender_id
             api_post(f"/api/handoff/{no_hp}", {})
             return [
-                SlotSet("booking_id_konfirmasi", None),
                 SlotSet("reschedule_booking_id", None),
                 SlotSet("booking_is_bpjs", None),
                 SlotSet("booking_nik", None),
@@ -1104,7 +1103,6 @@ class ActionBookingReschedule(Action):
             no_hp = tracker.sender_id
             api_post(f"/api/handoff/{no_hp}", {})
             return [
-                SlotSet("booking_id_konfirmasi", None),
                 SlotSet("reschedule_booking_id", None),
                 SlotSet("booking_is_bpjs", None),
                 SlotSet("booking_nik", None),
