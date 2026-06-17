@@ -75,11 +75,16 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 
 def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
     """Kirim reply via wa-service (pattern dari /send), simpan ke JSON dan Supabase."""
+    # Hardening: hindari mengirim reply kosong ke wa-service
+    if reply is None or (isinstance(reply, str) and reply.strip() == ""):
+        reply = "📅 Silakan balas dengan tanggal kunjungan (DD/MM/YYYY)"
+
     # Pattern dari /api/send endpoint - normalize target dulu
     target = normalize_whatsapp_target(no_hp)
-    
+
     # Kirim via wa_gateway (sudah handle queue otomatis)
     send_result = send_text_best_effort(target, reply)
+
     
     # Simpan ke storage
     save_chat_to_json(no_hp, input_pesan, reply, source=source)
