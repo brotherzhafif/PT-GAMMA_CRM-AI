@@ -183,6 +183,12 @@ slots:
     mappings:
       - type: custom
 
+  reschedule_booking_id:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+
 # Urutan Form Booking
 forms:
   booking_form_baru:
