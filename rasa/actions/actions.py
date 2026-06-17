@@ -625,8 +625,7 @@ class ValidateBookingFormBaru(FormValidationAction):
             f"✅ Poliklinik dipilih: *{poli_dipilih}*\n\n"
             f"📅 Dokter {poli_dipilih} praktek setiap:\n"
             f"{jadwal_display}\n\n"
-            f"Balas dengan tanggal kunjungan yang Anda inginkan.\n"
-            f"_(Contoh: 08/06/2026)_"
+            
         ))
         return {"booking_poli": poli_dipilih}
 
@@ -670,6 +669,8 @@ class ValidateBookingFormBaru(FormValidationAction):
                     jadwal_cocok = sched
                     break
 
+            jam_sudah_lewat = False
+            jam_praktik_lewat_display = ""
             if jadwal_cocok:
                 jadwal_id = str(jadwal_cocok.get("id"))
                 jam_mulai = jadwal_cocok.get("jamMulai", "")
@@ -684,6 +685,8 @@ class ValidateBookingFormBaru(FormValidationAction):
                         now_time = datetime.now().time()
                         if now_time > jam_selesai_dt:
                             jadwal_cocok = None
+                            jam_sudah_lewat = True
+                            jam_praktik_lewat_display = jam_praktik
                     except Exception:
                         pass
 
@@ -725,11 +728,19 @@ class ValidateBookingFormBaru(FormValidationAction):
 
             hari_kunjungan_nama = HARI_MAP.get(hari_kunjungan, str(hari_kunjungan))
             rekomendasi_display = "\n".join(rekomendasi)
-            dispatcher.utter_message(text=(
-                f"⚠️ Maaf, tidak ada dokter *{booking_poli}* yang praktek "
-                f"pada tanggal {tgl_display}.\n\n"
-                f"Silakan pilih dari jadwal yang tersedia:\n{rekomendasi_display}"
-            ))
+
+            if jam_sudah_lewat:
+                dispatcher.utter_message(text=(
+                    f"⚠️ Maaf, jam praktik dokter *{booking_poli}* hari ini "
+                    f"({jam_praktik_lewat_display}) sudah berakhir.\n\n"
+                    f"Silakan pilih dari jadwal yang tersedia:\n{rekomendasi_display}"
+                ))
+            else:
+                dispatcher.utter_message(text=(
+                    f"⚠️ Maaf, tidak ada dokter *{booking_poli}* yang praktek "
+                    f"pada tanggal {tgl_display}.\n\n"
+                    f"Silakan pilih dari jadwal yang tersedia:\n{rekomendasi_display}"
+                ))
             return {"booking_tgl_kunjungan": None}
 
         except Exception as e:

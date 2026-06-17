@@ -155,6 +155,11 @@ slots:
         conditions:
           - active_loop: booking_form_baru
             requested_slot: booking_tgl_kunjungan
+      - type: from_entity
+        entity: tanggal_lahir
+        conditions:
+          - active_loop: booking_form_baru
+            requested_slot: booking_tgl_kunjungan
       - type: from_text
         conditions:
           - active_loop: booking_form_baru
@@ -240,7 +245,7 @@ responses:
     - text: "Terima kasih atas penilaian Anda. 🙏😊"
 
   utter_ask_booking_untuk_siapa:
-    - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan.\n\n Apakah Anda ingin mendaftar untuk: \n*Diri Sendiri* atau untuk *Orang Lain*?"
+    - text: "Halo, saya lihat data diri Anda dengan NIK {nik} sudah tersimpan.\n\nApakah Anda ingin mendaftar untuk: \n\n*Diri Sendiri* atau untuk *Orang Lain*?"
 
   utter_booking_intro_baru:
     - text: |
@@ -264,9 +269,9 @@ responses:
   utter_ask_booking_poli:
     - text: ""
 
-  # Pesan dikirim dari validator (validate_booking_tgl_kunjungan)
+  # Pesan lainnya dikirim dari validator (validate_booking_tgl_kunjungan)
   utter_ask_booking_tgl_kunjungan:
-    - text: ""
+    - text: "📅 Silakan balas dengan tanggal kunjungan (DD/MM/YYYY)"
 
   utter_booking_nik_invalid:
     - text: "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang."
