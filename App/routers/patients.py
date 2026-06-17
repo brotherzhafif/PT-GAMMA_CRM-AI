@@ -2,28 +2,23 @@
 # SmartClinic CRM AI — routers/patients.py
 # Endpoint: /api/patients
 #
-# Last Change   :   11 Jun 2026
+# Last Change   :   18 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
-import asyncio
 import json
-from typing import Literal, Optional
+from typing import Optional
 
-import httpx
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Request, Response
-from pydantic import BaseModel, Field
 
 from App.activity_logger import log_activity
-from App.config import supabase
-from App.helpers import get_rme_patient_id_by_phone, normalize_phone_number
+from App.config import SMARTCLINIC_BASE_URL, supabase
+from App.helpers import get_rme_patient_id_by_phone, normalize_phone_number, proxy_smartclinic
 from App.models import PatientPayload
-from App.smartclinic_auth import get_smartclinic_token
 
 
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
-SMARTCLINIC_BASE_URL = "https://smartclinic-rekam-medis.onrender.com"
 SMARTCLINIC_PATIENTS_PATH = "/api/v1/patients"
 
 PATIENT_EXAMPLE = {
@@ -37,28 +32,6 @@ PATIENT_EXAMPLE = {
 
 PATIENT_ERROR_EXAMPLE = {"detail": "Pasien tidak ditemukan"}
 
-
-async def _smartclinic_request(
-    method: str,
-    path: str,
-    *,
-    params: Optional[list[tuple[str, str]]] = None,
-    json_body: Optional[dict] = None,
-) -> Response:
-    token = await get_smartclinic_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    async with httpx.AsyncClient(base_url=SMARTCLINIC_BASE_URL, timeout=30.0) as client:
-        try:
-            upstream = await client.request(method, path, params=params, json=json_body, headers=headers)
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail="Gagal menghubungi SmartClinic") from exc
-
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type"),
-    )
 
 def _build_patient_supabase_row(rme_patient_id: str, payload: PatientPayload) -> dict:
     return {
@@ -79,7 +52,7 @@ def _upsert_patient_to_supabase(rme_patient_id: str, payload: PatientPayload) ->
 
 
 async def _delete_patient_in_smartclinic(rme_patient_id: str) -> None:
-    await _smartclinic_request("DELETE", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
 @router.get(
@@ -101,7 +74,7 @@ async def get_all_patients(request: Request):
     query_params = list(request.query_params.multi_items())
     if not query_params:
         query_params = [("page", "1"), ("limit", "100")]
-    return await _smartclinic_request("GET", SMARTCLINIC_PATIENTS_PATH, params=query_params)
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, params=query_params)
 
 
 @router.post(
@@ -137,10 +110,11 @@ async def create_patient(
     )
 ):
     try:
-        response = await _smartclinic_request(
+        response = await proxy_smartclinic(
             "POST",
+            SMARTCLINIC_BASE_URL,
             SMARTCLINIC_PATIENTS_PATH,
-            json_body=payload.model_dump(exclude_none=True),
+            json=payload.model_dump(exclude_none=True),
         )
         if response.status_code >= 400:
             return response
@@ -178,7 +152,7 @@ async def create_patient(
                 status_code=500,
                 detail=f"Gagal menyimpan mapping pasien ke Supabase, data RME sudah dihapus lagi: {exc}",
             ) from exc
-        
+
         await log_activity(
             category="patients",
             action="CREATE_PATIENT",
@@ -190,7 +164,7 @@ async def create_patient(
                 "nik": payload.nik,
             },
         )
-        
+
         return response
     except Exception as exc:
         await log_activity(
@@ -236,8 +210,7 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
         normalized_phone,
         not_found_detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan",
     )
-
-    return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
 # @router.get(
@@ -259,7 +232,7 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
 #     },
 # )
 # async def get_patient_by_rm(noRm: str = Path(..., description="Nomor RM pasien")):
-#     return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
+#     return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/rm/{noRm}")
 
 
 @router.get(
@@ -281,7 +254,7 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
     },
 )
 async def get_patient_by_id(rme_patient_id: str = Path(..., description="rme_patient_id pasien")):
-    return await _smartclinic_request("GET", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
 @router.put(
@@ -320,10 +293,11 @@ async def update_patient(
         },
     ),
 ):
-    response = await _smartclinic_request(
+    response = await proxy_smartclinic(
         "PUT",
+        SMARTCLINIC_BASE_URL,
         f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}",
-        json_body=payload.model_dump(exclude_none=True),
+        json=payload.model_dump(exclude_none=True),
     )
     if response.status_code < 400:
         try:
@@ -354,7 +328,7 @@ async def update_patient(
     },
 )
 async def delete_patient(rme_patient_id: str = Path(..., description="rme_patient_id pasien")):
-    response = await _smartclinic_request("DELETE", f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    response = await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
     if response.status_code < 400 and supabase is not None:
         supabase.table("patients").delete().eq("rme_patient_id", rme_patient_id).execute()
     return response
