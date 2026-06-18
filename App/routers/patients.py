@@ -191,9 +191,69 @@ async def _sync_patients_list(response_body: bytes) -> None:
         print(f"[PatientSync] Gagal batch upsert: {exc}")
 
 
+async def _sync_all_patients_on_startup() -> None:
+    """Sinkronisasi semua pasien dari RME ke Supabase saat server startup.
+
+    Fetch halaman demi halaman (limit 100) sampai habis, lalu batch upsert ke Supabase.
+    Semua error ditangkap agar tidak mengganggu startup.
+    """
+    if supabase is None:
+        return
+
+    print("[PatientSync] Startup sync dimulai — mengambil semua pasien dari RME...")
+    page = 1
+    total_synced = 0
+
+    while True:
+        try:
+            response = await proxy_smartclinic(
+                "GET",
+                SMARTCLINIC_BASE_URL,
+                SMARTCLINIC_PATIENTS_PATH,
+                params=[("page", str(page)), ("limit", "100")],
+            )
+
+            if response.status_code >= 400:
+                print(f"[PatientSync] Startup sync: RME balik {response.status_code} pada page {page}, berhenti.")
+                break
+
+            await _sync_patients_list(response.body)
+
+            # Cek apakah masih ada halaman berikutnya
+            try:
+                data = json.loads(response.body.decode("utf-8"))
+                # Ambil list pasien dari nested response
+                patients_list: list = []
+                if isinstance(data, list):
+                    patients_list = data
+                elif isinstance(data, dict):
+                    inner = data.get("data", data)
+                    if isinstance(inner, list):
+                        patients_list = inner
+                    elif isinstance(inner, dict):
+                        patients_list = inner.get("data", [])
+
+                total_synced += len(patients_list)
+
+                # Kalau hasil kurang dari 100, berarti sudah halaman terakhir
+                if len(patients_list) < 100:
+                    break
+            except Exception:
+                break
+
+            page += 1
+
+        except Exception as exc:
+            print(f"[PatientSync] Startup sync error pada page {page}: {exc}")
+            break
+
+    print(f"[PatientSync] Startup sync selesai — total {total_synced} pasien diproses dari {page} halaman.")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # GET endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "",

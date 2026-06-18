@@ -18,6 +18,7 @@ from App.routers.activity import router as activity_router
 from App.routers.analytics import router as analytics_router
 from App.routers.users import router as users_router
 from App.routers import status, webhook, patients, messages, send, handoff, campaign, schedules, appointments, chatbot_settings, feedback, reminder
+from App.routers.patients import _sync_all_patients_on_startup
 from App.campaign_scheduler import start_campaign_scheduler
 from App.appointment_reminder_scheduler import start_appointment_reminder_scheduler
 from App.seed_bootstrap_users import seed_bootstrap_users
@@ -40,6 +41,11 @@ async def lifespan(app: FastAPI):
     # Proactive token refresher — jaga token RME selalu fresh sebelum expired
     start_token_refresher()
     print("[Lifespan] SmartClinic proactive token refresher started.")
+
+    # Sinkronisasi awal semua pasien dari RME ke Supabase saat startup
+    import asyncio
+    asyncio.create_task(_sync_all_patients_on_startup())
+    print("[Lifespan] Startup patient sync task scheduled.")
 
     yield
     # shutdown (if any cleanup is needed, add here)
