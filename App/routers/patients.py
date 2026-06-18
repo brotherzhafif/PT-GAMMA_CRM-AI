@@ -6,6 +6,7 @@
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import asyncio
 import json
 from typing import Optional
 
@@ -55,10 +56,149 @@ async def _delete_patient_in_smartclinic(rme_patient_id: str) -> None:
     await proxy_smartclinic("DELETE", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Background sync helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _sync_single_patient(rme_patient_id: str, response_body: bytes) -> None:
+    """Sinkronisasi satu pasien ke Supabase secara background.
+
+    - Jika RME balik 404 → hapus record di Supabase (cleanup stale data).
+    - Jika RME balik 200 → upsert name + phone_number ke Supabase.
+    Semua error ditangkap agar tidak mengganggu response utama.
+    """
+    if supabase is None:
+        return
+    try:
+        data = json.loads(response_body.decode("utf-8"))
+    except Exception:
+        return
+
+    # Jika 404 dari RME → hapus dari Supabase
+    # (response_body berupa {"message": "..."} atau {"detail": "..."} saat 404)
+    # Tapi kita tidak punya status code di sini — kita periksa strukturnya.
+    # Status code diteruskan lewat parameter terpisah via _sync_single_patient_with_status.
+    # Fungsi ini dipanggil hanya saat status 200, jadi langsung upsert.
+
+    # Ambil data pasien dari respons RME (bisa nested di "data")
+    patient_data = data
+    if isinstance(data, dict) and "data" in data:
+        patient_data = data["data"]
+
+    if not isinstance(patient_data, dict):
+        return
+
+    rme_id = patient_data.get("id") or rme_patient_id
+    telepon = patient_data.get("telepon") or patient_data.get("noHp")
+    nama = patient_data.get("namaLengkap") or patient_data.get("nama")
+
+    if not telepon:
+        return
+
+    phone_normalized = normalize_phone_number(telepon)
+    if not phone_normalized:
+        return
+
+    def _do_upsert():
+        supabase.table("patients").upsert(
+            {
+                "rme_patient_id": rme_id,
+                "phone_number": phone_normalized,
+                "name": nama,
+            },
+            on_conflict="phone_number",
+        ).execute()
+
+    try:
+        await asyncio.to_thread(_do_upsert)
+        print(f"[PatientSync] Upsert sukses: {rme_id} ({phone_normalized})")
+    except Exception as exc:
+        print(f"[PatientSync] Gagal upsert {rme_id}: {exc}")
+
+
+async def _sync_single_patient_with_status(rme_patient_id: str, response: Response) -> None:
+    """Wrapper: cek status code dulu, baru sync atau hapus."""
+    if supabase is None:
+        return
+
+    try:
+        if response.status_code == 404:
+            # Pasien sudah tidak ada di RME → hapus dari Supabase
+            def _do_delete():
+                supabase.table("patients").delete().eq("rme_patient_id", rme_patient_id).execute()
+            await asyncio.to_thread(_do_delete)
+            print(f"[PatientSync] Pasien {rme_patient_id} tidak ada di RME → dihapus dari Supabase")
+        elif response.status_code < 400:
+            await _sync_single_patient(rme_patient_id, response.body)
+    except Exception as exc:
+        print(f"[PatientSync] Error sync {rme_patient_id}: {exc}")
+
+
+async def _sync_patients_list(response_body: bytes) -> None:
+    """Sinkronisasi daftar pasien dari respons GET all ke Supabase secara background."""
+    if supabase is None:
+        return
+    try:
+        data = json.loads(response_body.decode("utf-8"))
+    except Exception:
+        return
+
+    # Normalkan ke list — RME bisa nested di data.data atau langsung list
+    patients: list = []
+    if isinstance(data, list):
+        patients = data
+    elif isinstance(data, dict):
+        inner = data.get("data", data)
+        if isinstance(inner, list):
+            patients = inner
+        elif isinstance(inner, dict):
+            patients = inner.get("data", [])
+
+    if not patients:
+        return
+
+    def _do_upsert_batch(rows: list):
+        supabase.table("patients").upsert(rows, on_conflict="phone_number").execute()
+
+    rows = []
+    for p in patients:
+        if not isinstance(p, dict):
+            continue
+        rme_id = p.get("id")
+        telepon = p.get("telepon") or p.get("noHp")
+        nama = p.get("namaLengkap") or p.get("nama")
+
+        if not rme_id or not telepon:
+            continue
+
+        phone_normalized = normalize_phone_number(telepon)
+        if not phone_normalized:
+            continue
+
+        rows.append({
+            "rme_patient_id": rme_id,
+            "phone_number": phone_normalized,
+            "name": nama,
+        })
+
+    if not rows:
+        return
+
+    try:
+        await asyncio.to_thread(_do_upsert_batch, rows)
+        print(f"[PatientSync] Batch upsert {len(rows)} pasien selesai")
+    except Exception as exc:
+        print(f"[PatientSync] Gagal batch upsert: {exc}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GET endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.get(
     "",
     summary="Ambil semua data pasien",
-    description="Meneruskan seluruh query params ke SmartClinic tanpa perubahan.",
+    description="Meneruskan seluruh query params ke SmartClinic tanpa perubahan. Sinkronisasi data ke Supabase berjalan di background.",
     responses={
         200: {
             "description": "Daftar pasien berhasil diambil",
@@ -74,7 +214,14 @@ async def get_all_patients(request: Request):
     query_params = list(request.query_params.multi_items())
     if not query_params:
         query_params = [("page", "1"), ("limit", "100")]
-    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, params=query_params)
+
+    response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, params=query_params)
+
+    # Sinkronisasi asinkronus di latar belakang — tidak memblokir response
+    if response.status_code < 400:
+        asyncio.create_task(_sync_patients_list(response.body))
+
+    return response
 
 
 @router.post(
@@ -210,7 +357,13 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
         normalized_phone,
         not_found_detail=f"Pasien dengan nomor {normalized_phone} tidak ditemukan",
     )
-    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+
+    response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+
+    # Sinkronisasi asinkronus di latar belakang
+    asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+
+    return response
 
 
 # @router.get(
@@ -254,8 +407,18 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
     },
 )
 async def get_patient_by_id(rme_patient_id: str = Path(..., description="rme_patient_id pasien")):
-    return await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
+    response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
+    # Sinkronisasi asinkronus di latar belakang
+    # Jika 404 → otomatis cleanup record stale di Supabase
+    asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+
+    return response
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PUT / DELETE
+# ──────────────────────────────────────────────────────────────────────────────
 
 @router.put(
     "/{rme_patient_id}",
