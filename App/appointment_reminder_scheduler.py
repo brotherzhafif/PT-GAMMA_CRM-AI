@@ -93,7 +93,11 @@ async def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
 
 
 async def _reminder_already_exists(phone_number: str, appointment_date: str, reminder_type: str) -> bool:
-    """Check apakah reminder sudah ada untuk appointment ini (Non-blocking)."""
+    """Check apakah reminder sudah ada untuk appointment ini (Non-blocking).
+
+    Cek semua status (pending/sent/failed) — bukan hanya pending.
+    Ini mencegah duplikasi row tiap 30 menit saat pengiriman gagal (failed).
+    """
     def _sync_check():
         response = (
             supabase.table("appointment_reminders")
@@ -101,7 +105,7 @@ async def _reminder_already_exists(phone_number: str, appointment_date: str, rem
             .eq("phone_number", phone_number)
             .eq("appointment_date", appointment_date)
             .eq("reminder_type", reminder_type)
-            .eq("status", REMINDER_STATUS_PENDING)
+            # Tidak filter status — cek ANY reminder yang sudah ada
             .execute()
         )
         return response.data
