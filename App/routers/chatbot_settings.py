@@ -20,6 +20,35 @@ DEFAULT_HANDOFF_TIMEOUT_MINUTES = 15
 DEFAULT_MAX_FALLBACK_BEFORE_HANDOFF = 3
 
 
+# ponytail: singleton cache, no class needed — just a module-level dict
+_settings_cache: dict = {}
+
+
+def refresh_cache(row_data: dict | None = None):
+    """Load settings into cache. If row_data given, use it directly; otherwise fetch from Supabase."""
+    global _settings_cache
+    if row_data:
+        _settings_cache = dict(row_data)
+        print(f"[SettingsCache] Refreshed from provided data: {list(row_data.keys())}")
+        return
+    try:
+        row = _get_single_settings_row()
+        if row:
+            _settings_cache = dict(row)
+            print(f"[SettingsCache] Loaded from Supabase")
+        else:
+            _settings_cache = _default_chatbot_settings_row()
+            print(f"[SettingsCache] No DB row, using defaults")
+    except Exception as e:
+        _settings_cache = _default_chatbot_settings_row()
+        print(f"[SettingsCache] Supabase error, using defaults: {e}")
+
+
+def get_settings() -> dict:
+    """Return cached settings dict. Falls back to defaults if cache empty."""
+    return _settings_cache or _default_chatbot_settings_row()
+
+
 CHATBOT_SETTINGS_EXAMPLE = {
     "id": "2f4d52c2-1111-4b5f-9b5d-1b2c3d4e5f67",
     "ai_name": "SmartClinic AI",
@@ -128,11 +157,12 @@ def _get_or_create_single_settings_row(initial_values: dict | None = None, allow
 
 
 def get_handoff_timeout_minutes(default: int = DEFAULT_HANDOFF_TIMEOUT_MINUTES) -> int:
-    return default
+    # ponytail: read from cache, fall back to default
+    return _settings_cache.get("handoff_timeout_minutes") or default
 
 
 def get_max_fallback_before_handoff(default: int = DEFAULT_MAX_FALLBACK_BEFORE_HANDOFF) -> int:
-    return default
+    return _settings_cache.get("max_fallback_before_handoff") or default
 
 
 @router.get(
@@ -241,7 +271,9 @@ async def update_chatbot_settings(
             },
         )
 
-        return _chatbot_settings_row(response.data[0])
+        updated_row = response.data[0]
+        refresh_cache(updated_row)
+        return _chatbot_settings_row(updated_row)
     except HTTPException:
         raise
     except Exception as exc:

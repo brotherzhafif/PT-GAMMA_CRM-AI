@@ -42,6 +42,14 @@ async def lifespan(app: FastAPI):
     start_token_refresher()
     print("[Lifespan] SmartClinic proactive token refresher started.")
 
+    # Load chatbot settings into in-memory cache
+    from App.routers.chatbot_settings import refresh_cache
+    try:
+        refresh_cache()
+        print("[Lifespan] Chatbot settings cache initialized.")
+    except Exception as e:
+        print(f"[Lifespan] Chatbot settings cache init failed: {e}")
+
     # Sinkronisasi awal semua pasien dari RME ke Supabase saat startup
     import asyncio
     asyncio.create_task(_sync_all_patients_on_startup())

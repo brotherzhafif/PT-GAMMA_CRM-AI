@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException
 
-from App.config import RASA_CONFIDENCE_THRESHOLD, RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, ONBOARDING_TIMEOUT_MINUTES
+from App.config import RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, ONBOARDING_TIMEOUT_MINUTES
 from App.models import WebhookPayload, ChatResponse
 from App.helpers import (
     save_to_supabase,
@@ -31,7 +31,7 @@ from App.helpers import (
     increment_fallback,
     reset_fallback,
 )
-from App.routers.chatbot_settings import get_max_fallback_before_handoff
+from App.routers.chatbot_settings import get_max_fallback_before_handoff, get_settings
 from App.handoff_manager import is_in_handoff, start_handoff
 from App.wa_gateway import send_text_best_effort
 from LLM.groq_service import groq_service as groq
@@ -84,6 +84,12 @@ def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatRe
             return ChatResponse(status="handoff", source="handoff", reply=None)
         reply = "📅 Silakan balas dengan tanggal kunjungan (DD/MM/YYYY)"
 
+
+    # ponytail: AI badge — append footer if enabled and source is bot
+    if source in ("rasa", "groq"):
+        settings = get_settings()
+        if settings.get("ai_badge_enabled"):
+            reply = f"{reply}\n\n🤖 _Respon Otomatis AI_"
 
     # Pattern dari /api/send endpoint - normalize target dulu
     target = normalize_whatsapp_target(no_hp)
@@ -429,11 +435,10 @@ def webhook(
         if is_handoff_keyword(input_pesan):
             start_handoff(no_hp)
             reset_fallback(no_hp)
-            reply = (
-                "Baik, kami akan menghubungkan kamu dengan admin kami. "
-                "Mohon tunggu sebentar ya 🙏\n\n"
-                "_Bot sementara tidak aktif. Admin akan segera membalas._"
-            )
+            # ponytail: dynamic handoff_message from cache
+            settings = get_settings()
+            handoff_msg = settings.get("handoff_message") or "Baik, kami akan menghubungkan kamu dengan admin kami. Mohon tunggu sebentar ya 🙏"
+            reply = f"{handoff_msg}\n\n_Bot sementara tidak aktif. Admin akan segera membalas._"
             print(f"[Handoff] {no_hp} minta handoff via keyword")
             return _send_reply(no_hp, input_pesan, reply, source="system")
         
@@ -456,10 +461,14 @@ def webhook(
         rasa_requested_slot  = rasa_result.get("requested_slot") if rasa_result else None
         rasa_was_form_active = rasa_form  # simpan snapshot untuk handle timeout
 
+        # ponytail: dynamic threshold from cache
+        settings = get_settings()
+        threshold = (settings.get("handoff_threshold") or 75) / 100.0
+
         print(
             f"[DEBUG][RASA] intent={rasa_intent} | "
             f"confidence={rasa_confidence:.4f} | "
-            f"threshold={RASA_CONFIDENCE_THRESHOLD} | "
+            f"threshold={threshold} | "
             f"trusted={rasa_trusted} | "
             f"form_active={rasa_form} | "
             f"requested_slot={rasa_requested_slot}"
@@ -468,7 +477,7 @@ def webhook(
         if (
             rasa_result 
             and (
-                (rasa_result["confidence"] >= RASA_CONFIDENCE_THRESHOLD and rasa_result["intent"] in RASA_TRUSTED_INTENTS) 
+                (rasa_result["confidence"] >= threshold and rasa_result["intent"] in RASA_TRUSTED_INTENTS) 
                 or rasa_result["is_form_active"]
             )
         ):
@@ -531,10 +540,10 @@ def webhook(
             if fallback_count >= get_max_fallback_before_handoff():
                 start_handoff(no_hp)
                 reset_fallback(no_hp)
-                reply += (
-                    "\n\n_Sepertinya pertanyaan kamu membutuhkan bantuan lebih lanjut. "
-                    "Kami sambungkan ke admin ya — mohon tunggu sebentar 🙏_"
-                )
+                # ponytail: dynamic handoff_message from cache
+                settings_fb = get_settings()
+                handoff_msg = settings_fb.get("handoff_message") or "Sepertinya pertanyaan kamu membutuhkan bantuan lebih lanjut."
+                reply += f"\n\n_{handoff_msg} Kami sambungkan ke admin ya — mohon tunggu sebentar 🙏_"
                 print(f"[Handoff] {no_hp} auto-handoff setelah {fallback_count}x fallback")
 
         # Kirim pesan via wa-service dan simpan ke DB (gunakan helper)

@@ -2,6 +2,7 @@
 # Logs last change: 5 Juni 2026
 
 import os
+import re
 import requests
 from .guardrail import ResponseGuardrail
 
@@ -142,6 +143,13 @@ MAX_BOT_CHARS = 300          # Batas karakter riwayat bot untuk hemat token
 GROQ_MODEL    = "llama-3.3-70b-versatile"
 TEMPERATURE   = 0.2         # Makin rendah makin kurang halusinasi dan kreatifit AI (intinya nilai kecil = minimalisir halu).
 
+# ponytail: tone mapping — conversation_tone -> instruksi bahasa Indonesia
+TONE_MAP = {
+    "friendly": "Ramah, hangat, bersahabat, santun namun profesional",
+    "professional": "Profesional, formal, taktis, dan sopan",
+    "caring": "Penuh empati, peduli, hangat, dan menenangkan",
+}
+
 
 # 
 #  SERVICE GROQ
@@ -163,7 +171,23 @@ class GroqService:
 
     #  Function untuk memanggil API Groq dengan role dan chat history 
     def get_response(self, user_message, role_type="default", chat_history=None):
-        messages = [{"role": "system", "content": ROLES.get(role_type, ROLES["default"])}]
+        system_prompt = ROLES.get(role_type, ROLES["default"])
+
+        # ponytail: dynamic ai_name + tone from cache
+        try:
+            from App.routers.chatbot_settings import get_settings
+            settings = get_settings()
+            ai_name = settings.get("ai_name")
+            if ai_name and ai_name != "Hana":
+                system_prompt = system_prompt.replace("Hana", ai_name)
+            tone = settings.get("conversation_tone")
+            if tone and tone in TONE_MAP:
+                tone_instruction = TONE_MAP[tone]
+                system_prompt = re.sub(r"- Nada:.*", f"- Nada: {tone_instruction}.", system_prompt)
+        except Exception as e:
+            print(f"[Groq] Settings injection skipped: {e}")
+
+        messages = [{"role": "system", "content": system_prompt}]
 
         for chat in (chat_history or []):
             messages.append({"role": "user", "content": chat["user"]})
