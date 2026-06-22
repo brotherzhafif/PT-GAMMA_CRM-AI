@@ -62,7 +62,7 @@ RASA_TRUSTED_INTENTS = {
     "intent_berikan_rating", "intent_diri_sendiri", "intent_orang_lain",
     "booking_konfirmasi", "booking_ubah_data",
     "booking_batalkan", "booking_reschedule",
-    "booking_pengguna_bpjs", "booking_pengguna_umum",
+    "booking_pengguna_bpjs", "booking_pengguna_umum", "ask_promo",
 }
 
 # Gejala umum — Groq triage tanpa handoff

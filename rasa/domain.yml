@@ -1,4 +1,4 @@
-# Log Last Change: 7 Juni 2026
+# Log Last Change:22 Juni 2026
 version: "3.1"
 
 intents:
@@ -7,6 +7,7 @@ intents:
   - ask_schedule
   - ask_queue
   - ask_services
+  - ask_promo
   - ask_location
   - ask_cost
   - request_human_agent
@@ -204,6 +205,7 @@ forms:
 actions:
   - action_fetch_schedule
   - action_fetch_queue
+  - action_fetch_promo
   - action_start_booking
   - action_handle_untuk_siapa
   - action_handle_bpjs
@@ -277,7 +279,7 @@ responses:
 
   # Pesan lainnya dikirim dari validator (validate_booking_tgl_kunjungan)
   utter_ask_booking_tgl_kunjungan:
-    - text: "📅 Silakan balas dengan tanggal kunjungan (DD/MM/YYYY)"
+    - text: "📅 Silakan balas dengan tanggal kunjungan (22/06/2026)"
 
   utter_booking_nik_invalid:
     - text: "⚠️ NIK harus terdiri dari *16 digit angka*. Silakan cek kembali dan kirim ulang."
@@ -307,6 +309,9 @@ responses:
 
   utter_bpjs_redirect_jkn:
     - text: "Untuk peserta BPJS, pendaftaran dapat dilakukan melalui aplikasi *Mobile JKN* 📱\n\nLangkah-langkahnya:\n1. Buka aplikasi *Mobile JKN*\n2. Pilih menu *Pendaftaran Pelayanan*\n3. Pilih *Klinik SmartClinic* sebagai faskes\n4. Pilih jadwal dan dokter yang tersedia\n\nJika mengalami kendala, ketik *admin* untuk bantuan langsung. 🙏"
+
+  utter_no_promo:
+    - text: "Maaf, saat ini belum ada promo yang berlaku. 🙏\n\nKetik *layanan* untuk lihat info layanan kami lainnya."
 
 session_config:
   session_expiration_time: 60

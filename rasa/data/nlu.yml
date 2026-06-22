@@ -230,6 +230,32 @@ nlu:
       - kalo pake bpjs gratis ga
       - bayarnya gimana bisa transfer ga
 
+  - intent: ask_promo
+    examples: |
+      - ada promo?
+      - ada promo
+      - info promo
+      - promo apa
+      - promo apa aja
+      - ada diskon?
+      - ada diskon
+      - diskon hari ini
+      - penawaran hari ini
+      - lagi ada promo ga
+      - lagi ada promo gak
+      - klinik ada promo gak
+      - ada potongan harga gak
+      - mau tau promo
+      - boleh tau promo apa aja
+      - promo terbaru apa
+      - ada penawaran spesial gak
+      - cek promo
+      - cek diskon
+      - apakah ada promo bulan ini
+      - apakah ada diskon untuk pemeriksaan
+      - info diskon dong
+      - kasih info promo dong
+
   - intent: request_human_agent
     examples: |
       - minta tolong hubungkan ke admin

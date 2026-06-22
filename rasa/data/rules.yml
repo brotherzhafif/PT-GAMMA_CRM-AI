@@ -48,6 +48,11 @@ rules:
       - action: utter_emergency
       - active_loop: null
 
+  - rule: Fetch promo hari ini
+    steps:
+      - intent: ask_promo
+      - action: action_fetch_promo
+
   # SUBMIT FORM (Hanya untuk mematikan form)
   - rule: Submit booking_form_baru selesai
     condition:

@@ -7,13 +7,13 @@ Handles:
   - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   07 Juni 2026
+# Last Change   :   22 Juni 2026
 # ======================================================
 
 import os
 import re
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Text, Dict, List, Optional
 
 from rasa_sdk import Action, Tracker, FormValidationAction
@@ -176,7 +176,7 @@ def format_tgl_indonesia(tgl_str: str) -> str:
         return tgl_str
 
 # ------------------------------------------------------
-# JADWAL dan ANTREAN actions
+# JADWAL ANTREAN dan PROMO 
 # ------------------------------------------------------
 
 #Action untuk mengambil jadwal dokter 
@@ -271,6 +271,37 @@ class ActionFetchSchedule(Action):
         msg += "Apakah Anda ingin membuat janji temu dengan salah satu dokter? 😊"
         dispatcher.utter_message(text=msg)
         return []
+    
+
+# Action untuk ambil data promo yang tengah berlangsung
+def _get_promo_hari_ini() -> list:
+    """Ambil daftar campaign promo yang terjadwal hari ini dan sudah terkirim (status 'sent'), berdasarkan tanggal WIB (UTC+7)."""
+    WIB = timezone(timedelta(hours=7))
+    today_str = datetime.now(timezone.utc).astimezone(WIB).strftime("%Y-%m-%d")
+    result = api_get("/api/marketing/campaigns")
+    if not result:
+        return []
+
+    if isinstance(result, list):
+        campaigns = result
+    elif isinstance(result, dict):
+        campaigns = result.get("data", [])
+    else:
+        campaigns = []
+
+    promo_aktif = []
+    for c in campaigns:
+        schedule_date = str(c.get("schedule_date", ""))
+        if schedule_date[:10] == today_str and c.get("status") == "sent":
+            promo_aktif.append(c)
+    return promo_aktif
+
+
+def _format_promo_message(promo_list: list) -> str:
+    """Gabungkan campaign_message dari setiap promo aktif. campaign_message sudah berformat WA lengkap."""
+    pesan_list = [c.get("campaign_message", "").strip() for c in promo_list if c.get("campaign_message")]
+    return "\n\n".join(pesan_list)
+
 
 # Action untuk ambil data antrian hari ini, dengan filter tanggal & grouping per dokter
 class ActionFetchQueue(Action):
@@ -345,7 +376,7 @@ class ActionFetchQueue(Action):
         return []
 
 # ------------------------------------------------------
-# Alur Booking dan Actionnya
+# Alur Booking dan Action Handlernya
 # ------------------------------------------------------
 
 class ActionStartBooking(Action):
@@ -691,11 +722,14 @@ class ValidateBookingFormBaru(FormValidationAction):
                 jam_praktik = f"{jam_mulai} - {jam_selesai}" if jam_mulai and jam_selesai else "-"
 
                 # Jika tanggal kunjungan adalah hari ini, cek apakah jam praktik sudah lewat
-                today_str = datetime.now().strftime("%Y-%m-%d")
+                # (pakai waktu WIB eksplisit, karena container server bisa jalan di UTC)
+                WIB = timezone(timedelta(hours=7))
+                now_wib = datetime.now(timezone.utc).astimezone(WIB)
+                today_str = now_wib.strftime("%Y-%m-%d")
                 if parsed == today_str and jam_selesai:
                     try:
                         jam_selesai_dt = datetime.strptime(jam_selesai, "%H:%M").time()
-                        now_time = datetime.now().time()
+                        now_time = now_wib.time()
                         if now_time > jam_selesai_dt:
                             jadwal_cocok = None
                             jam_sudah_lewat = True
@@ -761,7 +795,7 @@ class ValidateBookingFormBaru(FormValidationAction):
             return {"booking_tgl_kunjungan": parsed}
 
 # ------------------------------------------------------
-#  Action Review & Confirm Booking
+#  Action Handler untuk Review & Confirm Booking 
 # ------------------------------------------------------
 class ActionBookingFormBaruSubmit(Action):
     def name(self) -> Text:
@@ -962,6 +996,14 @@ class ActionBookingConfirm(Action):
             )
             dispatcher.utter_message(text=tiket)
             booking_id_final = str(booking_id)
+
+            # Lampirkan promo hari ini (silent kalau tidak ada)
+            try:
+                promo_list = _get_promo_hari_ini()
+                if promo_list:
+                    dispatcher.utter_message(text=_format_promo_message(promo_list))
+            except Exception as e:
+                print(f"[Promo] Gagal cek promo setelah booking: {e}")
         else:
             # POST failed
             # # ponytail: commented out due to RME RBAC constraints
@@ -1218,3 +1260,20 @@ class ActionBookingReschedule(Action):
 #             ActiveLoop("booking_form_baru"),
 #             FollowupAction("booking_form_baru"),
 #         ]
+    
+# ------------------------------------------------------
+#  Handler Promo
+# ------------------------------------------------------
+class ActionFetchPromo(Action):
+    def name(self) -> Text:
+        return "action_fetch_promo"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        promo_list = _get_promo_hari_ini()
+
+        if not promo_list:
+            dispatcher.utter_message(response="utter_no_promo")
+            return []
+
+        dispatcher.utter_message(text=_format_promo_message(promo_list))
+        return []
