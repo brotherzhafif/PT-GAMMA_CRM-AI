@@ -173,10 +173,14 @@ class GroqService:
     def get_response(self, user_message, role_type="default", chat_history=None):
         system_prompt = ROLES.get(role_type, ROLES["default"])
 
-        # ponytail: dynamic ai_name + tone from cache
+        # ponytail: dynamic settings override from cache
         try:
             from App.routers.chatbot_settings import get_settings
             settings = get_settings()
+            if role_type == "default":
+                db_prompt = settings.get("system_prompt")
+                if db_prompt and db_prompt.strip():
+                    system_prompt = db_prompt
             ai_name = settings.get("ai_name")
             if ai_name and ai_name != "Hana":
                 system_prompt = system_prompt.replace("Hana", ai_name)

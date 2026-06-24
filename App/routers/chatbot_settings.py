@@ -102,6 +102,14 @@ def _chatbot_settings_columns() -> str:
 
 def _chatbot_settings_row(record: dict) -> dict:
     quota_state = _groq_quota_state()
+    db_prompt = record.get("system_prompt")
+    if not db_prompt or not db_prompt.strip():
+        try:
+            from LLM.groq_service import ROLES
+            db_prompt = ROLES["default"]
+        except Exception:
+            db_prompt = None
+
     return {
         "id": record.get("id"),
         "ai_name": record.get("ai_name"),
@@ -110,7 +118,7 @@ def _chatbot_settings_row(record: dict) -> dict:
         "handoff_threshold": record.get("handoff_threshold"),
         "handoff_message": record.get("handoff_message"),
         "ai_badge_enabled": record.get("ai_badge_enabled"),
-        "system_prompt": record.get("system_prompt"),
+        "system_prompt": db_prompt,
         "quota_used_tokens": quota_state["quota_used_tokens"],
         "quota_limit_tokens": quota_state["quota_limit_tokens"],
         "quota": quota_state["quota"],
