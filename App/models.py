@@ -232,6 +232,7 @@ class ChatbotSettingsRecord(BaseModel):
                 "handoff_threshold": 70,
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
+                "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
                 "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "quota_used_tokens": 12500,
                 "quota_limit_tokens": 50000,
@@ -249,6 +250,10 @@ class ChatbotSettingsRecord(BaseModel):
     handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100)
     handoff_message: Optional[str] = Field(default=None)
     ai_badge_enabled: Optional[bool] = Field(default=None)
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="System prompt kustom untuk instruksi awal AI chatbot.",
+    )
     api_key: Optional[str] = Field(
         default=None,
         description="Groq API key aktif yang dipakai proses runtime saat ini.",
@@ -283,6 +288,7 @@ class UpdateChatbotSettingsPayload(BaseModel):
                 "handoff_threshold": 70,
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
+                "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
                 "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             }
         }
@@ -297,6 +303,10 @@ class UpdateChatbotSettingsPayload(BaseModel):
     handoff_threshold: Optional[int] = Field(default=None, ge=0, le=100, description="Ambang handoff 0-100")
     handoff_message: Optional[str] = Field(default=None, description="Pesan handoff")
     ai_badge_enabled: Optional[bool] = Field(default=None, description="Tampilkan badge AI")
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="System prompt kustom untuk instruksi awal AI chatbot.",
+    )
     api_key: Optional[str] = Field(
         default=None,
         description="Groq API key aktif yang akan dipakai runtime.",

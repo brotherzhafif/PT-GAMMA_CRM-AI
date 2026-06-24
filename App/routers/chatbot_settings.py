@@ -57,7 +57,7 @@ CHATBOT_SETTINGS_EXAMPLE = {
     "handoff_threshold": 70,
     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
     "ai_badge_enabled": True,
-    "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
     "quota_used_tokens": 12500,
     "quota_limit_tokens": 50000,
     "quota": "12500/50000",
@@ -76,6 +76,7 @@ def _default_chatbot_settings_row() -> dict:
         "handoff_threshold": 70,
         "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
         "ai_badge_enabled": True,
+        "system_prompt": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -95,12 +96,8 @@ def _groq_quota_state() -> dict[str, int | str]:
     }
 
 
-def _groq_api_key() -> Optional[str]:
-    return groq_service.api_key
-
-
 def _chatbot_settings_columns() -> str:
-    return "id, ai_name, primary_language, conversation_tone, handoff_threshold, handoff_message, ai_badge_enabled, created_at, updated_at"
+    return "id, ai_name, primary_language, conversation_tone, handoff_threshold, handoff_message, ai_badge_enabled, system_prompt, created_at, updated_at"
 
 
 def _chatbot_settings_row(record: dict) -> dict:
@@ -113,7 +110,7 @@ def _chatbot_settings_row(record: dict) -> dict:
         "handoff_threshold": record.get("handoff_threshold"),
         "handoff_message": record.get("handoff_message"),
         "ai_badge_enabled": record.get("ai_badge_enabled"),
-        "api_key": _groq_api_key(),
+        "system_prompt": record.get("system_prompt"),
         "quota_used_tokens": quota_state["quota_used_tokens"],
         "quota_limit_tokens": quota_state["quota_limit_tokens"],
         "quota": quota_state["quota"],
@@ -170,7 +167,7 @@ def get_max_fallback_before_handoff(default: int = DEFAULT_MAX_FALLBACK_BEFORE_H
     response_model=ChatbotSettingsRecord,
     summary="Ambil chatbot settings",
     description=(
-        "Mengembalikan satu baris settings chatbot dari Supabase beserta api_key runtime aktif dan ringkasan kuota Groq "
+        "Mengembalikan satu baris settings chatbot dari Supabase beserta runtime aktif dan ringkasan kuota Groq "
         "dalam format used/limit dari request terakhir."
     ),
     responses={
@@ -199,7 +196,7 @@ def get_chatbot_settings():
     response_model=ChatbotSettingsRecord,
     summary="Update chatbot settings",
     description=(
-        "Memperbarui satu baris settings chatbot. Field api_key akan dipakai oleh runtime Groq saat ini, sementara quota "
+        "Memperbarui satu baris settings chatbot. quota "
         "di response menampilkan used/limit dari metadata respons Groq terakhir."
     ),
     responses={
@@ -227,7 +224,7 @@ async def update_chatbot_settings(
                     "handoff_threshold": 70,
                     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                     "ai_badge_enabled": True,
-                    "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                    "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
                 },
             }
         },
@@ -235,11 +232,6 @@ async def update_chatbot_settings(
 ):
     try:
         update_data = payload.model_dump(exclude_none=True)
-        api_key = update_data.pop("api_key", None)
-        if api_key:
-            os.environ["GROQ_API_KEY"] = api_key
-            groq_service.api_key = api_key
-
         current_row = _get_single_settings_row()
         if current_row is None:
             return _chatbot_settings_row(_create_chatbot_settings_row(update_data))
