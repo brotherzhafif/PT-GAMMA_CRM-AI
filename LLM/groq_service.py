@@ -177,9 +177,17 @@ class GroqService:
         try:
             from App.routers.chatbot_settings import get_settings
             settings = get_settings()
-            if role_type == "default":
-                db_prompt = settings.get("system_prompt")
-                if db_prompt and db_prompt.strip():
+            db_prompt = settings.get("system_prompt")
+            if db_prompt and db_prompt.strip():
+                if role_type == "triage":
+                    system_prompt = db_prompt.replace(
+                        "asisten virtual resmi Klinik Smart Clinic.",
+                        "asisten virtual resmi Klinik Smart Clinic — fokus Triage."
+                    ).replace(
+                        "- Peran: Asisten Layanan Pasien Digital",
+                        "- Peran: Asisten Triage Digital"
+                    )
+                else:
                     system_prompt = db_prompt
             ai_name = settings.get("ai_name")
             if ai_name and ai_name != "Hana":
