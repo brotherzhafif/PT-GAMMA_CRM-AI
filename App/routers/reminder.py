@@ -15,8 +15,9 @@ from App.config import supabase
 from App.helpers import _require_supabase
 from App.models import GetAppointmentRemindersResponse, AppointmentReminderStatistics, AppointmentReminderRecord
 from App.appointment_reminder_scheduler import (
-    _send_pending_reminders,
     _process_reminders,
+    REMINDER_TYPE_T_3H,
+    REMINDER_TYPE_T_1H,
     REMINDER_STATUS_PENDING,
     REMINDER_STATUS_SENT,
     REMINDER_STATUS_FAILED,
@@ -36,18 +37,19 @@ router = APIRouter(prefix="/api/reminder", tags=["Reminders"])
                 "application/json": {
                     "example": {
                         "status": "ok",
-                        "total": 5,
+                        "total": 2,
                         "reminders": [
                             {
                                 "id": "550e8400-e29b-41d4-a716-446655440000",
                                 "phone_number": "6281234567890",
                                 "appointment_date": "2026-06-15",
-                                "reminder_type": "H-1",
-                                "reminder_message": "...",
-                                "status": "pending",
-                                "created_at": "2026-06-14T10:00:00Z",
-                                "sent_at": None,
-                                "updated_at": "2026-06-14T10:00:00Z",
+                                "reminder_type": "T-3h",
+                                "scheduled_send_at": "2026-06-15T11:00:00+07:00",
+                                "reminder_message": "Halo Budi! Pengingat: janji temu hari ini pukul 14:00 (3 jam lagi).",
+                                "status": "sent",
+                                "created_at": "2026-06-15T08:00:00Z",
+                                "sent_at": "2026-06-15T11:00:05Z",
+                                "updated_at": "2026-06-15T11:00:05Z",
                             }
                         ],
                     }
@@ -62,7 +64,7 @@ router = APIRouter(prefix="/api/reminder", tags=["Reminders"])
 )
 def get_reminders(
     status: Optional[str] = Query(None, description="Filter: pending, sent, atau failed"),
-    reminder_type: Optional[str] = Query(None, description="Filter: H-1 atau H-0"),
+    reminder_type: Optional[str] = Query(None, description="Filter: T-3h (3 jam sebelum) atau T-1h (1 jam sebelum)"),
     phone_number: Optional[str] = Query(None, description="Filter: nomor telepon pasien"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -138,45 +140,27 @@ def get_reminder_statistics():
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.post(
-    "/send-pending",
-    summary="Kirim semua reminders yang masih pending (H-0)",
-    responses={200: {"description": "Reminders berhasil dikirim"}},
+    "/trigger",
+    summary="Trigger manual proses reminder hari ini (T-3h & T-1h)",
+    description="Jalankan manual proses reminder: cek appointment hari ini dan kirim reminder yang sudah waktunya (T-3h dan T-1h).",
+    responses={200: {"description": "Proses reminder berhasil dijalankan"}},
 )
-async def send_pending_reminders(request: Request):
+async def trigger_reminder_process(request: Request):
     try:
         _require_supabase()
-        await _send_pending_reminders()  # Tambahkan await di sini
+        await _process_reminders()
 
-        await log_activity(        
+        await log_activity(
             category="reminders",
-            action="SEND_PENDING_REMINDERS",
+            action="TRIGGER_REMINDER_PROCESS",
             from_actor=request.client.host if request.client else "system",
-            message="Manual trigger kirim pending reminders",
+            message="Manual trigger proses reminder T-3h & T-1h",
         )
-        return {"status": "ok", "message": "Pending reminders sent successfully"}
+        return {"status": "ok", "message": "Reminder process completed (T-3h & T-1h)"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post(
-    "/process",
-    summary="Trigger manual process reminders",
-    responses={200: {"description": "Process berhasil dijalankan"}},
-)
-async def process_reminders(request: Request):
-    try:
-        _require_supabase()
-        await _process_reminders()  # Tambahkan await di sini
-
-        await log_activity(       
-            category="reminders",
-            action="PROCESS_REMINDERS",
-            from_actor=request.client.host if request.client else "system",
-            message="Manual trigger process reminders",
-        )
-        return {"status": "ok", "message": "Reminder process completed"}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 @router.delete(
     "",

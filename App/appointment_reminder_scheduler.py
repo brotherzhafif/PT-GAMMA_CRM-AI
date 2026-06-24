@@ -1,8 +1,9 @@
 # ======================================================
 # SmartClinic CRM AI — appointment_reminder_scheduler.py
-# Background worker untuk mengelola reminder appointment H-1 dan H-0.
+# Background worker untuk mengelola reminder appointment.
+# Mengirim 2x reminder: 3 jam (T-3h) dan 1 jam (T-1h) sebelum jadwal.
 #
-# Last Change   :   11 Jun 2026
+# Last Change   :   25 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
@@ -21,8 +22,9 @@ from App.wa_gateway import send_text_best_effort
 _scheduler_started = False
 _scheduler_lock = asyncio.Lock()
 
-REMINDER_TYPE_H_MINUS_1 = "H-1"
-REMINDER_TYPE_H_MINUS_0 = "H-0"
+# Tipe reminder berbasis jam
+REMINDER_TYPE_T_3H = "T-3h"   # 3 jam sebelum appointment
+REMINDER_TYPE_T_1H = "T-1h"   # 1 jam sebelum appointment
 
 REMINDER_STATUS_PENDING = "pending"
 REMINDER_STATUS_SENT = "sent"
@@ -30,30 +32,47 @@ REMINDER_STATUS_FAILED = "failed"
 
 LOCAL_TZ = ZoneInfo("Asia/Jakarta")
 
+
 def _get_today_date() -> str:
     """Get today's date in YYYY-MM-DD format berdasarkan timezone lokal klinik (WIB)."""
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 
 
-def _get_tomorrow_date() -> str:
-    """Get tomorrow's date in YYYY-MM-DD format berdasarkan timezone lokal klinik (WIB)."""
-    tomorrow = datetime.now(LOCAL_TZ) + timedelta(days=1)
-    return tomorrow.strftime("%Y-%m-%d")
+def _parse_appointment_datetime(date_str: str, jam_mulai: str) -> Optional[datetime]:
+    """Parse tanggal + jamMulai menjadi datetime aware WIB.
+
+    Args:
+        date_str: Tanggal dalam format YYYY-MM-DD
+        jam_mulai: Jam mulai dalam format HH:MM atau HH:MM:SS
+
+    Returns:
+        datetime aware WIB, atau None jika parse gagal
+    """
+    if not jam_mulai:
+        return None
+    try:
+        # Normalisasi: ambil hanya HH:MM
+        time_part = jam_mulai.strip()[:5]  # "14:30"
+        dt_str = f"{date_str} {time_part}"
+        naive_dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+        return naive_dt.replace(tzinfo=LOCAL_TZ)
+    except (ValueError, TypeError):
+        return None
 
 
 async def _fetch_appointments(date: str) -> list[dict]:
     """Fetch appointments dari endpoint lokal untuk tanggal tertentu.
-    
+
     Args:
         date: Tanggal dalam format YYYY-MM-DD
-    
+
     Returns:
         List appointment data asli dari nested response data.data
     """
     try:
         from App.helpers import proxy_smartclinic
         response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, "/queues", params=[("tanggal", date)])
-        
+
         # Decode bytes ke json dict
         res_json = json.loads(response.body.decode("utf-8"))
 
@@ -64,10 +83,10 @@ async def _fetch_appointments(date: str) -> list[dict]:
                 return inner_data.get("data", [])
             elif isinstance(inner_data, list):
                 return inner_data
-                
+
         if isinstance(res_json, list):
             return res_json
-            
+
         return []
     except HTTPException as exc:
         print(f"[AppointmentReminder] HTTP error fetching appointments for {date}: {exc.status_code} - {exc.detail}")
@@ -75,6 +94,7 @@ async def _fetch_appointments(date: str) -> list[dict]:
     except Exception as exc:
         print(f"[AppointmentReminder] Gagal mengambil daftar appointment untuk {date}: {exc}")
         return []
+
 
 async def _fetch_patient_by_rme_id(rme_patient_id: str) -> Optional[dict]:
     """Ambil data patient menggunakan asyncio.to_thread agar tidak memblokir event loop."""
@@ -118,134 +138,201 @@ async def _reminder_already_exists(phone_number: str, appointment_date: str, rem
         return False
 
 
-async def _create_reminder(
+async def _create_and_send_reminder(
     phone_number: str,
     appointment_date: str,
     reminder_type: str,
+    scheduled_send_at: datetime,
     patient_name: Optional[str] = None,
     appointment_time: Optional[str] = None,
 ) -> bool:
-    """Buat reminder baru di Supabase (Non-blocking)."""
-    try:
-        time_str = f" jam {appointment_time}" if appointment_time else ""
+    """Buat reminder baru di Supabase dan langsung kirim via WhatsApp.
 
-        if reminder_type == REMINDER_TYPE_H_MINUS_1:
-            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu besok ({appointment_date}{time_str}). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
-        else:
-            message = f"Halo {patient_name or 'pasien'}! Ingatkan: Anda memiliki janji temu HARI INI ({appointment_date}{time_str}). Harap datang tepat waktu. Terima kasih!"
-        
+    Args:
+        phone_number: Nomor WA pasien
+        appointment_date: Tanggal appointment (YYYY-MM-DD)
+        reminder_type: REMINDER_TYPE_T_3H atau REMINDER_TYPE_T_1H
+        scheduled_send_at: Waktu eksak kapan reminder seharusnya dikirim
+        patient_name: Nama pasien (opsional, untuk isi pesan)
+        appointment_time: Jam appointment dalam format HH:MM (opsional, untuk isi pesan)
+    """
+    try:
+        name = patient_name or "pasien"
+        time_label = f"pukul {appointment_time}" if appointment_time else "sebentar lagi"
+
+        if reminder_type == REMINDER_TYPE_T_3H:
+            message = (
+                f"Halo {name}! 🔔 Pengingat: Anda memiliki janji temu HARI INI {time_label} "
+                f"(sekitar 3 jam lagi). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
+            )
+        else:  # T-1h
+            message = (
+                f"Halo {name}! ⏰ Pengingat: Janji temu Anda HARI INI {time_label} "
+                f"sudah semakin dekat (sekitar 1 jam lagi). Harap datang tepat waktu. Terima kasih!"
+            )
+
+        scheduled_send_at_iso = scheduled_send_at.isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Buat row reminder di DB
+        reminder_id = None
+
         def _sync_insert():
-            supabase.table("appointment_reminders").insert({
+            return supabase.table("appointment_reminders").insert({
                 "phone_number": phone_number,
                 "appointment_date": appointment_date,
                 "reminder_type": reminder_type,
+                "scheduled_send_at": scheduled_send_at_iso,
                 "reminder_message": message,
                 "status": REMINDER_STATUS_PENDING,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+                "created_at": now_iso,
+            }).select("id").execute()
 
-        await asyncio.to_thread(_sync_insert)
-        print(f"[AppointmentReminder] Reminder {reminder_type} created untuk {phone_number} on {appointment_date}")
-        return True
+        insert_resp = await asyncio.to_thread(_sync_insert)
+        if insert_resp.data:
+            reminder_id = insert_resp.data[0].get("id")
+
+        print(f"[AppointmentReminder] Reminder {reminder_type} created untuk {phone_number} ({appointment_date})")
+
+        # Langsung kirim
+        result = await asyncio.to_thread(send_text_best_effort, phone_number, message)
+
+        if result and (result.get("queued") is True or result.get("status") in ["ok", "success"]):
+            status = REMINDER_STATUS_SENT
+            print(f"[AppointmentReminder] Reminder {reminder_type} sukses terkirim ke {phone_number}")
+        else:
+            status = REMINDER_STATUS_FAILED
+            print(f"[AppointmentReminder] Gagal kirim reminder {reminder_type} ke {phone_number}. Response: {result}")
+
+        # Update status di DB
+        if reminder_id:
+            payload = {"status": status}
+            if status == REMINDER_STATUS_SENT:
+                payload["sent_at"] = datetime.now(timezone.utc).isoformat()
+
+            def _sync_update():
+                supabase.table("appointment_reminders").update(payload).eq("id", reminder_id).execute()
+            await asyncio.to_thread(_sync_update)
+
+        return status == REMINDER_STATUS_SENT
+
     except Exception as exc:
-        print(f"[AppointmentReminder] Gagal buat reminder: {exc}")
+        print(f"[AppointmentReminder] Gagal buat/kirim reminder {reminder_type} ke {phone_number}: {exc}")
         return False
 
 
-async def _mark_reminder_status(reminder_id: str, status: str, send_time: bool = False):
-    """Helper async untuk mengupdate status reminder."""
-    payload = {"status": status}
-    if send_time:
-        payload["sent_at"] = datetime.now(timezone.utc).isoformat()
-
-    def _sync_update():
-        supabase.table("appointment_reminders").update(payload).eq("id", reminder_id).execute()
-
-    try:
-        await asyncio.to_thread(_sync_update)
-    except Exception as exc:
-        print(f"[AppointmentReminder] Gagal update status reminder {reminder_id} ke {status}: {exc}")
-
-
-async def _send_pending_reminders():
-    """Send all pending reminders (scheduled untuk H-0 hari ini) secara Async."""
+async def _retry_failed_reminders():
+    """Coba kirim ulang reminder yang statusnya failed (belum lebih dari 2 jam sejak dibuat)."""
     try:
         _require_supabase()
-        
-        def _sync_get_pending():
-            return supabase.table("appointment_reminders").select("id, phone_number, reminder_message").eq("status", REMINDER_STATUS_PENDING).eq("reminder_type", REMINDER_TYPE_H_MINUS_0).execute().data
 
-        reminders = await asyncio.to_thread(_sync_get_pending) or []
-        
+        def _sync_get_failed():
+            return (
+                supabase.table("appointment_reminders")
+                .select("id, phone_number, reminder_message, created_at")
+                .eq("status", REMINDER_STATUS_FAILED)
+                .execute()
+                .data
+            )
+
+        reminders = await asyncio.to_thread(_sync_get_failed) or []
+        now = datetime.now(timezone.utc)
+
         for reminder in reminders:
+            # Hanya retry dalam 2 jam sejak gagal pertama
+            created_at_str = reminder.get("created_at")
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if (now - created_at).total_seconds() > 7200:  # > 2 jam, skip
+                        continue
+                except Exception:
+                    pass
+
             reminder_id = reminder.get("id")
             phone_number = reminder.get("phone_number")
             message = reminder.get("reminder_message")
-            
+
             try:
                 result = await asyncio.to_thread(send_text_best_effort, phone_number, message)
-                
-                # Tambahkan pengecekan jika 'queued' bernilai True atau status-status sukses lainnya
                 if result and (result.get("queued") is True or result.get("status") in ["ok", "success"]):
-                    await _mark_reminder_status(reminder_id, REMINDER_STATUS_SENT, send_time=True)
-                    print(f"[AppointmentReminder] Reminder sukses terkirim/antre ke {phone_number}")
-                else:
-                    await _mark_reminder_status(reminder_id, REMINDER_STATUS_FAILED)
-                    print(f"[AppointmentReminder] Gagal send reminder ke {phone_number}. Response gateway: {result}")
+                    payload = {"status": REMINDER_STATUS_SENT, "sent_at": now.isoformat()}
+                    def _sync_update(rid=reminder_id, p=payload):
+                        supabase.table("appointment_reminders").update(p).eq("id", rid).execute()
+                    await asyncio.to_thread(_sync_update)
+                    print(f"[AppointmentReminder] Retry sukses ke {phone_number}")
             except Exception as exc:
-                await _mark_reminder_status(reminder_id, REMINDER_STATUS_FAILED)
-                print(f"[AppointmentReminder] Error send reminder {reminder_id}: {exc}")
+                print(f"[AppointmentReminder] Retry gagal untuk {reminder_id}: {exc}")
     except Exception as exc:
-        print(f"[AppointmentReminder] Error sending reminders: {exc}")
+        print(f"[AppointmentReminder] Error retry failed reminders: {exc}")
 
 
 async def _process_reminders():
-    """Process reminders untuk H-1 (besok) dan H-0 (hari ini)."""
+    """Process reminder untuk hari ini dengan logika berbasis jam.
+
+    Untuk setiap appointment hari ini yang memiliki jamMulai:
+    - Hitung send_at_3h = appointment_time - 3 jam
+    - Hitung send_at_1h = appointment_time - 1 jam
+    - Jika sekarang >= send_at_Xh dan reminder belum ada → buat & kirim
+    """
     try:
         _require_supabase()
-        
+
         today_date = _get_today_date()
-        tomorrow_date = _get_tomorrow_date()
+        now = datetime.now(LOCAL_TZ)
+
+        print(f"[AppointmentReminder] Processing reminders untuk {today_date}, jam sekarang: {now.strftime('%H:%M')} WIB")
+
+        appointments = await _fetch_appointments(today_date)
+
+        if not appointments:
+            print(f"[AppointmentReminder] Tidak ada appointment untuk {today_date}")
         
-        # 1. Fetch & Process H-1
-        tomorrow_appointments = await _fetch_appointments(tomorrow_date)
-        for apt in tomorrow_appointments:
+        for apt in appointments:
             patient_id = apt.get("pasienId") or apt.get("patient_id")
             if not patient_id:
                 continue
-            
+
+            jam_mulai = apt.get("jadwal", {}).get("jamMulai") if isinstance(apt.get("jadwal"), dict) else apt.get("jamMulai")
+            if not jam_mulai:
+                print(f"[AppointmentReminder] Appointment {patient_id} tidak punya jamMulai, dilewati.")
+                continue
+
+            appointment_dt = _parse_appointment_datetime(today_date, jam_mulai)
+            if not appointment_dt:
+                print(f"[AppointmentReminder] Gagal parse jam '{jam_mulai}' untuk appointment {patient_id}, dilewati.")
+                continue
+
             patient = await _fetch_patient_by_rme_id(patient_id)
             if not patient:
                 continue
-            
+
             phone_number = patient.get("phone_number")
             patient_name = patient.get("name")
-            appointment_time = apt.get("jadwal", {}).get("jamMulai")
 
-            if not await _reminder_already_exists(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1):
-                await _create_reminder(phone_number, tomorrow_date, REMINDER_TYPE_H_MINUS_1, patient_name, appointment_time)
-        
-        # 2. Fetch & Process H-0
-        today_appointments = await _fetch_appointments(today_date)
-        for apt in today_appointments:
-            patient_id = apt.get("pasienId") or apt.get("patient_id")
-            if not patient_id:
-                continue
-            
-            patient = await _fetch_patient_by_rme_id(patient_id)
-            if not patient:
-                continue
-            
-            phone_number = patient.get("phone_number")
-            patient_name = patient.get("name")
-            appointment_time = apt.get("jadwal", {}).get("jamMulai")
+            # Window T-3h: kirim saat now >= (appointment - 3 jam)
+            send_at_3h = appointment_dt - timedelta(hours=3)
+            if now >= send_at_3h and now < appointment_dt:
+                if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_T_3H):
+                    print(f"[AppointmentReminder] Kirim T-3h ke {phone_number} (apt jam {jam_mulai})")
+                    await _create_and_send_reminder(
+                        phone_number, today_date, REMINDER_TYPE_T_3H,
+                        send_at_3h, patient_name, jam_mulai[:5]
+                    )
 
-            if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_H_MINUS_0):
-                await _create_reminder(phone_number, today_date, REMINDER_TYPE_H_MINUS_0, patient_name, appointment_time)
-        
-        # 3. Eksekusi pengiriman pesan pending
-        await _send_pending_reminders()
-        
+            # Window T-1h: kirim saat now >= (appointment - 1 jam)
+            send_at_1h = appointment_dt - timedelta(hours=1)
+            if now >= send_at_1h and now < appointment_dt:
+                if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_T_1H):
+                    print(f"[AppointmentReminder] Kirim T-1h ke {phone_number} (apt jam {jam_mulai})")
+                    await _create_and_send_reminder(
+                        phone_number, today_date, REMINDER_TYPE_T_1H,
+                        send_at_1h, patient_name, jam_mulai[:5]
+                    )
+
+        # Coba kirim ulang yang failed
+        await _retry_failed_reminders()
+
         print(f"[AppointmentReminder] Process completed for {today_date}")
     except Exception as exc:
         print(f"[AppointmentReminder] Process error: {exc}")
@@ -260,7 +347,7 @@ async def _worker_loop():
         except Exception as exc:
             print(f"[AppointmentReminder] Worker loop error: {exc}")
 
-        await asyncio.sleep(1800) 
+        await asyncio.sleep(1800)
 
 
 def start_appointment_reminder_scheduler():
@@ -270,4 +357,4 @@ def start_appointment_reminder_scheduler():
     _scheduler_started = True
 
     asyncio.create_task(_worker_loop())
-    print("[AppointmentReminder] Scheduler task started")   
+    print("[AppointmentReminder] Scheduler task started (T-3h & T-1h mode)")
