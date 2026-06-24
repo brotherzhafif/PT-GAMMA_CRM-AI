@@ -233,7 +233,6 @@ class ChatbotSettingsRecord(BaseModel):
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
                 "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
-                "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "quota_used_tokens": 12500,
                 "quota_limit_tokens": 50000,
                 "quota": "12500/50000",
@@ -253,11 +252,6 @@ class ChatbotSettingsRecord(BaseModel):
     system_prompt: Optional[str] = Field(
         default=None,
         description="System prompt kustom untuk instruksi awal AI chatbot.",
-    )
-    api_key: Optional[str] = Field(
-        default=None,
-        description="Groq API key aktif yang dipakai proses runtime saat ini.",
-        examples=["gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],
     )
     quota_used_tokens: Optional[int] = Field(
         default=None,
@@ -289,7 +283,6 @@ class UpdateChatbotSettingsPayload(BaseModel):
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
                 "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
-                "api_key": "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             }
         }
     )
@@ -306,11 +299,6 @@ class UpdateChatbotSettingsPayload(BaseModel):
     system_prompt: Optional[str] = Field(
         default=None,
         description="System prompt kustom untuk instruksi awal AI chatbot.",
-    )
-    api_key: Optional[str] = Field(
-        default=None,
-        description="Groq API key aktif yang akan dipakai runtime.",
-        examples=["gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],
     )
 
 
