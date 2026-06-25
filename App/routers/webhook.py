@@ -392,7 +392,6 @@ def webhook(
 
             tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
             try:
-                from datetime import datetime
                 tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
                 tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
             except Exception:
