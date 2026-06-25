@@ -176,7 +176,7 @@ def format_tgl_indonesia(tgl_str: str) -> str:
         return tgl_str
 
 # ------------------------------------------------------
-# JADWAL ANTREAN dan PROMO 
+# FETCH DATA (Jadwal, Antrian, Promo, dll) dari API
 # ------------------------------------------------------
 
 #Action untuk mengambil jadwal dokter 
@@ -376,7 +376,7 @@ class ActionFetchQueue(Action):
         return []
 
 # ------------------------------------------------------
-# Alur Booking dan Action Handlernya
+# Action BOOKING: Inisiasi & Handler 
 # ------------------------------------------------------
 
 class ActionStartBooking(Action):
@@ -498,7 +498,7 @@ class ActionHandleUntukSiapa(Action):
             ]
 
 # ------------------------------------------------------
-#  Fungsi Validator Booking
+#  Action BOOKING:  Form Validator
 # ------------------------------------------------------
 
 class ValidateBookingFormBaru(FormValidationAction):
@@ -795,7 +795,7 @@ class ValidateBookingFormBaru(FormValidationAction):
             return {"booking_tgl_kunjungan": parsed}
 
 # ------------------------------------------------------
-#  Action Handler untuk Review & Confirm Booking 
+#  Action BOOKING:  Review, Confirm, Cancel
 # ------------------------------------------------------
 class ActionBookingFormBaruSubmit(Action):
     def name(self) -> Text:
@@ -1131,7 +1131,9 @@ class ActionSlotResetBooking(Action):
             ActiveLoop(None),
             FollowupAction("action_start_booking")
         ]
-    
+# ------------------------------------------------------
+#  Action BOOKING:  Reschedule  
+# ------------------------------------------------------    
 class ActionBookingReschedule(Action):
     """Fetch active bookings, pre-fill patient slots, launch booking_form_baru for new date only."""
 
@@ -1262,7 +1264,7 @@ class ActionBookingReschedule(Action):
 #         ]
     
 # ------------------------------------------------------
-#  Handler Promo
+#  Action Handler General Info
 # ------------------------------------------------------
 class ActionFetchPromo(Action):
     def name(self) -> Text:

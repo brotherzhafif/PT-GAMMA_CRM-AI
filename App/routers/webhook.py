@@ -55,7 +55,9 @@ def _groq_reply_text(result) -> tuple[str, dict | None]:
 # Format: {no_hp: {"last_message": str, "last_timestamp": float, "repeat_count": int, "processing": bool, "last_reply": str, "last_source": str}}
 MESSAGE_STATES = {}
 
-ONBOARDING_STATES = {"waiting_name", "waiting_nik", "waiting_dob", "waiting_gender"}
+ONBOARDING_STATES = {"waiting_name", "waiting_nik", "waiting_dob", "waiting_gender", "waiting_review", "waiting_edit_name", 
+                     "waiting_edit_nik", "waiting_edit_dob", "waiting_edit_gender" }
+                      
 
 WEBHOOK_REQUEST_EXAMPLE = {
     "sender": "6281234567890",
@@ -367,10 +369,10 @@ def webhook(
             print(f"[Onboarding] {no_hp} → DOB '{tanggal_lahir}' → tanya Gender")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
-        # ── Langkah 4: Gender → selesai onboarding 
+        # ── Langkah 4: Gender → review onboarding
         if session_state == "waiting_gender":
             gender_input = input_pesan.strip().lower()
-            LAKI_KEYWORDS    = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
+            LAKI_KEYWORDS      = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
             PEREMPUAN_KEYWORDS = {"perempuan", "wanita", "cewek", "cewe", "p", "pr", "female"}
 
             if gender_input in LAKI_KEYWORDS:
@@ -386,24 +388,288 @@ def webhook(
 
             onboarding_data = get_onboarding_data(no_hp)
             onboarding_data["jenisKelamin"] = jenis_kelamin
+            jenis_kelamin_display = "Laki-laki" if jenis_kelamin == "LAKI_LAKI" else "Perempuan"
 
-            # Semua langkah selesai → simpan ke DB
-            upsert_patient(
-                no_hp,
-                namaLengkap=onboarding_data.get("namaLengkap"),
-                nik=onboarding_data.get("nik"),
-                tanggalLahir=onboarding_data.get("tanggalLahir"),
-                jenisKelamin=onboarding_data.get("jenisKelamin"),
-            )
-            set_session_state(no_hp, None)
+            tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
+            try:
+                from datetime import datetime
+                tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
+                tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
+            except Exception:
+                tanggal_lahir_display = tgl_lahir_raw
 
-            nama = onboarding_data.get("namaLengkap", "")
+            nik_raw = onboarding_data.get("nik", "")
+            nik_masked = f"{nik_raw[:4]}****{nik_raw[-4:]}" if len(nik_raw) >= 8 else nik_raw
+
+            set_session_state(no_hp, "waiting_review", data=onboarding_data)
+
             reply = (
-                f"Terima kasih{', *' + nama + '*' if nama else ''}! "
-                "Data kamu sudah lengkap tersimpan. "
-                "Ada yang bisa kami bantu hari ini? 😊"
+                "Berikut ringkasan data pendaftaran Anda:\n\n"
+                f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                f"🪪 *NIK*       : {nik_masked}\n"
+                f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                "Ketik *OK* untuk konfirmasi, atau:\n"
+                "• *1* — ubah Nama\n"
+                "• *2* — ubah NIK\n"
+                "• *3* — ubah Tanggal Lahir\n"
+                "• *4* — ubah Jenis Kelamin"
             )
-            print(f"[Onboarding] {no_hp} selesai lengkap → data: {onboarding_data}")
+            print(f"[Onboarding] {no_hp} → menuju waiting_review: {onboarding_data}")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+        
+
+        # ── Langkah 5: Review Onboarding ─────────────────────────────────────
+        if session_state == "waiting_review":
+            pilihan = input_pesan.strip().lower()
+            onboarding_data = get_onboarding_data(no_hp)
+ 
+            if pilihan in {"ok", "oke", "ya", "yes", "konfirmasi", "benar", "lanjut"}:
+                # Pasien konfirmasi → simpan ke DB
+                upsert_patient(
+                    no_hp,
+                    namaLengkap=onboarding_data.get("namaLengkap"),
+                    nik=onboarding_data.get("nik"),
+                    tanggalLahir=onboarding_data.get("tanggalLahir"),
+                    jenisKelamin=onboarding_data.get("jenisKelamin"),
+                )
+                set_session_state(no_hp, None)
+                nama = onboarding_data.get("namaLengkap", "")
+                reply = (
+                    f"Terima kasih{', *' + nama + '*' if nama else ''}! ✅\n\n"
+                    "Data kamu sudah tersimpan. Ada yang bisa kami bantu hari ini? 😊"
+                )
+                print(f"[Onboarding] {no_hp} → konfirmasi review → upsert_patient")
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            elif pilihan == "1":
+                set_session_state(no_hp, "waiting_edit_name", data=onboarding_data)
+                reply = (
+                    "Silakan ketik *nama lengkap* baru kamu:"
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            elif pilihan == "2":
+                set_session_state(no_hp, "waiting_edit_nik", data=onboarding_data)
+                reply = (
+                    "Silakan ketik *16 digit NIK* baru kamu:"
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            elif pilihan == "3":
+                set_session_state(no_hp, "waiting_edit_dob", data=onboarding_data)
+                reply = (
+                    "Silakan ketik *tanggal lahir* baru kamu dengan format *DD/MM/YYYY*\n"
+                    "(Contoh: 15/08/1995)."
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            elif pilihan == "4":
+                set_session_state(no_hp, "waiting_edit_gender", data=onboarding_data)
+                reply = (
+                    "Silakan balas *Laki-laki* atau *Perempuan*:"
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            else:
+                # Input tidak dikenali → tampilkan ulang review
+                tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
+                try:
+                    tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
+                    tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
+                except Exception:
+                    tanggal_lahir_display = tgl_lahir_raw
+ 
+                jenis_kelamin = onboarding_data.get("jenisKelamin", "")
+                jenis_kelamin_display = "Laki-laki" if jenis_kelamin == "LAKI_LAKI" else "Perempuan"
+                nik_raw = onboarding_data.get("nik", "")
+                nik_masked = f"{nik_raw[:4]}****{nik_raw[-4:]}" if len(nik_raw) >= 8 else nik_raw
+ 
+                reply = (
+                    "⚠️ Pilihan tidak dikenali. Silakan ketik *Ya* untuk konfirmasi atau pilih nomor yang ingin diubah:\n\n"
+                    f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                    f"🪪 *NIK*       : {nik_masked}\n"
+                    f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                    f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                    "Ketik *OK* untuk konfirmasi, atau:\n"
+                    "• *1* — ubah Nama\n"
+                    "• *2* — ubah NIK\n"
+                    "• *3* — ubah Tanggal Lahir\n"
+                    "• *4* — ubah Jenis Kelamin"
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+        # ── Langkah 5a: Edit Nama ─────────────────────────────────────────────
+        if session_state == "waiting_edit_name":
+            nama_baru = input_pesan.strip()
+            if len(nama_baru) < 2:
+                reply = "⚠️ Nama terlalu pendek. Silakan masukkan nama lengkap kamu."
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["namaLengkap"] = nama_baru
+ 
+            tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
+            try:
+                tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
+                tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
+            except Exception:
+                tanggal_lahir_display = tgl_lahir_raw
+ 
+            jenis_kelamin = onboarding_data.get("jenisKelamin", "")
+            jenis_kelamin_display = "Laki-laki" if jenis_kelamin == "LAKI_LAKI" else "Perempuan"
+            nik_raw = onboarding_data.get("nik", "")
+            nik_masked = f"{nik_raw[:4]}****{nik_raw[-4:]}" if len(nik_raw) >= 8 else nik_raw
+ 
+            set_session_state(no_hp, "waiting_review", data=onboarding_data)
+            reply = (
+                f"✅ Nama diperbarui ke *{nama_baru}*.\n\n"
+                "Berikut ringkasan data terbaru:\n\n"
+                f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                f"🪪 *NIK*       : {nik_masked}\n"
+                f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                "Ketik *OK* untuk konfirmasi, atau:\n"
+                "• *1* — ubah Nama\n"
+                "• *2* — ubah NIK\n"
+                "• *3* — ubah Tanggal Lahir\n"
+                "• *4* — ubah Jenis Kelamin"
+            )
+            print(f"[Onboarding] {no_hp} → edit nama → '{nama_baru}' → kembali ke review")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+        # ── Langkah 5b: Edit NIK ──────────────────────────────────────────────
+        if session_state == "waiting_edit_nik":
+            nik_digits = re.sub(r"\D", "", input_pesan)
+            if len(nik_digits) != 16:
+                reply = (
+                    "⚠️ NIK harus terdiri dari *16 digit angka*.\n"
+                    "Silakan cek kembali dan kirim ulang."
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["nik"] = nik_digits
+ 
+            tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
+            try:
+                tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
+                tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
+            except Exception:
+                tanggal_lahir_display = tgl_lahir_raw
+ 
+            jenis_kelamin = onboarding_data.get("jenisKelamin", "")
+            jenis_kelamin_display = "Laki-laki" if jenis_kelamin == "LAKI_LAKI" else "Perempuan"
+            nik_masked = f"{nik_digits[:4]}****{nik_digits[-4:]}"
+ 
+            set_session_state(no_hp, "waiting_review", data=onboarding_data)
+            reply = (
+                "✅ NIK diperbarui.\n\n"
+                "Berikut ringkasan data terbaru:\n\n"
+                f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                f"🪪 *NIK*       : {nik_masked}\n"
+                f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                "Ketik *OK* untuk konfirmasi, atau:\n"
+                "• *1* — ubah Nama\n"
+                "• *2* — ubah NIK\n"
+                "• *3* — ubah Tanggal Lahir\n"
+                "• *4* — ubah Jenis Kelamin"
+            )
+            print(f"[Onboarding] {no_hp} → edit NIK → kembali ke review")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+        # ── Langkah 5c: Edit Tanggal Lahir ───────────────────────────────────
+        if session_state == "waiting_edit_dob":
+            match = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", input_pesan)
+            if not match:
+                reply = (
+                    "⚠️ Format tanggal tidak dikenali. Gunakan format *DD/MM/YYYY*\n"
+                    "(Contoh: 15/08/1995)."
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            day, month, year = match.groups()
+            try:
+                dob_date = datetime(int(year), int(month), int(day))
+                tanggal_lahir = dob_date.strftime("%Y-%m-%d")
+                tanggal_lahir_display = dob_date.strftime("%d-%m-%Y")
+            except ValueError:
+                reply = (
+                    "⚠️ Tanggal tidak valid. Gunakan format *DD/MM/YYYY*\n"
+                    "(Contoh: 15/08/1995)."
+                )
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["tanggalLahir"] = tanggal_lahir
+ 
+            jenis_kelamin = onboarding_data.get("jenisKelamin", "")
+            jenis_kelamin_display = "Laki-laki" if jenis_kelamin == "LAKI_LAKI" else "Perempuan"
+            nik_raw = onboarding_data.get("nik", "")
+            nik_masked = f"{nik_raw[:4]}****{nik_raw[-4:]}" if len(nik_raw) >= 8 else nik_raw
+ 
+            set_session_state(no_hp, "waiting_review", data=onboarding_data)
+            reply = (
+                f"✅ Tanggal lahir diperbarui ke *{tanggal_lahir_display}*.\n\n"
+                "Berikut ringkasan data terbaru:\n\n"
+                f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                f"🪪 *NIK*       : {nik_masked}\n"
+                f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                "Ketik *OK* untuk konfirmasi, atau:\n"
+                "• *1* — ubah Nama\n"
+                "• *2* — ubah NIK\n"
+                "• *3* — ubah Tanggal Lahir\n"
+                "• *4* — ubah Jenis Kelamin"
+            )
+            print(f"[Onboarding] {no_hp} → edit DOB → '{tanggal_lahir}' → kembali ke review")
+            return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+        # ── Langkah 5d: Edit Jenis Kelamin ───────────────────────────────────
+        if session_state == "waiting_edit_gender":
+            gender_input = input_pesan.strip().lower()
+            LAKI_KEYWORDS      = {"laki-laki", "laki laki", "lakilaki", "pria", "cowok", "cowo", "l", "lk", "male"}
+            PEREMPUAN_KEYWORDS = {"perempuan", "wanita", "cewek", "cewe", "p", "pr", "female"}
+ 
+            if gender_input in LAKI_KEYWORDS:
+                jenis_kelamin = "LAKI_LAKI"
+                jenis_kelamin_display = "Laki-laki"
+            elif gender_input in PEREMPUAN_KEYWORDS:
+                jenis_kelamin = "PEREMPUAN"
+                jenis_kelamin_display = "Perempuan"
+            else:
+                reply = "⚠️ Mohon balas dengan *Laki-laki* atau *Perempuan*."
+                return _send_reply(no_hp, input_pesan, reply, source="system")
+ 
+            onboarding_data = get_onboarding_data(no_hp)
+            onboarding_data["jenisKelamin"] = jenis_kelamin
+ 
+            tgl_lahir_raw = onboarding_data.get("tanggalLahir", "")
+            try:
+                tgl_obj = datetime.strptime(tgl_lahir_raw, "%Y-%m-%d")
+                tanggal_lahir_display = tgl_obj.strftime("%d-%m-%Y")
+            except Exception:
+                tanggal_lahir_display = tgl_lahir_raw
+ 
+            nik_raw = onboarding_data.get("nik", "")
+            nik_masked = f"{nik_raw[:4]}****{nik_raw[-4:]}" if len(nik_raw) >= 8 else nik_raw
+ 
+            set_session_state(no_hp, "waiting_review", data=onboarding_data)
+            reply = (
+                f"✅ Jenis kelamin diperbarui ke *{jenis_kelamin_display}*.\n\n"
+                "Berikut ringkasan data terbaru:\n\n"
+                f"👤 *Nama*      : {onboarding_data.get('namaLengkap', '')}\n"
+                f"🪪 *NIK*       : {nik_masked}\n"
+                f"🎂 *Tgl Lahir* : {tanggal_lahir_display}\n"
+                f"⚧ *Jenis Kel* : {jenis_kelamin_display}\n\n"
+                "Ketik *OK* untuk konfirmasi, atau:\n"
+                "• *1* — ubah Nama\n"
+                "• *2* — ubah NIK\n"
+                "• *3* — ubah Tanggal Lahir\n"
+                "• *4* — ubah Jenis Kelamin"
+            )
+            print(f"[Onboarding] {no_hp} → edit gender → '{jenis_kelamin}' → kembali ke review")
             return _send_reply(no_hp, input_pesan, reply, source="system")
 
         # ── Step 1.5: Feedback State ──────────────────────────────────────────
