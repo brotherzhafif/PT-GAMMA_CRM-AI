@@ -2,10 +2,12 @@
 # SmartClinic CRM AI — routers/webhook.py
 # Endpoint: GET / dan POST /webhook
 #
-# Last Change   :   29 May 2026
+# Last Change   :   29 Jun 2026
 # Developer     :   Raja Zhafif Raditya Harahap
 # ======================================================
 
+import json
+import os
 import re
 import requests
 import time
@@ -37,6 +39,69 @@ from App.wa_gateway import send_text_best_effort
 from LLM.groq_service import groq_service as groq
 
 router = APIRouter()
+
+
+# ======================================================
+#   HELPER — Groq feedback analyzer (Auto-Sentiment)
+# ======================================================
+
+def analyze_feedback_with_groq(user_message: str) -> dict | None:
+    """Kirim pesan user ke Groq JSON mode untuk ekstrak rating (1-5) dan ulasan bersih.
+    Return {"rating": int, "ulasan": str} atau None jika gagal."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        print("[Feedback-Groq] GROQ_API_KEY tidak ditemukan")
+        return None
+
+    system_prompt = (
+        "You are a feedback classifier. Analyze patient feedback and determine:\n"
+        "1. Rating (integer 1-5). 1=Very dissatisfied (e.g. slow response, wrong answer), "
+        "2=Dissatisfied/needs improvement, 3=Neutral/ordinary, 4=Satisfied/good, 5=Very satisfied/excellent.\n"
+        "2. Review/Ulasan (clean string containing the feedback or complaining text, without rating numbers).\n\n"
+        "Output ONLY a valid JSON object with keys 'rating' and 'ulasan'."
+    )
+
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(content)
+        rating = int(parsed.get("rating", 0))
+        ulasan = str(parsed.get("ulasan", "")).strip()
+        if 1 <= rating <= 5:
+            print(f"[Feedback-Groq] Parsed → rating={rating}, ulasan='{ulasan}'")
+            return {"rating": rating, "ulasan": ulasan}
+        print(f"[Feedback-Groq] Rating di luar range: {rating}")
+        return None
+    except Exception as e:
+        print(f"[Feedback-Groq] Error: {e}")
+        return None
+
+
+def save_feedback_db(no_hp: str, rating: int, ulasan: str):
+    """Simpan feedback ke API /api/feedback."""
+    try:
+        requests.post(
+            "https://ai-crm.brotherzhafif.my.id/api/feedback",
+            json={"no_hp": no_hp, "rating": rating, "ulasan": ulasan},
+            timeout=5,
+        )
+        print(f"[Feedback] Saved → {no_hp} rating={rating}")
+    except Exception as e:
+        print(f"[Feedback] Save error: {e}")
 
 
 def _groq_reply_text(result) -> tuple[str, dict | None]:
@@ -755,6 +820,21 @@ def webhook(
             reset_fallback(no_hp)
             print(f"[DEBUG] → Direspons oleh: RASA ✅ (Intent: {rasa_intent} | confidence={rasa_confidence:.4f})")
             
+            # ── Auto-Sentiment: intercept intent_berikan_rating ──
+            if rasa_result["intent"] == "intent_berikan_rating":
+                feedback_result = analyze_feedback_with_groq(input_pesan)
+                if feedback_result:
+                    save_feedback_db(no_hp, feedback_result["rating"], feedback_result["ulasan"])
+                    set_session_state(no_hp, None)
+                    reply = "Terima kasih atas penilaian dan ulasan yang Anda berikan! 🙏😊"
+                    source = "system"
+                else:
+                    # Fallback: Groq gagal → minta rating eksplisit
+                    set_session_state(no_hp, "waiting_feedback")
+                    reply = "Terima kasih atas masukannya! Boleh bantu kami dengan memberikan rating berupa angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas)?"
+                    source = "system"
+                return _send_reply(no_hp, input_pesan, reply, source=source)
+
             if rasa_result["intent"] == "goodbye":
                 set_session_state(no_hp, "waiting_feedback")
                 reply += "\n\nDalam skala 1-5, bagaimana pelayanan kami? Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas).\nApakah ada ulasan atau komentar tambahan?"

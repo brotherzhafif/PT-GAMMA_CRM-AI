@@ -437,6 +437,27 @@ nlu:
       - oke sih bantu banget
       - bagus pelayanannya
       - mantap pelayanannya mks
+      - aduh kok responnya lama banget sih
+      - bot nya lemot balasnya lama
+      - jawabannya gak nyambung sama sekali
+      - penjelasannya kurang jelas
+      - sangat membantu terima kasih banyak
+      - pelayanan sangat cepat dan memuaskan
+      - ramah sekali responnya
+      - responnya cepet banget sih makasih
+      - jelek banget pelayanannya
+      - ga guna bot nya
+      - bales nya lama bgt
+      - mantap cepat dan tepat
+      - helpful banget sih ini
+      - kurang memuaskan ya
+      - oke lah lumayan membantu
+      - top banget pelayanannya
+      - sangat mengecewakan
+      - recommended deh kliniknya
+      - balasannya ga sesuai pertanyaan saya
+      - puas sih cukup informatif
+
 
   - intent: booking_pasien_baru
     examples: |
