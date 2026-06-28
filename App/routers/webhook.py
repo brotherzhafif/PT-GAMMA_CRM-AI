@@ -739,31 +739,32 @@ def webhook(
         # ── Step 1.5: Feedback State ──────────────────────────────────────────
         if session_state == "waiting_feedback":
             match = re.search(r'(?<!\d)([1-5])(?!\d)', input_pesan)
-            if not match:
-                reply = "⚠️ Mohon berikan penilaian dengan angka *1 sampai 5*.\nSilakan balas kembali dengan angka penilaian Anda."
-                print(f"[Feedback] {no_hp} → Rating invalid '{input_pesan}'")
+            if match:
+                rating = int(match.group(1))
+                start, end = match.span()
+                before = input_pesan[:start]
+                after = input_pesan[end:]
+                ulasan = f"{before.strip()} {after.strip()}".strip()
+                ulasan = re.sub(r'^[\s,.\-:]+|[\s,.\-:]+$', '', ulasan).strip()
+                
+                save_feedback_db(no_hp, rating, ulasan)
+                set_session_state(no_hp, None)
+                reply = "Terima kasih atas penilaian dan ulasan yang Anda berikan! 🙏😊"
                 return _send_reply(no_hp, input_pesan, reply, source="system")
-            
-            rating = int(match.group(1))
-            start, end = match.span()
-            before = input_pesan[:start]
-            after = input_pesan[end:]
-            ulasan = f"{before.strip()} {after.strip()}".strip()
-            ulasan = re.sub(r'^[\s,.\-:]+|[\s,.\-:]+$', '', ulasan).strip()
-            
-            try:
-                requests.post(
-                    "https://ai-crm.brotherzhafif.my.id/api/feedback",
-                    json={"no_hp": no_hp, "rating": rating, "ulasan": ulasan},
-                    timeout=5
-                )
-                print(f"[Feedback] {no_hp} → API berhasil (Rating: {rating}, Ulasan: {ulasan})")
-            except Exception as e:
-                print(f"[Feedback] {no_hp} → API Error: {e}")
-            
-            set_session_state(no_hp, None)
-            reply = "Terima kasih atas penilaian dan ulasan yang Anda berikan! 🙏😊"
-            return _send_reply(no_hp, input_pesan, reply, source="system")
+            else:
+                # Coba parsing pakai Groq auto-sentiment jika tidak ada angka eksplisit
+                feedback_result = analyze_feedback_with_groq(input_pesan)
+                if feedback_result:
+                    save_feedback_db(no_hp, feedback_result["rating"], feedback_result["ulasan"])
+                    set_session_state(no_hp, None)
+                    reply = "Terima kasih atas penilaian dan ulasan yang Anda berikan! 🙏😊"
+                    source = "system"
+                else:
+                    reply = "⚠️ Mohon berikan penilaian dengan angka *1 sampai 5*.\nSilakan balas kembali dengan angka penilaian Anda."
+                    source = "system"
+                    print(f"[Feedback] {no_hp} → Rating invalid '{input_pesan}'")
+                return _send_reply(no_hp, input_pesan, reply, source=source)
+
 
         # ── Step 2: Cek keyword handoff ───────────────────────────────────────
         if is_handoff_keyword(input_pesan):
