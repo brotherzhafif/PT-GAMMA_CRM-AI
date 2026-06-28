@@ -673,14 +673,18 @@ def webhook(
 
         # ── Step 1.5: Feedback State ──────────────────────────────────────────
         if session_state == "waiting_feedback":
-            match = re.search(r'(?<!\d)([1-5])(?!\d)[\s,.\-:]*(.*)', input_pesan, re.DOTALL)
+            match = re.search(r'(?<!\d)([1-5])(?!\d)', input_pesan)
             if not match:
                 reply = "⚠️ Mohon berikan penilaian dengan angka *1 sampai 5*.\nSilakan balas kembali dengan angka penilaian Anda."
                 print(f"[Feedback] {no_hp} → Rating invalid '{input_pesan}'")
                 return _send_reply(no_hp, input_pesan, reply, source="system")
             
             rating = int(match.group(1))
-            ulasan = match.group(2).strip()
+            start, end = match.span()
+            before = input_pesan[:start]
+            after = input_pesan[end:]
+            ulasan = f"{before.strip()} {after.strip()}".strip()
+            ulasan = re.sub(r'^[\s,.\-:]+|[\s,.\-:]+$', '', ulasan).strip()
             
             try:
                 requests.post(
