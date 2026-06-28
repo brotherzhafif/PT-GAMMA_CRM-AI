@@ -76,6 +76,58 @@ async def _get_latest_messages() -> list[dict]:
         return []
 
 
+async def _has_new_activity_since_last_feedback(sender: str) -> bool:
+    """Cek apakah ada interaksi percakapan baru (outbound dari bot selain feedback)
+    setelah feedback terakhir selesai."""
+    if supabase is None:
+        return True
+
+    try:
+        def _sync_get_history():
+            return (
+                supabase.table("messages")
+                .select("message_text, direction, created_at")
+                .eq("sender_number", sender)
+                .order("created_at", desc=True)
+                .limit(15)
+                .execute()
+            )
+
+        resp = await asyncio.to_thread(_sync_get_history)
+        rows = resp.data or []
+        # Balik urutan agar kronologis (tertua ke terbaru)
+        rows.reverse()
+
+        # Cari index feedback terakhir (baik prompt maupun thank you)
+        last_feedback_idx = -1
+        for i, row in enumerate(rows):
+            text = row.get("message_text", "")
+            direction = row.get("direction", "")
+            if direction == "outbound" and (
+                FEEDBACK_PROMPT_MARKER in text
+                or "Terima kasih atas penilaian dan ulasan" in text
+            ):
+                last_feedback_idx = i
+
+        # Jika tidak pernah ada feedback dalam 15 pesan terakhir, anggap ada aktivitas baru
+        if last_feedback_idx == -1:
+            return True
+
+        # Cek apakah ada outbound message baru dari bot SETELAH feedback terakhir
+        for row in rows[last_feedback_idx + 1:]:
+            direction = row.get("direction", "")
+            text = row.get("message_text", "")
+            if direction == "outbound":
+                # Abaikan jika itu pesan error rating invalid
+                if "Mohon berikan penilaian dengan angka" not in text:
+                    return True
+
+        return False
+    except Exception as e:
+        print(f"[FeedbackScheduler] Gagal cek activity history untuk {sender}: {e}")
+        return True
+
+
 async def _process_idle_users():
     """Cek user idle > 30 menit, kirim auto-goodbye + prompt rating."""
     messages = await _get_latest_messages()
@@ -118,6 +170,11 @@ async def _process_idle_users():
         last_text = msg.get("message_text", "")
         if FEEDBACK_PROMPT_MARKER in last_text:
             continue
+
+        # Cek jika tidak ada aktivitas percakapan baru sejak feedback terakhir selesai
+        if not await _has_new_activity_since_last_feedback(sender):
+            continue
+
 
         # Kirim auto-goodbye + prompt rating
         goodbye_msg = (
