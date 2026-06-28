@@ -5,7 +5,7 @@ rules:
   - rule: Say greeting
     steps:
       - intent: greet
-      - action: utter_greet
+      - action: action_greet
 
   - rule: Say goodbye
     steps:
@@ -25,17 +25,17 @@ rules:
   - rule: Answer services
     steps:
       - intent: ask_services
-      - action: utter_services
+      - action: action_services
 
   - rule: Answer location
     steps:
       - intent: ask_location
-      - action: utter_location
+      - action: action_location
 
   - rule: Answer cost
     steps:
       - intent: ask_cost
-      - action: utter_cost
+      - action: action_cost
 
   - rule: Request human agent
     steps:

@@ -5,7 +5,7 @@ stories:
   - story: greet and ask schedule
     steps:
       - intent: greet
-      - action: utter_greet
+      - action: action_greet
       - intent: ask_schedule
       - action: action_fetch_schedule
       - intent: goodbye
@@ -14,7 +14,7 @@ stories:
   - story: greet and check queue
     steps:
       - intent: greet
-      - action: utter_greet
+      - action: action_greet
       - intent: ask_queue
       - action: action_fetch_queue
       - intent: goodbye
@@ -23,11 +23,11 @@ stories:
   - story: ask services then location
     steps:
       - intent: greet
-      - action: utter_greet
+      - action: action_greet
       - intent: ask_services
-      - action: utter_services
+      - action: action_services
       - intent: ask_location
-      - action: utter_location
+      - action: action_location
 
   - story: emergency flow
     steps:

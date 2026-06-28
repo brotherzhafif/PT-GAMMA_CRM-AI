@@ -7,7 +7,7 @@ Handles:
   - Booking Flow (Pasien Baru & Lama Fixed)
 """
 
-# Last Change   :   22 Juni 2026
+# Last Change   :   28 Juni 2026
 # ======================================================
 
 import os
@@ -15,6 +15,7 @@ import re
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import Any, Text, Dict, List, Optional
+import json
 
 from rasa_sdk import Action, Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
@@ -106,6 +107,99 @@ def get_patient_by_phone(phone_number: str) -> dict:
             return inner[0] if len(inner) > 0 else {}
             
     return {}
+
+# Cache chatbot settings supaya tidak perlu fetch ke API setiap ada pesan WA.
+# (Solusi karena Knowledge Based satu teks full)
+_settings_cache: dict = {"data": None, "fetched_at": None}
+SETTINGS_CACHE_TTL = 300  # 5 menit
+
+FALLBACK_KB = {
+    "lokasi":            "Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284",
+    "maps":              "https://maps.google.com/?q=-7.7218,110.3568",
+    "biaya_konsultasi":  "Rp 50.000",
+    "biaya_pendaftaran": "Rp 25.000",
+    "layanan_poli":      "Poli Umum, Poli Penyakit Dalam (Sp.PD)",
+    "layanan_penunjang": "Laboratorium, Radiologi, EKG",
+    "layanan_khusus":    "Vaksinasi, Prolanis, Home Visit, Surat Sehat, Rapid Test"
+}
+
+# (Solusi karena Knowledge Based satu teks full) kalo BE udh KB udah diubah jadi field-field khusus perlu disesuain
+def get_knowledge_base(system_prompt: str) -> dict:
+    """Parse JSON block dari system_prompt via marker KNOWLEDGE_BASE_RASA.
+    Fallback per field — bukan all-or-nothing.
+    """
+    parsed = {}
+    try:
+        match = re.search(
+            r'=== KNOWLEDGE_BASE_RASA_START ===.*?```json\s*(\{.*?\})\s*```.*?=== KNOWLEDGE_BASE_RASA_END ===',
+            system_prompt,
+            re.DOTALL
+        )
+        if match:
+            parsed = json.loads(match.group(1))
+    except Exception:
+        pass
+
+    return {
+        "lokasi":            parsed.get("lokasi")            or FALLBACK_KB["lokasi"],
+        "maps":              parsed.get("maps")              or FALLBACK_KB["maps"],
+        "biaya_konsultasi":  parsed.get("biaya_konsultasi")  or FALLBACK_KB["biaya_konsultasi"],
+        "biaya_pendaftaran": parsed.get("biaya_pendaftaran") or FALLBACK_KB["biaya_pendaftaran"],
+        "layanan_poli":      parsed.get("layanan_poli")      or FALLBACK_KB["layanan_poli"],
+        "layanan_penunjang": parsed.get("layanan_penunjang") or FALLBACK_KB["layanan_penunjang"],
+        "layanan_khusus":    parsed.get("layanan_khusus")    or FALLBACK_KB["layanan_khusus"],
+    }
+
+# (Solusi karena Knowledge Based satu teks full) 
+def get_chatbot_settings() -> dict:
+    """Fetch chatbot settings dari BE dengan cache in-memory TTL 5 menit."""
+    now = datetime.now()
+    cache = _settings_cache
+    if (
+        cache["data"] is None or
+        cache["fetched_at"] is None or
+        (now - cache["fetched_at"]).total_seconds() > SETTINGS_CACHE_TTL
+    ):
+        result = api_get("/api/chatbot-settings")
+        if result:
+            system_prompt = result.get("system_prompt", "")
+            result["_kb"] = get_knowledge_base(system_prompt)
+            cache["data"] = result
+            cache["fetched_at"] = now
+            print("[Settings] Cache refreshed + knowledge base parsed")
+        else:
+            print("[Settings] Gagal fetch — pakai fallback")
+    return cache["data"] or {}
+
+# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field lokasi perlu disesuain
+def format_location(kb: dict) -> str:
+    return (
+        "📍 *Lokasi Klinik Smart Clinic:*\n\n"
+        f"🏠 {kb['lokasi']}\n"
+        f"🗺️ *Google Maps:* {kb['maps']}\n\n"
+        "Ada yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
+    )
+
+# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field biaya perlu disesuain
+def format_cost(kb: dict) -> str:
+    return (
+        "💰 *Informasi Biaya Layanan*\n\n"
+        f"🩺 Konsultasi Umum: {kb['biaya_konsultasi']}\n"
+        f"📝 Pendaftaran: {kb['biaya_pendaftaran']}\n\n"
+        "Klinik menerima pembayaran *tunai*, *QRIS*, dan *BPJS*.\n\n"
+        "Untuk rincian biaya tindakan tertentu, silakan ketik *admin* "
+        "untuk terhubung dengan staf kami."
+    )
+
+# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field layanan perlu disesuain
+def format_services(kb: dict) -> str:
+    return (
+        "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n"
+        f"*Poliklinik:*\n🩺 {kb['layanan_poli']}\n\n"
+        f"*Layanan Penunjang:*\n🔬 {kb['layanan_penunjang']}\n\n"
+        f"*Layanan Khusus:*\n💉 {kb['layanan_khusus']}\n\n"
+        "Ada layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
+    )
 
 # ------------------------------------------------------
 # FORMAT dan VALIDASI TANGGAL 
@@ -1278,4 +1372,57 @@ class ActionFetchPromo(Action):
             return []
 
         dispatcher.utter_message(text=_format_promo_message(promo_list))
+        return []
+
+# (Solusi karena Knowledge Based satu teks full)
+class ActionGreet(Action):
+    def name(self) -> Text:
+        return "action_greet"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        ai_name = settings.get("ai_name") or "Hana"
+        dispatcher.utter_message(text=(
+            f"Halo! 👋 Saya {ai_name}, asisten virtual Klinik SmartClinic.\n\n"
+            "Ada yang bisa saya bantu hari ini? Anda bisa tanya:\n"
+            "📅 *Jadwal Dokter*\n"
+            "🔢 *Cek Antrian*\n"
+            "💰 *Biaya Layanan*\n"
+            "🏥 *Booking Poliklinik*\n"
+            "✨ *Info Promo*\n\n"
+            "Atau informasi lain terkait klinik dan gejala penyakit Anda. 😊"
+        ))
+        return []
+
+
+class ActionServices(Action):
+    def name(self) -> Text:
+        return "action_services"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_services(kb))
+        return []
+
+
+class ActionLocation(Action):
+    def name(self) -> Text:
+        return "action_location"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_location(kb))
+        return []
+
+
+class ActionCost(Action):
+    def name(self) -> Text:
+        return "action_cost"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_cost(kb))
         return []

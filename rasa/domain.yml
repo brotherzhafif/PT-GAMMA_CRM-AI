@@ -216,24 +216,27 @@ actions:
   - action_booking_reschedule
   - validate_booking_form_baru
   - action_slot_reset_booking
+  - action_greet
+  - action_services
+  - action_location
+  - action_cost
 
 responses:
   utter_greet:
-    - text: "Halo! 👋 Saya Hana, asisten virtual Klinik SmartClinic.\n\nAda yang bisa saya bantu hari ini? Anda bisa tanya:\n📅 *Jadwal Dokter*\n🔢 *Cek Antrian*\n💰 *Biaya Layanan*\n🏥 *Booking Poliklinik*\n✨ *Info Promo*\n\nAtau informasi lain terkait klinik dan gejala penyakit Anda. 😊"
+    - text: ""
 
   utter_goodbye:
     - text: "Terima kasih telah menghubungi Klinik SmartClinic. Semoga sehat selalu! 🙏\n\nJangan ragu hubungi kami lagi jika ada pertanyaan ya."
     - text: "Sampai jumpa! 😊 Semoga hari Anda menyenangkan. Hana selalu siap membantu kapan saja Bapak/Ibu butuh."
 
   utter_services:
-    - text: "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n*Poliklinik:*\n🩺 Poli Umum\n🫀 Poli Penyakit Dalam (Sp.PD)\n🚨 UGD\n📋 Medical Check-Up (MCU)\n\n*Layanan Penunjang:*\n🔬 Laboratorium Klinik\n🩻 Radiologi (Rontgen/X-Ray)\n❤️ EKG (Rekam Jantung)\n\n*Layanan Khusus:*\n💉 Vaksinasi\n📊 Program Prolanis (BPJS)\n🏠 Home Visit\n📄 Surat Keterangan Sehat\n🧪 Rapid Test & Swab Antigen\n\nAda layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
+    - text: ""
 
   utter_location:
-    - text: "📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284\n🏪 *Patokan:* Sebelah utara UPN Veteran Yogyakarta, berhadapan dengan Indomaret\n🗺️ *Google Maps:* https://maps.google.com/?q=-7.7218,110.3568\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
+    - text: ""
 
   utter_cost:
-    - text: "💰 *Informasi Biaya Layanan*\n\n🩺 Konsultasi Umum: mulai dari Rp 50.000\n📝 Pendaftaran: Rp 25.000\n\nKlinik menerima pembayaran *tunai*, *QRIS*, dan *BPJS*.\n\nUntuk rincian biaya tindakan tertentu, silakan ketik *admin* untuk terhubung dengan staf kami."
-
+    - text: ""
   utter_request_human_agent:
     - text: "Baik, Bapak/Ibu. Saya akan menghubungkan Anda dengan staf klinik kami yang akan segera membantu. Mohon tunggu sebentar. 🙏"
 

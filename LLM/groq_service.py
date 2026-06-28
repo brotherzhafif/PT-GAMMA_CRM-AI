@@ -150,6 +150,15 @@ TONE_MAP = {
     "caring": "Penuh empati, peduli, hangat, dan menenangkan",
 }
 
+# (Solusi karena Knowledge Based satu teks full) Fungsi untuk menghapus bagian JSON knowledge base dari system prompt.
+def strip_knowledge_base(system_prompt: str) -> str:
+    """Hapus blok JSON knowledge base sebelum dikirim ke Groq."""
+    return re.sub(
+        r'=== KNOWLEDGE_BASE_RASA_START ===.*?=== KNOWLEDGE_BASE_RASA_END ===',
+        '',
+        system_prompt,
+        flags=re.DOTALL
+    ).strip()
 
 # 
 #  SERVICE GROQ
@@ -171,6 +180,7 @@ class GroqService:
 
     #  Function untuk memanggil API Groq dengan role dan chat history 
     def get_response(self, user_message, role_type="default", chat_history=None):
+        # Strip knowledge base block sebelum kirim ke Groq
         system_prompt = ROLES.get(role_type, ROLES["default"])
 
         # ponytail: dynamic settings override from cache
@@ -198,7 +208,7 @@ class GroqService:
                 system_prompt = re.sub(r"- Nada:.*", f"- Nada: {tone_instruction}.", system_prompt)
         except Exception as e:
             print(f"[Groq] Settings injection skipped: {e}")
-
+        system_prompt = strip_knowledge_base(system_prompt)
         messages = [{"role": "system", "content": system_prompt}]
 
         for chat in (chat_history or []):
