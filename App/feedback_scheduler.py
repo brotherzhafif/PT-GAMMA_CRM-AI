@@ -23,7 +23,7 @@ from App.wa_gateway import send_text_best_effort
 _scheduler_started = False
 
 # Substring prompt rating — digunakan untuk cek apakah pesan terakhir sudah prompt feedback
-FEEDBACK_PROMPT_MARKER = "Dalam skala 1-5, bagaimana pelayanan kami?"
+FEEDBACK_PROMPT_MARKER = "Apakah ada ulasan atau komentar atas pelayanan"
 
 # Batas waktu idle (detik)
 IDLE_THRESHOLD_SECONDS = 30 * 60   # 30 menit
@@ -180,9 +180,7 @@ async def _process_idle_users():
         goodbye_msg = (
             "Halo! Sepertinya percakapan kita sudah selesai. "
             "Terima kasih sudah menghubungi SmartClinic! 😊\n\n"
-            "Dalam skala 1-5, bagaimana pelayanan kami? "
-            "Balas dengan angka 1 (Sangat Tidak Puas) sampai 5 (Sangat Puas).\n"
-            "Apakah ada ulasan atau komentar tambahan?"
+            "Apakah ada ulasan atau komentar atas pelayanan kami?"
         )
 
         target = normalize_whatsapp_target(sender)
