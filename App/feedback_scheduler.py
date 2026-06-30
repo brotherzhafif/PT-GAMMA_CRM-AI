@@ -109,20 +109,9 @@ async def _has_new_activity_since_last_feedback(sender: str) -> bool:
             ):
                 last_feedback_idx = i
 
-        # Jika tidak pernah ada feedback dalam 15 pesan terakhir, anggap ada aktivitas baru
-        if last_feedback_idx == -1:
-            return True
-
-        # Cek apakah ada outbound message baru dari bot SETELAH feedback terakhir
-        for row in rows[last_feedback_idx + 1:]:
-            direction = row.get("direction", "")
-            text = row.get("message_text", "")
-            if direction == "outbound":
-                # Abaikan jika itu pesan error rating invalid
-                if "Mohon berikan penilaian dengan angka" not in text:
-                    return True
-
-        return False
+        # ponytail: check if user sent any message in the active session
+        active_rows = rows[last_feedback_idx + 1:] if last_feedback_idx != -1 else rows
+        return any(row.get("direction") == "inbound" for row in active_rows)
     except Exception as e:
         print(f"[FeedbackScheduler] Gagal cek activity history untuk {sender}: {e}")
         return True
