@@ -8,7 +8,7 @@
 # ======================================================
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from App.config import supabase
 from App.helpers import (
@@ -77,31 +77,48 @@ async def _get_latest_messages() -> list[dict]:
 
 
 async def _has_new_activity_since_last_feedback(sender: str) -> bool:
-    """Cek apakah ada interaksi percakapan baru (outbound dari bot selain feedback)
-    setelah feedback terakhir selesai."""
+    """Cek apakah percakapan baru memenuhi syarat kelayakan feedback (UX filters)."""
     if supabase is None:
         return True
 
     try:
+        # ponytail: 24h limit on feedback prompt to avoid spamming the user
+        def _sync_check_24h_cooldown():
+            one_day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+            return (
+                supabase.table("messages")
+                .select("id")
+                .eq("sender_number", sender)
+                .eq("direction", "outbound")
+                .like("message_text", f"%{FEEDBACK_PROMPT_MARKER}%")
+                .gte("created_at", one_day_ago)
+                .limit(1)
+                .execute()
+            )
+
+        cooldown_resp = await asyncio.to_thread(_sync_check_24h_cooldown)
+        if cooldown_resp.data:
+            return False
+
+        # ponytail: limit history to 30 to check session goals, fallback, and activity
         def _sync_get_history():
             return (
                 supabase.table("messages")
                 .select("message_text, direction, created_at")
                 .eq("sender_number", sender)
                 .order("created_at", desc=True)
-                .limit(15)
+                .limit(30)
                 .execute()
             )
 
         resp = await asyncio.to_thread(_sync_get_history)
         rows = resp.data or []
-        # Balik urutan agar kronologis (tertua ke terbaru)
         rows.reverse()
 
         # Cari index feedback terakhir (baik prompt maupun thank you)
         last_feedback_idx = -1
         for i, row in enumerate(rows):
-            text = row.get("message_text", "")
+            text = row.get("message_text", "") or ""
             direction = row.get("direction", "")
             if direction == "outbound" and (
                 FEEDBACK_PROMPT_MARKER in text
@@ -109,9 +126,50 @@ async def _has_new_activity_since_last_feedback(sender: str) -> bool:
             ):
                 last_feedback_idx = i
 
-        # ponytail: check if user sent any message in the active session
         active_rows = rows[last_feedback_idx + 1:] if last_feedback_idx != -1 else rows
-        return any(row.get("direction") == "inbound" for row in active_rows)
+
+        # 1. Minimal percakapan: 3+ inbound
+        inbound_count = sum(1 for r in active_rows if r.get("direction") == "inbound")
+        if inbound_count < 3:
+            return False
+
+        # 2. Filter Intent / Jangan kirim jika bot jawab "kurang paham" (fallback)
+        FALLBACK_MARKERS = [
+            "kurang memahami",
+            "hanya dapat membantu hal-hal yang berkaitan",
+            "layanan AI sedang bermasalah",
+            "tidak dapat terhubung ke layanan",
+            "kurang paham"
+        ]
+        SUCCESS_MARKERS = [
+            "Pendaftaran Berhasil!",
+            "Konfirmasi Kunjungan",
+            "Tiket Antrean Bot",
+            "Jadwal Dokter Klinik SmartClinic"
+        ]
+
+        # Cek outbound terakhir
+        last_outbound = None
+        for row in reversed(active_rows):
+            if row.get("direction") == "outbound":
+                last_outbound = row.get("message_text", "") or ""
+                break
+
+        if last_outbound and any(m in last_outbound for m in FALLBACK_MARKERS):
+            return False
+
+        # 3. Hanya kirim jika user capai tujuan (booking sukses, info jadwal dapat)
+        has_success = False
+        for row in active_rows:
+            text = row.get("message_text", "") or ""
+            if row.get("direction") == "outbound" and any(m in text for m in SUCCESS_MARKERS):
+                has_success = True
+                break
+
+        if not has_success:
+            return False
+
+        return True
     except Exception as e:
         print(f"[FeedbackScheduler] Gagal cek activity history untuk {sender}: {e}")
         return True
