@@ -193,11 +193,15 @@ def format_cost(kb: dict) -> str:
 
 # (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field layanan perlu disesuain
 def format_services(kb: dict) -> str:
+    poli = "\n".join([f"• {p.strip()}" for p in kb['layanan_poli'].split(",")])
+    penunjang = "\n".join([f"• {p.strip()}" for p in kb['layanan_penunjang'].split(",")])
+    khusus = "\n".join([f"• {p.strip()}" for p in kb['layanan_khusus'].split(",")])
+
     return (
         "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n"
-        f"*Poliklinik:*\n🩺 {kb['layanan_poli']}\n\n"
-        f"*Layanan Penunjang:*\n🔬 {kb['layanan_penunjang']}\n\n"
-        f"*Layanan Khusus:*\n💉 {kb['layanan_khusus']}\n\n"
+        f"*Poliklinik:*\n{poli}\n\n"
+        f"*Layanan Penunjang:*\n{penunjang}\n\n"
+        f"*Layanan Khusus:*\n{khusus}\n\n"
         "Ada layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
     )
 
@@ -392,9 +396,70 @@ def _get_promo_hari_ini() -> list:
 
 
 def _format_promo_message(promo_list: list) -> str:
-    """Gabungkan campaign_message dari setiap promo aktif. campaign_message sudah berformat WA lengkap."""
-    pesan_list = [c.get("campaign_message", "").strip() for c in promo_list if c.get("campaign_message")]
-    return "\n\n".join(pesan_list)
+    """Render teks banner promo. Tanpa attachment — gambar dihandle terpisah oleh _send_promo_attachment()."""
+    if not promo_list:
+        return ""
+
+    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
+    blok_promo = []
+
+    for c in promo_list:
+        pesan = c.get("campaign_message", "").strip()
+        if not pesan:
+            continue
+        blok_promo.append(
+            f"✨ *Promo Hari Ini*\n"
+            f"{SEPARATOR}\n"
+            f"📢 {pesan}\n"
+            f"{SEPARATOR}"
+        )
+
+    if not blok_promo:
+        return ""
+
+    return (
+        "\n\n".join(blok_promo) +
+        "\n\nKetik *Booking* untuk mendaftar dan nikmati promo ini! 🙏"
+    )
+
+def _send_promo_attachment(no_hp: str, message: str, promo: dict) -> bool:
+    """Kirim promo sebagai 1 bubble: gambar + caption teks.
+    Return True kalau berhasil dikirim sebagai attachment, False kalau fallback ke teks biasa.
+    """
+    attachment_url = (promo.get("attachment_url") or "").strip()
+    if not (attachment_url.startswith("http://") or attachment_url.startswith("https://")):
+        return False
+
+    api_post("/api/send", {
+        "target": no_hp,
+        "message": message,
+        "attachment_url": attachment_url,
+        "filename": promo.get("filename"),
+    })
+    return True
+
+def _format_promo_message_booking(promo_list: list) -> str:
+    """Render teks banner promo khusus untuk tiket booking confirm.
+    Tanpa CTA 'Ketik Booking' karena pasien sudah selesai booking.
+    """
+    if not promo_list:
+        return ""
+
+    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
+    blok_promo = []
+
+    for c in promo_list:
+        pesan = c.get("campaign_message", "").strip()
+        if not pesan:
+            continue
+        blok_promo.append(
+            f"✨ *Promo Hari Ini*\n"
+            f"{SEPARATOR}\n"
+            f"📢 {pesan}\n"
+            f"{SEPARATOR}"
+        )
+
+    return "\n\n".join(blok_promo) 
 
 
 # Action untuk ambil data antrian hari ini, dengan filter tanggal & grouping per dokter
@@ -1088,16 +1153,18 @@ class ActionBookingConfirm(Action):
                 "Sampai jumpa di klinik! 🙏\n\n"
                 "_Ketik *reschedule* untuk ganti jadwal_\n"
             )
-            dispatcher.utter_message(text=tiket)
-            booking_id_final = str(booking_id)
+            
 
             # Lampirkan promo hari ini (silent kalau tidak ada)
             try:
                 promo_list = _get_promo_hari_ini()
                 if promo_list:
-                    dispatcher.utter_message(text=_format_promo_message(promo_list))
+                    tiket += "\n\n" + _format_promo_message_booking(promo_list)
             except Exception as e:
                 print(f"[Promo] Gagal cek promo setelah booking: {e}")
+
+            dispatcher.utter_message(text=tiket)
+            booking_id_final = str(booking_id)
         else:
             # POST failed
             # # ponytail: commented out due to RME RBAC constraints
@@ -1371,7 +1438,14 @@ class ActionFetchPromo(Action):
             dispatcher.utter_message(response="utter_no_promo")
             return []
 
-        dispatcher.utter_message(text=_format_promo_message(promo_list))
+        for promo in promo_list:
+            pesan = _format_promo_message([promo])
+            if not pesan:
+                continue
+            sent_as_attachment = _send_promo_attachment(tracker.sender_id, pesan, promo)
+            if not sent_as_attachment:
+                dispatcher.utter_message(text=pesan)
+
         return []
 
 # (Solusi karena Knowledge Based satu teks full)
