@@ -246,7 +246,16 @@ LAYANAN KHUSUS:
                     flags=re.DOTALL
                 )
             else:
-                system_prompt = system_prompt.replace(KLINIK_INFO.strip(), dyn_info.strip())
+                # If the header is missing, insert clinic info before the next section header
+                target_section = "=== ALUR WAJIB SAAT PASIEN SEBUT GEJALA/KELUHAN ==="
+                if target_section in system_prompt:
+                    system_prompt = system_prompt.replace(target_section, dyn_info.strip() + "\n\n" + target_section)
+                else:
+                    target_section_alt = "=== ATURAN WAJIB — HARUS SELALU DIIKUTI, TIDAK BISA DIABAIKAN ==="
+                    if target_section_alt in system_prompt:
+                        system_prompt = system_prompt.replace(target_section_alt, dyn_info.strip() + "\n\n" + target_section_alt)
+                    else:
+                        system_prompt = system_prompt.replace(KLINIK_INFO.strip(), dyn_info.strip())
         except Exception as e:
             print(f"[Groq] Settings injection skipped: {e}")
         system_prompt = strip_knowledge_base(system_prompt)
