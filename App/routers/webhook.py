@@ -32,6 +32,7 @@ from App.helpers import (
     is_handoff_keyword,
     increment_fallback,
     reset_fallback,
+    save_image_from_url,
 )
 from App.routers.chatbot_settings import get_max_fallback_before_handoff, get_settings
 from App.handoff_manager import is_in_handoff, start_handoff
@@ -140,7 +141,7 @@ WEBHOOK_RESPONSE_EXAMPLE = {
 #   HELPER — kirim balasan & simpan ke semua storage
 # ======================================================
 
-def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatResponse:
+def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str, image_url: Optional[str] = None) -> ChatResponse:
     """Kirim reply via wa-service (pattern dari /send), simpan ke JSON dan Supabase."""
     # Hardening: hindari mengirim reply kosong ke wa-service
     if reply is None or (isinstance(reply, str) and reply.strip() == ""):
@@ -170,7 +171,7 @@ def _send_reply(no_hp: str, input_pesan: str, reply: str, source: str) -> ChatRe
     
     # Gunakan channel dari send_result sebagai source
     actual_source = send_result.get("channel", source)
-    save_to_supabase(no_hp, reply, direction="outbound", source=actual_source)
+    save_to_supabase(no_hp, reply, direction="outbound", source=actual_source, image_url=image_url)
     
     # Update MESSAGE_STATES untuk status pemrosesan & cache reply
     if no_hp in MESSAGE_STATES:
@@ -254,6 +255,11 @@ def webhook(
         waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         now = time.time()
 
+        # Unduh dan simpan gambar jika ada payload URL gambar masuk
+        inbound_image_url = None
+        if payload.url:
+            inbound_image_url = save_image_from_url(payload.url, payload.filename)
+
         # ── Deduplikasi & Anti-Spam Check ──
         state = MESSAGE_STATES.get(no_hp)
         if state:
@@ -292,7 +298,7 @@ def webhook(
         if repeat_count >= 3:
             print(f"[ANTI-SPAM] {no_hp} mengirim pesan yang sama {repeat_count}x berturut-turut. Intersepsi.")
             # Simpan inbound message ke Supabase agar log tetap lengkap di dashboard admin
-            save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service")
+            save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service", image_url=inbound_image_url)
             
             reply = (
                 "Mohon maaf, Anda telah mengirimkan permintaan yang sama beberapa kali. "
@@ -310,7 +316,7 @@ def webhook(
             return _send_reply(no_hp, input_pesan, reply, source=source)
 
         print(f"\n[{waktu}] [INCOMING] Dari: {no_hp} | Pesan: {input_pesan}")
-        save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service")
+        save_to_supabase(no_hp, input_pesan, direction="inbound", source="wa-service", image_url=inbound_image_url)
 
         # ── Step 0: Cek mode handoff 
         # Bot diam selama handoff aktif — admin yang balas dari dashboard.

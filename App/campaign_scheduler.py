@@ -67,6 +67,7 @@ def _process_campaign(campaign: dict):
             attachment_url=attachment_url,
             filename=campaign.get("filename"),
             attachment_file_path=attachment_file_path,
+            image_url=campaign.get("image_url"),
         )
 
         _mark_campaign_status(campaign_id, "sent")
@@ -108,7 +109,7 @@ def _run_birthday_campaign_if_time():
         _require_supabase()
         resp = (
             supabase.table("campaigns")
-            .select("id, campaign_name, campaign_message, attachment_url, filename, status, last_run_date")
+            .select("id, campaign_name, campaign_message, attachment_url, filename, status, last_run_date, image_url")
             .eq("campaign_type", "birthday")
             .limit(1)
             .execute()
@@ -212,7 +213,7 @@ def _run_birthday_campaign_if_time():
                     send_result = send_text_best_effort(number, msg)
                     source = send_result.get("channel", "broadcast")
 
-                save_to_supabase(number, msg, direction="outbound", source=source)
+                save_to_supabase(number, msg, direction="outbound", source=source, image_url=campaign.get("image_url"))
                 sent_count += 1
             except Exception as e:
                 print(f"[CampaignScheduler] Failed to send birthday campaign to {number}: {e}")
@@ -234,7 +235,7 @@ def _worker_loop():
             # 1. Standard scheduled campaigns (only standard type)
             response = (
                 supabase.table("campaigns")
-                .select("id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status")
+                .select("id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status, image_url")
                 .eq("status", "scheduled")
                 .eq("campaign_type", "standard")
                 .execute()

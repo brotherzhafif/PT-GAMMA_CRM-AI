@@ -17,7 +17,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Path, UploadFile
 
 from App.activity_logger import log_activity
 from App.config import supabase
-from App.helpers import _require_supabase
+from App.helpers import _require_supabase, save_image_from_bytes, save_image_from_url
 from App.models import CampaignRecord, SaveCampaignPayload, UpdateCampaignPayload
 
 router = APIRouter(prefix="/api/marketing/campaigns", tags=["Marketing Campaigns"])
@@ -63,7 +63,7 @@ ERROR_EXAMPLE = {
 
 
 def _campaign_select_columns() -> str:
-    return "id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status, campaign_type, recurrence, last_run_date, created_at, updated_at"
+    return "id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status, campaign_type, recurrence, last_run_date, image_url, created_at, updated_at"
 
 
 def _campaign_row(record: dict) -> dict:
@@ -78,6 +78,7 @@ def _campaign_row(record: dict) -> dict:
         "campaign_type": record.get("campaign_type", "standard"),
         "recurrence": record.get("recurrence", "once"),
         "last_run_date": record.get("last_run_date"),
+        "image_url": record.get("image_url"),
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
     }
@@ -279,6 +280,11 @@ async def create_campaign(
         if payload.schedule_date:
             _validate_schedule_date(payload.schedule_date)
 
+        # Resolve image_url jika bertipe gambar
+        image_url = payload.image_url
+        if not image_url and payload.attachment_url:
+            image_url = save_image_from_url(payload.attachment_url, payload.filename)
+
         insert_data = {
             "campaign_name": payload.campaign_name,
             "schedule_date": _serialize_schedule_date(payload.schedule_date) if payload.schedule_date else None,
@@ -288,6 +294,7 @@ async def create_campaign(
             "status": payload.status or "scheduled",
             "campaign_type": payload.campaign_type or "standard",
             "recurrence": payload.recurrence or "once",
+            "image_url": image_url,
         }
         response = await asyncio.to_thread(
             lambda: supabase.table("campaigns").insert(insert_data).execute()
@@ -384,6 +391,12 @@ async def update_campaign(
             if "schedule_date" in update_data:
                 raise HTTPException(status_code=400, detail="Campaign ulang tahun tidak menggunakan schedule_date")
 
+        # Resolve image_url if attachment_url is being updated and no custom image_url was sent
+        if "attachment_url" in update_data and "image_url" not in update_data:
+            resolved_img = save_image_from_url(update_data["attachment_url"], update_data.get("filename"))
+            if resolved_img:
+                update_data["image_url"] = resolved_img
+
         if "schedule_date" in update_data and update_data["schedule_date"]:
             update_data["schedule_date"] = _serialize_schedule_date(update_data["schedule_date"])
         if not update_data:
@@ -457,10 +470,15 @@ async def create_campaign_with_upload(
 
         resolved_attachment_url = attachment_url
         resolved_filename = None
+        image_url = None
         if file is not None:
+            file.file.seek(0)
+            file_bytes = file.file.read()
             resolved_attachment_url, resolved_filename = _store_campaign_attachment(file)
+            image_url = save_image_from_bytes(file_bytes, file.filename or "upload")
         elif attachment_url:
             resolved_filename = _sanitize_filename(attachment_url.rsplit("/", 1)[-1])
+            image_url = save_image_from_url(attachment_url, resolved_filename)
 
         insert_data = {
             "campaign_name": campaign_name,
@@ -469,6 +487,7 @@ async def create_campaign_with_upload(
             "attachment_url": resolved_attachment_url,
             "filename": resolved_filename,
             "status": status or "scheduled",
+            "image_url": image_url,
         }
         response = await asyncio.to_thread(
             lambda: supabase.table("campaigns").insert(insert_data).execute()

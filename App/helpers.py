@@ -9,6 +9,7 @@
 import json
 import os
 import re
+import hashlib
 from datetime import datetime
 from typing import Any, Optional
 
@@ -178,8 +179,60 @@ async def proxy_smartclinic(
     )
 
 
-def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "system"):
-    """Insert satu baris pesan ke tabel messages di Supabase."""
+def save_image_from_bytes(file_bytes: bytes, filename: str) -> Optional[str]:
+    """Menyimpan bytes gambar ke folder lokal chat_images dengan nama file hash MD5 untuk deduplikasi."""
+    if not file_bytes:
+        return None
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"):
+        # Jika file bukan gambar, lewati
+        return None
+    
+    os.makedirs("chat_images", exist_ok=True)
+    
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+    stored_name = f"{file_hash}{ext}"
+    stored_path = os.path.join("chat_images", stored_name)
+    
+    try:
+        if not os.path.exists(stored_path):
+            with open(stored_path, "wb") as f:
+                f.write(file_bytes)
+        return f"/chat_images/{stored_name}"
+    except Exception as e:
+        print(f"[ImageHelper] Gagal menyimpan file gambar hash: {e}")
+        return None
+
+
+def save_image_from_url(url: str, filename: str | None = None) -> Optional[str]:
+    """Mengambil bytes dari URL (atau file path lokal) dan menyimpannya sebagai file hash ter-deduplikasi."""
+    if not url:
+        return None
+    try:
+        # Jika berupa link file lokal
+        if url.startswith("file://"):
+            local_path = url.removeprefix("file://")
+            if os.path.exists(local_path):
+                with open(local_path, "rb") as f:
+                    file_bytes = f.read()
+                name = filename or os.path.basename(local_path)
+                return save_image_from_bytes(file_bytes, name)
+            return None
+
+        # Request HTTP ke URL
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 200:
+            name = filename or url.split("/")[-1] or "image.jpg"
+            content_type = resp.headers.get("content-type", "")
+            if content_type.startswith("image/") or any(name.lower().endswith(e) for e in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")):
+                return save_image_from_bytes(resp.content, name)
+    except Exception as e:
+        print(f"[ImageHelper] Gagal mengambil gambar dari URL {url}: {e}")
+    return None
+
+
+def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "system", image_url: Optional[str] = None):
+    """Insert satu baris pesan ke tabel messages di Supabase, beserta opsional image_url."""
     if supabase is None:
         print("[Supabase] Skip save — belum dikonfigurasi.")
         return None
@@ -189,6 +242,7 @@ def save_to_supabase(no_hp: str, message: str, direction: str, source: str = "sy
         "message_text": message,
         "direction": direction,
         "source": source,
+        "image_url": image_url,
     }).execute()
 
 

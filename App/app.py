@@ -68,6 +68,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("chat_images", exist_ok=True)
+app.mount("/chat_images", StaticFiles(directory="chat_images"), name="chat_images")
+
 # Allow CORS from any origin (use with caution in production)
 app.add_middleware(
     CORSMiddleware,

@@ -19,12 +19,16 @@ class WebhookPayload(BaseModel):
             "example": {
                 "sender": "6281234567890",
                 "message": "Jadwal dokter hari ini?",
+                "url": None,
+                "filename": None,
             }
         }
     )
 
     sender: str = Field(..., description="Nomor WhatsApp pengirim", examples=["6281234567890"])
-    message: str = Field(..., description="Isi pesan masuk", examples=["Jadwal dokter hari ini?"])
+    message: str = Field(..., description="Isi pesan masuk/caption", examples=["Jadwal dokter hari ini?"])
+    url: Optional[str] = Field(default=None, description="URL file media/attachment yang diterima dari WhatsApp")
+    filename: Optional[str] = Field(default=None, description="Nama file media/attachment yang diterima")
 
 
 class ChatResponse(BaseModel):
@@ -65,6 +69,7 @@ class ChatRecord(BaseModel):
     message_text: str
     direction: str = Field(..., description="inbound atau outbound")
     source: Optional[str] = Field(default=None, description="fonnte, rasa, groq, manual, broadcast, atau admin")
+    image_url: Optional[str] = Field(default=None, description="URL image chat (jika ada)")
     created_at: Optional[str] = Field(default=None)
 
 
@@ -137,6 +142,7 @@ class CampaignRecord(BaseModel):
     campaign_type: Optional[str] = Field(default="standard", description="Tipe campaign (standard atau birthday)", examples=["standard"])
     recurrence: Optional[str] = Field(default="once", description="Pengulangan (once, weekly, monthly, dll)", examples=["once"])
     last_run_date: Optional[str] = Field(default=None, description="Tanggal terakhir campaign dijalankan (khusus recurring/birthday)")
+    image_url: Optional[str] = Field(default=None, description="URL gambar lokal yang di-deduplikasi", examples=["/chat_images/abcde12345.jpg"])
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
 
@@ -153,6 +159,7 @@ class SaveCampaignPayload(BaseModel):
                 "status": "scheduled",
                 "campaign_type": "standard",
                 "recurrence": "once",
+                "image_url": None,
             }
         }
     )
@@ -165,6 +172,7 @@ class SaveCampaignPayload(BaseModel):
     status: Optional[str] = Field(default=None, description="Status campaign", examples=["scheduled"])
     campaign_type: Optional[str] = Field(default="standard", description="Tipe campaign (standard atau birthday)", examples=["standard"])
     recurrence: Optional[str] = Field(default="once", description="Pengulangan (once, weekly, monthly, dll)", examples=["once"])
+    image_url: Optional[str] = Field(default=None, description="URL gambar lokal (opsional)")
 
 
 class UpdateCampaignPayload(BaseModel):
@@ -179,6 +187,7 @@ class UpdateCampaignPayload(BaseModel):
                 "status": "scheduled",
                 "campaign_type": "standard",
                 "recurrence": "once",
+                "image_url": None,
             }
         }
     )
@@ -191,6 +200,7 @@ class UpdateCampaignPayload(BaseModel):
     status: Optional[str] = Field(default=None, description="Status campaign baru", examples=["scheduled"])
     campaign_type: Optional[str] = Field(default=None, description="Tipe campaign (standard atau birthday)")
     recurrence: Optional[str] = Field(default=None, description="Pengulangan (once, weekly, monthly, dll)")
+    image_url: Optional[str] = Field(default=None, description="URL gambar lokal baru (opsional)")
 
 # Send 
 
@@ -199,6 +209,7 @@ class SendMessagePayload(BaseModel):
     message: str = Field(..., description="Isi pesan yang akan dikirim")
     attachment_url: Optional[str] = Field(default=None, description="URL file attachment (PDF, gambar). Jika diisi, dikirim via whatsapp-web.js")
     filename: Optional[str] = Field(default=None, description="Nama file yang tampil di WhatsApp (opsional)")
+    image_url: Optional[str] = Field(default=None, description="URL gambar lokal yang sudah di-hash (opsional)")
 
 
 class SendInteractiveTargetPayload(BaseModel):

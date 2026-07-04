@@ -16,7 +16,14 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadF
 from App.activity_logger import log_activity
 from App.config import supabase
 from App.models import SendMessagePayload, BroadcastPayload, BroadcastResult, SendInteractiveTargetPayload
-from App.helpers import save_to_supabase, _require_supabase, normalize_phone_number, normalize_whatsapp_target
+from App.helpers import (
+    save_to_supabase,
+    _require_supabase,
+    normalize_phone_number,
+    normalize_whatsapp_target,
+    save_image_from_bytes,
+    save_image_from_url,
+)
 from App.queue_manager import fonnte_queue
 from App.wa_gateway import send_text_best_effort
 from App.wa_gateway import buat_menu_booking, buat_menu_layanan, buat_poll_feedback
@@ -137,6 +144,12 @@ async def send_message(
     try:
         target = normalize_whatsapp_target(payload.target)
         delivery = None
+        
+        # Resolve local image_url if not already provided
+        image_url = payload.image_url
+        if not image_url and payload.attachment_url:
+            image_url = save_image_from_url(payload.attachment_url, payload.filename)
+
         if payload.attachment_url:
             # Kirim via whatsapp-web.js (attachment) 
             response = wa_service_request(
@@ -158,7 +171,7 @@ async def send_message(
             source = send_result.get("channel", "manual")
             delivery = send_result
 
-        save_to_supabase(target, payload.message, direction="outbound", source=source)
+        save_to_supabase(target, payload.message, direction="outbound", source=source, image_url=image_url)
         
         await log_activity(
             category="messaging",
@@ -219,6 +232,8 @@ async def send_media(
         normalized_target = normalize_whatsapp_target(target)
 
         file_bytes = file.file.read()
+        image_url = save_image_from_bytes(file_bytes, file.filename or "upload")
+
         response = _send_media_to_target(
             normalized_target,
             message,
@@ -228,7 +243,7 @@ async def send_media(
         )
         response.raise_for_status()
 
-        save_to_supabase(normalized_target, message or file.filename or "media", direction="outbound", source="wa-service")
+        save_to_supabase(normalized_target, message or file.filename or "media", direction="outbound", source="wa-service", image_url=image_url)
         
         await log_activity(
             category="messaging",
@@ -362,6 +377,7 @@ def broadcast_to_patients(
     filename: str | None = None,
     file: UploadFile | None = None,
     attachment_file_path: str | None = None,
+    image_url: str | None = None,
 ) -> BroadcastResult:
     _require_supabase()
 
@@ -380,15 +396,25 @@ def broadcast_to_patients(
     file_name: str | None = None
     file_content_type = "application/octet-stream"
 
+    # Resolve image_url once for the whole broadcast (deduplicated file saving)
     if file is not None:
+        file.file.seek(0)
         file_bytes = file.file.read()
+        file.file.seek(0)
         file_name = file.filename or "upload"
         file_content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+        if not image_url:
+            image_url = save_image_from_bytes(file_bytes, file_name)
     elif attachment_file_path:
         with open(attachment_file_path, "rb") as file_handle:
             file_bytes = file_handle.read()
         file_name = os.path.basename(attachment_file_path) or "upload"
         file_content_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        if not image_url:
+            image_url = save_image_from_bytes(file_bytes, file_name)
+    elif attachment_url:
+        if not image_url:
+            image_url = save_image_from_url(attachment_url, filename)
 
     for patient in patients:
         number = normalize_phone_number(patient.get("phone_number", ""))
@@ -421,7 +447,7 @@ def broadcast_to_patients(
             send_result = send_text_best_effort(number, message)
             source = send_result.get("channel", "broadcast")
 
-        save_to_supabase(number, message, direction="outbound", source=source)
+        save_to_supabase(number, message, direction="outbound", source=source, image_url=image_url)
         recipients.append(number)
 
     return BroadcastResult(status="ok", total_sent=len(recipients), recipients=recipients)
