@@ -12,6 +12,7 @@ import re
 import requests
 import time
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Body, HTTPException
 
 from App.config import RASA_TRUSTED_INTENTS, TRIAGE_KEYWORDS, EMERGENCY_KEYWORDS, ONBOARDING_TIMEOUT_MINUTES
