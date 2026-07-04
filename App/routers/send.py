@@ -381,7 +381,7 @@ def broadcast_to_patients(
 ) -> BroadcastResult:
     _require_supabase()
 
-    response = supabase.table("patients").select("phone_number").execute()
+    response = supabase.table("patients").select("phone_number").eq("campaign_enabled", True).execute()
     patients = response.data
 
     if not patients:

@@ -131,7 +131,7 @@ def _run_birthday_campaign_if_time():
 
         print(f"[CampaignScheduler] Running Birthday Campaign '{campaign.get('campaign_name')}' for {today_str}...")
 
-        patients_resp = supabase.table("patients").select("phone_number, name, birthdate").execute()
+        patients_resp = supabase.table("patients").select("phone_number, name, birthdate").eq("campaign_enabled", True).execute()
         patients = patients_resp.data or []
 
         today_month_day = local_now.strftime("%m-%d")

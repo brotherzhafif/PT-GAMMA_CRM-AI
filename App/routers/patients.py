@@ -289,9 +289,46 @@ async def get_all_patients(request: Request):
 
     response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, SMARTCLINIC_PATIENTS_PATH, params=query_params)
 
-    # Sinkronisasi asinkronus di latar belakang — tidak memblokir response
     if response.status_code < 400:
+        # Sinkronisasi asinkronus di latar belakang — tidak memblokir response
         asyncio.create_task(_sync_patients_list(response.body))
+
+        # Merge status campaign_enabled lokal
+        try:
+            data = json.loads(response.body.decode("utf-8"))
+            patients_list = data
+            if isinstance(data, dict) and "data" in data:
+                patients_list = data["data"]
+            
+            if isinstance(patients_list, list) and len(patients_list) > 0:
+                phones = []
+                for p in patients_list:
+                    tel = p.get("telepon") or p.get("noHp")
+                    if tel:
+                        norm = normalize_phone_number(tel)
+                        if norm:
+                            phones.append(norm)
+                
+                if phones:
+                    local_resp = supabase.table("patients").select("phone_number, campaign_enabled").in_("phone_number", phones).execute()
+                    local_map = {row["phone_number"]: row["campaign_enabled"] for row in (local_resp.data or [])}
+                    
+                    for p in patients_list:
+                        tel = p.get("telepon") or p.get("noHp")
+                        norm = normalize_phone_number(tel) if tel else None
+                        p["campaign_enabled"] = local_map.get(norm, True)
+                else:
+                    for p in patients_list:
+                        p["campaign_enabled"] = True
+
+            new_content = json.dumps(data)
+            return Response(
+                content=new_content,
+                status_code=response.status_code,
+                media_type="application/json"
+            )
+        except Exception as e:
+            print(f"[PatientsMerge] Gagal menggabungkan data campaign_enabled: {e}")
 
     return response
 
@@ -432,8 +469,31 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
 
     response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
-    # Sinkronisasi asinkronus di latar belakang
-    asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+    if response.status_code < 400:
+        # Sinkronisasi asinkronus di latar belakang
+        asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+
+        try:
+            data = json.loads(response.body.decode("utf-8"))
+            patient_data = data
+            if isinstance(data, dict) and "data" in data:
+                patient_data = data["data"]
+            
+            if isinstance(patient_data, dict):
+                local_resp = supabase.table("patients").select("campaign_enabled").eq("phone_number", normalized_phone).limit(1).execute()
+                campaign_enabled = True
+                if local_resp.data:
+                    campaign_enabled = local_resp.data[0].get("campaign_enabled", True)
+                patient_data["campaign_enabled"] = campaign_enabled
+
+            new_content = json.dumps(data)
+            return Response(
+                content=new_content,
+                status_code=response.status_code,
+                media_type="application/json"
+            )
+        except Exception as e:
+            print(f"[PatientsMerge] Gagal menggabungkan data campaign_enabled: {e}")
 
     return response
 
@@ -481,9 +541,39 @@ async def get_patient_by_phone(phone: str = Query(..., description="Nomor telepo
 async def get_patient_by_id(rme_patient_id: str = Path(..., description="rme_patient_id pasien")):
     response = await proxy_smartclinic("GET", SMARTCLINIC_BASE_URL, f"{SMARTCLINIC_PATIENTS_PATH}/{rme_patient_id}")
 
-    # Sinkronisasi asinkronus di latar belakang
-    # Jika 404 → otomatis cleanup record stale di Supabase
-    asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+    if response.status_code < 400:
+        # Sinkronisasi asinkronus di latar belakang
+        # Jika 404 → otomatis cleanup record stale di Supabase
+        asyncio.create_task(_sync_single_patient_with_status(rme_patient_id, response))
+
+        try:
+            data = json.loads(response.body.decode("utf-8"))
+            patient_data = data
+            if isinstance(data, dict) and "data" in data:
+                patient_data = data["data"]
+            
+            if isinstance(patient_data, dict):
+                tel = patient_data.get("telepon") or patient_data.get("noHp")
+                norm = normalize_phone_number(tel) if tel else None
+                
+                query = supabase.table("patients").select("campaign_enabled").eq("rme_patient_id", rme_patient_id)
+                if norm:
+                    query = query.or_(f"phone_number.eq.{norm}")
+                
+                local_resp = query.limit(1).execute()
+                campaign_enabled = True
+                if local_resp.data:
+                    campaign_enabled = local_resp.data[0].get("campaign_enabled", True)
+                patient_data["campaign_enabled"] = campaign_enabled
+
+            new_content = json.dumps(data)
+            return Response(
+                content=new_content,
+                status_code=response.status_code,
+                media_type="application/json"
+            )
+        except Exception as e:
+            print(f"[PatientsMerge] Gagal menggabungkan data campaign_enabled: {e}")
 
     return response
 
@@ -567,3 +657,38 @@ async def delete_patient(rme_patient_id: str = Path(..., description="rme_patien
     if response.status_code < 400 and supabase is not None:
         supabase.table("patients").delete().eq("rme_patient_id", rme_patient_id).execute()
     return response
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Toggle Campaign Opt-in/Opt-out (Blacklist/Whitelist)
+# ──────────────────────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+class ToggleCampaignPayload(BaseModel):
+    campaign_enabled: bool
+
+
+@router.put(
+    "/campaign-status/{phone_or_id}",
+    summary="Toggle status penerimaan campaign untuk pasien",
+    description="Mengubah kolom campaign_enabled di tabel patients lokal Supabase berdasarkan nomor HP atau rme_patient_id.",
+)
+async def toggle_campaign_status(
+    phone_or_id: str,
+    payload: ToggleCampaignPayload = Body(...),
+):
+    _require_supabase()
+    normalized = normalize_phone_number(phone_or_id)
+    
+    query = supabase.table("patients").update({"campaign_enabled": payload.campaign_enabled})
+    if normalized:
+        query = query.eq("phone_number", normalized)
+    else:
+        query = query.eq("rme_patient_id", phone_or_id)
+        
+    resp = query.execute()
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Pasien tidak ditemukan di database lokal")
+        
+    return {"status": "ok", "campaign_enabled": payload.campaign_enabled, "record": resp.data[0]}
