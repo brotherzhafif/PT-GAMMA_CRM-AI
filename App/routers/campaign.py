@@ -63,7 +63,7 @@ ERROR_EXAMPLE = {
 
 
 def _campaign_select_columns() -> str:
-    return "id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status, created_at, updated_at"
+    return "id, campaign_name, schedule_date, campaign_message, attachment_url, filename, status, campaign_type, recurrence, last_run_date, created_at, updated_at"
 
 
 def _campaign_row(record: dict) -> dict:
@@ -75,6 +75,9 @@ def _campaign_row(record: dict) -> dict:
         "attachment_url": record.get("attachment_url"),
         "filename": record.get("filename"),
         "status": record.get("status"),
+        "campaign_type": record.get("campaign_type", "standard"),
+        "recurrence": record.get("recurrence", "once"),
+        "last_run_date": record.get("last_run_date"),
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
     }
@@ -146,12 +149,14 @@ def get_all_campaigns(include_canceled: bool = False):
         response = (
             supabase.table("campaigns")
             .select(_campaign_select_columns())
-            .order("campaign_name", desc=False)
             .execute()
         )
         campaigns = response.data or []
         if not include_canceled:
             campaigns = [row for row in campaigns if row.get("status") != "canceled"]
+        
+        # Urutkan: tipe birthday di atas, sisanya diurutkan berdasarkan campaign_name secara alfabetis
+        campaigns.sort(key=lambda x: (x.get("campaign_type") != "birthday", x.get("campaign_name", "")))
         return [_campaign_row(row) for row in campaigns]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -276,11 +281,13 @@ async def create_campaign(
 
         insert_data = {
             "campaign_name": payload.campaign_name,
-            "schedule_date": _serialize_schedule_date(payload.schedule_date),
+            "schedule_date": _serialize_schedule_date(payload.schedule_date) if payload.schedule_date else None,
             "campaign_message": payload.campaign_message,
             "attachment_url": payload.attachment_url,
             "filename": payload.filename,
             "status": payload.status or "scheduled",
+            "campaign_type": payload.campaign_type or "standard",
+            "recurrence": payload.recurrence or "once",
         }
         response = await asyncio.to_thread(
             lambda: supabase.table("campaigns").insert(insert_data).execute()
@@ -361,8 +368,23 @@ async def update_campaign(
         if payload.schedule_date:
             _validate_schedule_date(payload.schedule_date)
 
+        # Dapatkan campaign yang ada untuk memeriksa tipe
+        check_resp = await asyncio.to_thread(
+            lambda: supabase.table("campaigns").select("campaign_type").eq("campaign_name", campaign_name).limit(1).execute()
+        )
+        is_birthday = False
+        if check_resp.data and check_resp.data[0].get("campaign_type") == "birthday":
+            is_birthday = True
+
         update_data = {key: value for key, value in payload.model_dump().items() if value is not None}
-        if "schedule_date" in update_data:
+        
+        if is_birthday:
+            if "status" in update_data and update_data["status"] not in ("active", "disabled"):
+                raise HTTPException(status_code=400, detail="Status untuk campaign ulang tahun hanya boleh 'active' atau 'disabled'")
+            if "schedule_date" in update_data:
+                raise HTTPException(status_code=400, detail="Campaign ulang tahun tidak menggunakan schedule_date")
+
+        if "schedule_date" in update_data and update_data["schedule_date"]:
             update_data["schedule_date"] = _serialize_schedule_date(update_data["schedule_date"])
         if not update_data:
             raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate")
@@ -517,3 +539,60 @@ async def create_campaign_with_upload(
 #         raise
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/by-name/{campaign_name}",
+    summary="Hapus campaign berdasarkan nama",
+    responses={
+        200: {
+            "description": "Campaign berhasil dihapus",
+            "content": {"application/json": {"example": {"status": "ok", "message": "Campaign '...' berhasil dihapus"}}},
+        },
+        400: {
+            "description": "Campaign ulang tahun tidak bisa dihapus",
+            "content": {"application/json": {"example": {"detail": "Campaign ulang tahun tidak dapat dihapus, hanya bisa dinonaktifkan"}}},
+        },
+        404: {
+            "description": "Campaign tidak ditemukan",
+            "content": {"application/json": {"example": ERROR_EXAMPLE}},
+        },
+        500: {
+            "description": "Gagal menghapus campaign",
+            "content": {"application/json": {"example": ERROR_EXAMPLE}},
+        },
+    },
+)
+async def delete_campaign(
+    request: Request,
+    campaign_name: str = Path(..., description="Nama campaign yang akan dihapus", examples=["Promo Cek Gigi Mei"]),
+):
+    _require_supabase()
+    try:
+        check_resp = await asyncio.to_thread(
+            lambda: supabase.table("campaigns").select("campaign_type").eq("campaign_name", campaign_name).limit(1).execute()
+        )
+        if not check_resp.data:
+            raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
+        
+        if check_resp.data[0].get("campaign_type") == "birthday":
+            raise HTTPException(status_code=400, detail="Campaign ulang tahun tidak dapat dihapus, hanya bisa dinonaktifkan")
+            
+        response = await asyncio.to_thread(
+            lambda: supabase.table("campaigns").delete().eq("campaign_name", campaign_name).execute()
+        )
+        if not response.data:
+             raise HTTPException(status_code=404, detail=f"Campaign '{campaign_name}' tidak ditemukan")
+             
+        await log_activity(
+            category="marketing",
+            action="DELETE_CAMPAIGN",
+            from_actor=request.client.host if request.client else "system",
+            message=f"Campaign dihapus: {campaign_name}",
+            metadata={"campaign_name": campaign_name}
+        )
+        return {"status": "ok", "message": f"Campaign '{campaign_name}' berhasil dihapus"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

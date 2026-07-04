@@ -134,6 +134,9 @@ class CampaignRecord(BaseModel):
     )
     filename: Optional[str] = Field(default=None, description="Nama file attachment yang dikirim ke broadcast", examples=["promo-cekgigi.jpg"])
     status: Optional[str] = Field(default=None, description="Status campaign", examples=["scheduled", "processing", "sent", "failed"])
+    campaign_type: Optional[str] = Field(default="standard", description="Tipe campaign (standard atau birthday)", examples=["standard"])
+    recurrence: Optional[str] = Field(default="once", description="Pengulangan (once, weekly, monthly, dll)", examples=["once"])
+    last_run_date: Optional[str] = Field(default=None, description="Tanggal terakhir campaign dijalankan (khusus recurring/birthday)")
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
 
@@ -148,6 +151,8 @@ class SaveCampaignPayload(BaseModel):
                 "attachment_url": "https://example.com/promo-cekgigi.jpg",
                 "filename": "promo-cekgigi.jpg",
                 "status": "scheduled",
+                "campaign_type": "standard",
+                "recurrence": "once",
             }
         }
     )
@@ -158,6 +163,8 @@ class SaveCampaignPayload(BaseModel):
     attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign (opsional)", examples=["https://example.com/promo-cekgigi.jpg"])
     filename: Optional[str] = Field(default=None, description="Nama file attachment (opsional)", examples=["promo-cekgigi.jpg"])
     status: Optional[str] = Field(default=None, description="Status campaign", examples=["scheduled"])
+    campaign_type: Optional[str] = Field(default="standard", description="Tipe campaign (standard atau birthday)", examples=["standard"])
+    recurrence: Optional[str] = Field(default="once", description="Pengulangan (once, weekly, monthly, dll)", examples=["once"])
 
 
 class UpdateCampaignPayload(BaseModel):
@@ -170,6 +177,8 @@ class UpdateCampaignPayload(BaseModel):
                 "attachment_url": "https://example.com/promo-cekgigi.jpg",
                 "filename": "promo-cekgigi.jpg",
                 "status": "scheduled",
+                "campaign_type": "standard",
+                "recurrence": "once",
             }
         }
     )
@@ -180,6 +189,8 @@ class UpdateCampaignPayload(BaseModel):
     attachment_url: Optional[str] = Field(default=None, description="URL attachment campaign baru (opsional)", examples=["https://example.com/promo-cekgigi.jpg"])
     filename: Optional[str] = Field(default=None, description="Nama file attachment baru (opsional)", examples=["promo-cekgigi.jpg"])
     status: Optional[str] = Field(default=None, description="Status campaign baru", examples=["scheduled"])
+    campaign_type: Optional[str] = Field(default=None, description="Tipe campaign (standard atau birthday)")
+    recurrence: Optional[str] = Field(default=None, description="Pengulangan (once, weekly, monthly, dll)")
 
 # Send 
 
@@ -253,6 +264,13 @@ class ChatbotSettingsRecord(BaseModel):
         default=None,
         description="System prompt kustom untuk instruksi awal AI chatbot.",
     )
+    lokasi: Optional[str] = Field(default=None, description="Lokasi klinik")
+    maps: Optional[str] = Field(default=None, description="Link Google Maps lokasi klinik")
+    biaya_konsultasi: Optional[str] = Field(default=None, description="Biaya konsultasi dokter")
+    biaya_pendaftaran: Optional[str] = Field(default=None, description="Biaya pendaftaran pasien baru")
+    layanan_poli: Optional[str] = Field(default=None, description="Layanan poliklinik yang tersedia")
+    layanan_penunjang: Optional[str] = Field(default=None, description="Layanan penunjang medis")
+    layanan_khusus: Optional[str] = Field(default=None, description="Layanan khusus klinik")
     quota_used_tokens: Optional[int] = Field(
         default=None,
         description="Total token dari respons Groq terakhir yang tersimpan di memory proses.",
@@ -283,6 +301,13 @@ class UpdateChatbotSettingsPayload(BaseModel):
                 "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                 "ai_badge_enabled": True,
                 "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
+                "lokasi": "Jl. Raya No. 123, Jakarta",
+                "maps": "https://maps.google.com/?q=SmartClinic",
+                "biaya_konsultasi": "Rp 150.000",
+                "biaya_pendaftaran": "Rp 50.000",
+                "layanan_poli": "Poli Umum, Poli Gigi, Poli Anak",
+                "layanan_penunjang": "Laboratorium, Apotek",
+                "layanan_khusus": "Fisioterapi",
             }
         }
     )
@@ -300,6 +325,13 @@ class UpdateChatbotSettingsPayload(BaseModel):
         default=None,
         description="System prompt kustom untuk instruksi awal AI chatbot.",
     )
+    lokasi: Optional[str] = Field(default=None, description="Lokasi klinik")
+    maps: Optional[str] = Field(default=None, description="Link Google Maps lokasi klinik")
+    biaya_konsultasi: Optional[str] = Field(default=None, description="Biaya konsultasi dokter")
+    biaya_pendaftaran: Optional[str] = Field(default=None, description="Biaya pendaftaran pasien baru")
+    layanan_poli: Optional[str] = Field(default=None, description="Layanan poliklinik yang tersedia")
+    layanan_penunjang: Optional[str] = Field(default=None, description="Layanan penunjang medis")
+    layanan_khusus: Optional[str] = Field(default=None, description="Layanan khusus klinik")
 
 
 # Feedback

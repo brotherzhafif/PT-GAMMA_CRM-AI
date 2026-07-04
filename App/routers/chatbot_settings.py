@@ -58,6 +58,13 @@ CHATBOT_SETTINGS_EXAMPLE = {
     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
     "ai_badge_enabled": True,
     "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
+    "lokasi": "Jl. Raya No. 123, Jakarta",
+    "maps": "https://maps.google.com/?q=SmartClinic",
+    "biaya_konsultasi": "Rp 150.000",
+    "biaya_pendaftaran": "Rp 50.000",
+    "layanan_poli": "Poli Umum, Poli Gigi, Poli Anak",
+    "layanan_penunjang": "Laboratorium, Apotek",
+    "layanan_khusus": "Fisioterapi",
     "quota_used_tokens": 12500,
     "quota_limit_tokens": 50000,
     "quota": "12500/50000",
@@ -77,6 +84,13 @@ def _default_chatbot_settings_row() -> dict:
         "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
         "ai_badge_enabled": True,
         "system_prompt": None,
+        "lokasi": None,
+        "maps": None,
+        "biaya_konsultasi": None,
+        "biaya_pendaftaran": None,
+        "layanan_poli": None,
+        "layanan_penunjang": None,
+        "layanan_khusus": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -97,7 +111,7 @@ def _groq_quota_state() -> dict[str, int | str]:
 
 
 def _chatbot_settings_columns() -> str:
-    return "id, ai_name, primary_language, conversation_tone, handoff_threshold, handoff_message, ai_badge_enabled, system_prompt, created_at, updated_at"
+    return "id, ai_name, primary_language, conversation_tone, handoff_threshold, handoff_message, ai_badge_enabled, system_prompt, lokasi, maps, biaya_konsultasi, biaya_pendaftaran, layanan_poli, layanan_penunjang, layanan_khusus, created_at, updated_at"
 
 
 def _chatbot_settings_row(record: dict) -> dict:
@@ -119,6 +133,13 @@ def _chatbot_settings_row(record: dict) -> dict:
         "handoff_message": record.get("handoff_message"),
         "ai_badge_enabled": record.get("ai_badge_enabled"),
         "system_prompt": db_prompt,
+        "lokasi": record.get("lokasi"),
+        "maps": record.get("maps"),
+        "biaya_konsultasi": record.get("biaya_konsultasi"),
+        "biaya_pendaftaran": record.get("biaya_pendaftaran"),
+        "layanan_poli": record.get("layanan_poli"),
+        "layanan_penunjang": record.get("layanan_penunjang"),
+        "layanan_khusus": record.get("layanan_khusus"),
         "quota_used_tokens": quota_state["quota_used_tokens"],
         "quota_limit_tokens": quota_state["quota_limit_tokens"],
         "quota": quota_state["quota"],
@@ -233,6 +254,13 @@ async def update_chatbot_settings(
                     "handoff_message": "Mohon tunggu sebentar, admin kami akan segera membantu.",
                     "ai_badge_enabled": True,
                     "system_prompt": "Kamu adalah asisten AI untuk klinik SmartClinic. Jawab dengan ramah dan profesional.",
+                    "lokasi": "Jl. Raya No. 123, Jakarta",
+                    "maps": "https://maps.google.com/?q=SmartClinic",
+                    "biaya_konsultasi": "Rp 150.000",
+                    "biaya_pendaftaran": "Rp 50.000",
+                    "layanan_poli": "Poli Umum, Poli Gigi, Poli Anak",
+                    "layanan_penunjang": "Laboratorium, Apotek",
+                    "layanan_khusus": "Fisioterapi",
                 },
             }
         },

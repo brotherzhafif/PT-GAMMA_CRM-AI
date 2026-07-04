@@ -35,10 +35,14 @@ PATIENT_ERROR_EXAMPLE = {"detail": "Pasien tidak ditemukan"}
 
 
 def _build_patient_supabase_row(rme_patient_id: str, payload: PatientPayload) -> dict:
+    tgl_lahir = payload.tanggalLahir
+    if tgl_lahir:
+        tgl_lahir = tgl_lahir.split("T")[0]
     return {
         "rme_patient_id": rme_patient_id,
         "phone_number": normalize_phone_number(payload.telepon),
         "name": payload.namaLengkap,
+        "birthdate": tgl_lahir,
     }
 
 
@@ -91,6 +95,9 @@ async def _sync_single_patient(rme_patient_id: str, response_body: bytes) -> Non
     rme_id = patient_data.get("id") or rme_patient_id
     telepon = patient_data.get("telepon") or patient_data.get("noHp")
     nama = patient_data.get("namaLengkap") or patient_data.get("nama")
+    tgl_lahir = patient_data.get("tanggalLahir") or patient_data.get("tanggal_lahir")
+    if tgl_lahir:
+        tgl_lahir = tgl_lahir.split("T")[0]
 
     if not telepon:
         return
@@ -105,6 +112,7 @@ async def _sync_single_patient(rme_patient_id: str, response_body: bytes) -> Non
                 "rme_patient_id": rme_id,
                 "phone_number": phone_normalized,
                 "name": nama,
+                "birthdate": tgl_lahir,
             },
             on_conflict="phone_number",
         ).execute()
@@ -167,6 +175,9 @@ async def _sync_patients_list(response_body: bytes) -> None:
         rme_id = p.get("id")
         telepon = p.get("telepon") or p.get("noHp")
         nama = p.get("namaLengkap") or p.get("nama")
+        tgl_lahir = p.get("tanggalLahir") or p.get("tanggal_lahir")
+        if tgl_lahir:
+            tgl_lahir = tgl_lahir.split("T")[0]
 
         if not rme_id or not telepon:
             continue
@@ -179,6 +190,7 @@ async def _sync_patients_list(response_body: bytes) -> None:
             "rme_patient_id": rme_id,
             "phone_number": phone_normalized,
             "name": nama,
+            "birthdate": tgl_lahir,
         })
 
     if not rows:

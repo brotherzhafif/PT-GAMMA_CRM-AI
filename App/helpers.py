@@ -277,6 +277,8 @@ def upsert_patient(
         sb_payload["name"] = namaLengkap
     if rme_patient_id:
         sb_payload["rme_patient_id"] = rme_patient_id
+    if tanggalLahir:
+        sb_payload["birthdate"] = tanggalLahir.split("T")[0]
 
     supabase.table("patients").upsert(
         sb_payload,
