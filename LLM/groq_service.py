@@ -206,6 +206,47 @@ class GroqService:
             if tone and tone in TONE_MAP:
                 tone_instruction = TONE_MAP[tone]
                 system_prompt = re.sub(r"- Nada:.*", f"- Nada: {tone_instruction}.", system_prompt)
+
+            # ponytail: dynamically construct KLINIK_INFO section if settings columns are populated
+            lokasi = settings.get("lokasi") or "Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284"
+            maps = settings.get("maps") or "https://maps.google.com/?q=-7.7218,110.3568"
+            biaya_konsul = settings.get("biaya_konsultasi") or "Rp 50.000"
+            biaya_daftar = settings.get("biaya_pendaftaran") or "Rp 25.000"
+            layanan_poli = settings.get("layanan_poli") or "Poli Umum, Poli Penyakit Dalam (Sp.PD)"
+            layanan_penunjang = settings.get("layanan_penunjang") or "Laboratorium, Radiologi, EKG"
+            layanan_khusus = settings.get("layanan_khusus") or "Vaksinasi, Prolanis, Home Visit, Surat Sehat, Rapid Test"
+
+            poli_list = "\n".join([f"- {p.strip()}" for p in layanan_poli.split(",") if p.strip()])
+            penunjang_list = "\n".join([f"- {p.strip()}" for p in layanan_penunjang.split(",") if p.strip()])
+            khusus_list = "\n".join([f"- {p.strip()}" for p in layanan_khusus.split(",") if p.strip()])
+
+            dyn_info = f"""
+=== DATA KLINIK SMART CLINIC ===
+Lokasi Smart Clinic:
+📍 *Lokasi Klinik Smart Clinic:*\n\n🏠 {lokasi}\n🗺️ *Google Maps:* {maps}\n\nAda yang bisa Saya bantu lagi, Bapak/Ibu? 🙏 
+ 
+Biaya Layanan:
+ Untuk informasi biaya layanan, berikut gambaran umum:\n\n💰 Konsultasi Umum: Mulai dari {biaya_konsul}\n💰 Pendaftaran: {biaya_daftar}\n\nKlinik menerima pembayaran tunai, QRIS, dan BPJS.\n\nUntuk detail biaya spesifik, silakan hubungi admin klinik kami.
+ 
+POLIKLINIK YANG TERSEDIA:
+{poli_list}
+ 
+LAYANAN PENUNJANG MEDIS:
+{penunjang_list}
+ 
+LAYANAN KHUSUS:
+{khusus_list}
+"""
+            # Replace the old KLINIK_INFO section if it exists in the system_prompt
+            if "=== DATA KLINIK SMART CLINIC ===" in system_prompt:
+                system_prompt = re.sub(
+                    r'=== DATA KLINIK SMART CLINIC ===.*?(?==== ALUR WAJIB SAAT PASIEN SEBUT GEJALA/KELUHAN ===|=== ATURAN WAJIB — HARUS SELALU DIIKUTI, TIDAK BISA DIABAIKAN ===|$)',
+                    dyn_info.strip() + '\n\n',
+                    system_prompt,
+                    flags=re.DOTALL
+                )
+            else:
+                system_prompt = system_prompt.replace(KLINIK_INFO.strip(), dyn_info.strip())
         except Exception as e:
             print(f"[Groq] Settings injection skipped: {e}")
         system_prompt = strip_knowledge_base(system_prompt)

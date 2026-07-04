@@ -124,21 +124,31 @@ FALLBACK_KB = {
 }
 
 # (Solusi karena Knowledge Based satu teks full) kalo BE udh KB udah diubah jadi field-field khusus perlu disesuain
-def get_knowledge_base(system_prompt: str) -> dict:
-    """Parse JSON block dari system_prompt via marker KNOWLEDGE_BASE_RASA.
-    Fallback per field — bukan all-or-nothing.
-    """
+# ponytail: direct settings columns over JSON block regex parse
+def get_knowledge_base(system_prompt: str, settings_dict: dict = None) -> dict:
+    """Ambil data KB dari field settings langsung, jika tidak ada fallback ke JSON block system_prompt."""
     parsed = {}
-    try:
-        match = re.search(
-            r'=== KNOWLEDGE_BASE_RASA_START ===.*?```json\s*(\{.*?\})\s*```.*?=== KNOWLEDGE_BASE_RASA_END ===',
-            system_prompt,
-            re.DOTALL
-        )
-        if match:
-            parsed = json.loads(match.group(1))
-    except Exception:
-        pass
+    if settings_dict:
+        for key in FALLBACK_KB:
+            val = settings_dict.get(key)
+            if val and str(val).strip():
+                parsed[key] = val
+
+    # Jika ada key yang kosong/belum terisi di settings_dict, coba parse dari system_prompt
+    if len(parsed) < len(FALLBACK_KB) and system_prompt:
+        try:
+            match = re.search(
+                r'=== KNOWLEDGE_BASE_RASA_START ===.*?```json\s*(\{.*?\})\s*```.*?=== KNOWLEDGE_BASE_RASA_END ===',
+                system_prompt,
+                re.DOTALL
+            )
+            if match:
+                parsed_json = json.loads(match.group(1))
+                for k, v in parsed_json.items():
+                    if k not in parsed and v:
+                        parsed[k] = v
+        except Exception:
+            pass
 
     return {
         "lokasi":            parsed.get("lokasi")            or FALLBACK_KB["lokasi"],
@@ -163,7 +173,7 @@ def get_chatbot_settings() -> dict:
         result = api_get("/api/chatbot-settings")
         if result:
             system_prompt = result.get("system_prompt", "")
-            result["_kb"] = get_knowledge_base(system_prompt)
+            result["_kb"] = get_knowledge_base(system_prompt, settings_dict=result)
             cache["data"] = result
             cache["fetched_at"] = now
             print("[Settings] Cache refreshed + knowledge base parsed")
