@@ -33,6 +33,8 @@ if (!fs.existsSync(CHAT_FILES_DIR)) {
     fs.mkdirSync(CHAT_FILES_DIR, { recursive: true })
 }
 
+app.use('/chat_files', express.static(CHAT_FILES_DIR))
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, CHAT_FILES_DIR),
     filename: (req, file, cb) => {
@@ -312,12 +314,61 @@ function attachClientEvents(instance) {
                 }
             }
 
+            let mediaUrl = null
+            let mediaFilename = null
+
+            if (msg.hasMedia) {
+                try {
+                    const media = await msg.downloadMedia()
+                    if (media && media.data) {
+                        const mimeToExt = {
+                            'image/jpeg': '.jpg',
+                            'image/jpg': '.jpg',
+                            'image/png': '.png',
+                            'image/webp': '.webp',
+                            'image/gif': '.gif',
+                            'video/mp4': '.mp4',
+                            'audio/mp3': '.mp3',
+                            'audio/ogg': '.ogg',
+                            'audio/mpeg': '.mp3',
+                            'application/pdf': '.pdf',
+                        }
+                        let ext = mimeToExt[media.mimetype]
+                        if (!ext) {
+                            if (media.filename && path.extname(media.filename)) {
+                                ext = path.extname(media.filename)
+                            } else if (media.mimetype && media.mimetype.startsWith('image/')) {
+                                ext = '.jpg'
+                            } else {
+                                ext = '.bin'
+                            }
+                        }
+                        const randomHash = Math.random().toString(36).substring(2, 10)
+                        const fileBase = media.filename ? path.parse(media.filename).name : `inbound_${Date.now()}`
+                        const safeBaseName = fileBase.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/_+/g, '_')
+                        const finalFilename = `${safeBaseName}_${randomHash}${ext}`
+                        const filepath = path.join(CHAT_FILES_DIR, finalFilename)
+
+                        const buffer = Buffer.from(media.data, 'base64')
+                        fs.writeFileSync(filepath, buffer)
+
+                        mediaUrl = `http://wa-service:3000/chat_files/${finalFilename}`
+                        mediaFilename = media.filename || finalFilename
+                        console.log(`[WA] Inbound media saved: ${finalFilename} -> URL: ${mediaUrl}`)
+                    }
+                } catch (mediaErr) {
+                    console.error('[WA] Error downloading/saving inbound media:', mediaErr.message)
+                }
+            }
+
             console.log(`[WA] Pesan masuk dari ${numericSender} ${isLid ? '(via LID)' : ''}: ${message.substring(0, 50)}...`)
 
             // Forward ke FastAPI webhook
             await axios.post('http://app:5000/webhook', {
                 sender: numericSender,
                 message: message,
+                url: mediaUrl,
+                filename: mediaFilename,
             }, {
                 timeout: 30000, // 30 detik timeout
                 headers: {
