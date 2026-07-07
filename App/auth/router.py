@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from App.activity_logger import log_activity
 from App.auth.dependencies import require_any_staff
 from App.config import supabase, supabase_auth
+from App.helpers_device import get_real_ip, parse_user_agent, resolve_ip_location
 from App.models import AuthLoginResponse, AuthRefreshResponse, AuthSimpleMessage
 
 
@@ -158,8 +159,10 @@ async def login(
             detail="Supabase belum dikonfigurasi",
         )
 
-    ip_address = request.client.host if request.client else None
-    device = request.headers.get("user-agent")
+    ip_address = get_real_ip(request)
+    raw_ua     = request.headers.get("user-agent")
+    device     = parse_user_agent(raw_ua)
+    location   = await resolve_ip_location(ip_address)
 
     try:
         auth_response = await asyncio.to_thread(
@@ -185,6 +188,7 @@ async def login(
             message=f"{payload.email} login berhasil",
             ip_address=ip_address,
             device=device,
+            location=location,
         )
 
         return {
@@ -200,6 +204,7 @@ async def login(
             message=f"{payload.email} login gagal",
             ip_address=ip_address,
             device=device,
+            location=location,
         )
         raise exc
     except Exception as exc:
@@ -210,6 +215,7 @@ async def login(
             message=f"{payload.email} login gagal",
             ip_address=ip_address,
             device=device,
+            location=location,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email atau password salah") from exc
 
@@ -224,13 +230,18 @@ async def logout(request: Request, current_user: dict = require_any_staff):
 
     await asyncio.to_thread(supabase_auth.auth.sign_out)
 
+    _ip  = get_real_ip(request)
+    _dev = parse_user_agent(request.headers.get("user-agent"))
+    _loc = await resolve_ip_location(_ip)
+
     await log_activity(
         category="auth",
         action="LOGOUT",
         from_actor=current_user.get("email") or "system",
         message=f"{current_user.get('email') or 'User'} logout berhasil",
-        ip_address=request.client.host if request.client else None,
-        device=request.headers.get("user-agent"),
+        ip_address=_ip,
+        device=_dev,
+        location=_loc,
     )
 
     return AuthSimpleMessage(message="Logout berhasil")
@@ -281,13 +292,18 @@ async def logout_all_devices(request: Request, current_user: dict = require_any_
             except Exception as e:
                 print(f"[Auth] Warning: Gagal invalidate sessions di DB: {e}")
         
+        _ip  = get_real_ip(request)
+        _dev = parse_user_agent(request.headers.get("user-agent"))
+        _loc = await resolve_ip_location(_ip)
+
         await log_activity(
             category="auth",
             action="LOGOUT_ALL",
             from_actor=email,
             message=f"{email} logout dari semua device",
-            ip_address=request.client.host if request.client else None,
-            device=request.headers.get("user-agent"),
+            ip_address=_ip,
+            device=_dev,
+            location=_loc,
         )
 
         return AuthSimpleMessage(message="Logout dari semua device berhasil")
@@ -298,8 +314,8 @@ async def logout_all_devices(request: Request, current_user: dict = require_any_
             action="LOGOUT_ALL_FAILED",
             from_actor=email,
             message=f"{email} logout semua device gagal",
-            ip_address=request.client.host if request.client else None,
-            device=request.headers.get("user-agent"),
+            ip_address=get_real_ip(request),
+            device=parse_user_agent(request.headers.get("user-agent")),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
