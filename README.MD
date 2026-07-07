@@ -280,7 +280,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_secret
 # Bootstrap user awal tidak pakai env. Datanya ada di seed_bootstrap_users.py.
 
 # SmartClinic RME API
-SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis.onrender.com/api/v1
+SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis-production.up.railway.app/api/v1
 SMARTCLINIC_EMAIL=your_rme_email
 SMARTCLINIC_PASSWORD=your_rme_password
 ```

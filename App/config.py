@@ -45,7 +45,7 @@ FONNTE_TOKEN = os.getenv("FONNTE_TOKEN")
 #  SmartClinic RME API
 SMARTCLINIC_BASE_URL = os.getenv(
     "SMARTCLINIC_BASE_URL",
-    "https://smartclinic-rekam-medis.onrender.com/api/v1",
+    "https://smartclinic-rekam-medis-production.up.railway.app/api/v1",
 )
 SMARTCLINIC_EMAIL = os.getenv("SMARTCLINIC_EMAIL")
 SMARTCLINIC_PASSWORD = os.getenv("SMARTCLINIC_PASSWORD")
