@@ -140,7 +140,7 @@ KAPABILITAS:
 #  KONFIGURASI
 # ----------------------------------------------
 MAX_BOT_CHARS = 300          # Batas karakter riwayat bot untuk hemat token
-GROQ_MODEL    = "llama-3.3-70b-versatile"
+GROQ_MODEL    = "qwen/qwen3.6-27b"
 TEMPERATURE   = 0.2         # Makin rendah makin kurang halusinasi dan kreatifit AI (intinya nilai kecil = minimalisir halu).
 
 # ponytail: tone mapping — conversation_tone -> instruksi bahasa Indonesia
