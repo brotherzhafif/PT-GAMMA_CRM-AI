@@ -281,6 +281,11 @@ LAYANAN KHUSUS:
             response_json = response.json()
             raw_response = response_json['choices'][0]['message']['content']
 
+            # Hapus tag <think>...</think> beserta isinya (log thinking model Qwen/DeepSeek)
+            raw_response = re.sub(r'<think>.*?</think>', '', raw_response, flags=re.DOTALL)
+            raw_response = re.sub(r'<think>.*', '', raw_response, flags=re.DOTALL)
+            raw_response = raw_response.strip()
+
             # Respons difilter menggunakan guardrail.py
             final_response = self.guardrail.filter(raw_response)
 

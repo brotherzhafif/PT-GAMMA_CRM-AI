@@ -80,6 +80,9 @@ def analyze_feedback_with_groq(user_message: str) -> dict | None:
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+        content = re.sub(r'<think>.*', '', content, flags=re.DOTALL)
+        content = content.strip()
         parsed = json.loads(content)
         rating = int(parsed.get("rating", 0))
         ulasan = str(parsed.get("ulasan", "")).strip()
