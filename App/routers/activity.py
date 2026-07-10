@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status, Request
+from sse_starlette.sse import EventSourceResponse
 
 from App.auth.dependencies import require_admin_or_above, require_manager_or_above
 from App.config import supabase
@@ -65,8 +67,30 @@ def _query_activity_by_categories(
     return response.data or []
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="Stream activity logs via SSE",
+    description="Mengirim snapshot activity logs terbaru, lalu update realtime jika ada data baru/perubahan.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+            "content": {
+                "text/event-stream": {
+                    "examples": {
+                        "initial": {"summary": "Event awal", "value": "event: initial\ndata: [...]"},
+                        "update": {"summary": "Event update", "value": "event: update\ndata: [...]"},
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Gagal memulai stream",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
 async def get_activity_logs(
+    request: Request,
     category: str | None = Query(None),
     action: str | None = Query(None),
     from_date: str | None = Query(None),
@@ -77,55 +101,215 @@ async def get_activity_logs(
     _require_supabase()
     _ = current_user
 
-    return await asyncio.to_thread(
-        _query_activity_logs,
-        category=category,
-        action=action,
-        from_date=from_date,
-        to_date=to_date,
-        limit=limit,
-    )
+    async def generator():
+        # initial fetch
+        last_data = await asyncio.to_thread(
+            _query_activity_logs,
+            category=category,
+            action=action,
+            from_date=from_date,
+            to_date=to_date,
+            limit=limit,
+        )
+        yield {"event": "initial", "data": json.dumps(last_data)}
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            await asyncio.sleep(2)
+
+            new_data = await asyncio.to_thread(
+                _query_activity_logs,
+                category=category,
+                action=action,
+                from_date=from_date,
+                to_date=to_date,
+                limit=limit,
+            )
+            if new_data != last_data:
+                last_data = new_data
+                yield {"event": "update", "data": json.dumps(new_data)}
+            else:
+                yield {"event": "heartbeat", "data": "null"}
+
+    return EventSourceResponse(generator())
 
 
-@router.get("/notifications")
+@router.get(
+    "/notifications",
+    summary="Stream notifications via SSE",
+    description="Mengirim snapshot notifications terbaru, lalu update realtime jika ada data baru/perubahan.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+            "content": {
+                "text/event-stream": {
+                    "examples": {
+                        "initial": {"summary": "Event awal", "value": "event: initial\ndata: [...]"},
+                        "update": {"summary": "Event update", "value": "event: update\ndata: [...]"},
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Gagal memulai stream",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
 async def get_notifications(
+    request: Request,
     unread_only: bool = Query(False),
     current_user: dict = require_admin_or_above,
 ):
     _require_supabase()
     _ = current_user
 
-    return await asyncio.to_thread(
-        _query_activity_by_categories,
-        NOTIFICATION_CATEGORIES,
-        unread_only=unread_only,
-        limit=100,
-    )
+    async def generator():
+        last_data = await asyncio.to_thread(
+            _query_activity_by_categories,
+            NOTIFICATION_CATEGORIES,
+            unread_only=unread_only,
+            limit=100,
+        )
+        yield {"event": "initial", "data": json.dumps(last_data)}
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            await asyncio.sleep(2)
+
+            new_data = await asyncio.to_thread(
+                _query_activity_by_categories,
+                NOTIFICATION_CATEGORIES,
+                unread_only=unread_only,
+                limit=100,
+            )
+            if new_data != last_data:
+                last_data = new_data
+                yield {"event": "update", "data": json.dumps(new_data)}
+            else:
+                yield {"event": "heartbeat", "data": "null"}
+
+    return EventSourceResponse(generator())
 
 
-@router.get("/audit")
-async def get_audit_logs(current_user: dict = require_manager_or_above):
+@router.get(
+    "/audit",
+    summary="Stream audit logs via SSE",
+    description="Mengirim snapshot audit logs terbaru, lalu update realtime jika ada data baru/perubahan.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+            "content": {
+                "text/event-stream": {
+                    "examples": {
+                        "initial": {"summary": "Event awal", "value": "event: initial\ndata: [...]"},
+                        "update": {"summary": "Event update", "value": "event: update\ndata: [...]"},
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Gagal memulai stream",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_audit_logs(
+    request: Request,
+    current_user: dict = require_manager_or_above,
+):
     _require_supabase()
     _ = current_user
 
-    return await asyncio.to_thread(
-        _query_activity_by_categories,
-        AUDIT_CATEGORIES,
-        unread_only=False,
-        limit=100,
-    )
+    async def generator():
+        last_data = await asyncio.to_thread(
+            _query_activity_by_categories,
+            AUDIT_CATEGORIES,
+            unread_only=False,
+            limit=100,
+        )
+        yield {"event": "initial", "data": json.dumps(last_data)}
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            await asyncio.sleep(2)
+
+            new_data = await asyncio.to_thread(
+                _query_activity_by_categories,
+                AUDIT_CATEGORIES,
+                unread_only=False,
+                limit=100,
+            )
+            if new_data != last_data:
+                last_data = new_data
+                yield {"event": "update", "data": json.dumps(new_data)}
+            else:
+                yield {"event": "heartbeat", "data": "null"}
+
+    return EventSourceResponse(generator())
 
 
-@router.get("/logins")
-async def get_login_logs(current_user: dict = require_manager_or_above):
+@router.get(
+    "/logins",
+    summary="Stream login logs via SSE",
+    description="Mengirim snapshot login logs terbaru, lalu update realtime jika ada data baru/perubahan.",
+    responses={
+        200: {
+            "description": "Stream SSE aktif",
+            "content": {
+                "text/event-stream": {
+                    "examples": {
+                        "initial": {"summary": "Event awal", "value": "event: initial\ndata: [...]"},
+                        "update": {"summary": "Event update", "value": "event: update\ndata: [...]"},
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Gagal memulai stream",
+            "content": {"application/json": {"example": {"detail": "..."}}},
+        },
+    },
+)
+async def get_login_logs(
+    request: Request,
+    current_user: dict = require_manager_or_above,
+):
     _require_supabase()
     _ = current_user
 
-    return await asyncio.to_thread(
-        _query_activity_logs,
-        category="auth",
-        limit=50,
-    )
+    async def generator():
+        last_data = await asyncio.to_thread(
+            _query_activity_logs,
+            category="auth",
+            limit=50,
+        )
+        yield {"event": "initial", "data": json.dumps(last_data)}
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            await asyncio.sleep(2)
+
+            new_data = await asyncio.to_thread(
+                _query_activity_logs,
+                category="auth",
+                limit=50,
+            )
+            if new_data != last_data:
+                last_data = new_data
+                yield {"event": "update", "data": json.dumps(new_data)}
+            else:
+                yield {"event": "heartbeat", "data": "null"}
+
+    return EventSourceResponse(generator())
 
 
 @router.put("/{id}/read")
