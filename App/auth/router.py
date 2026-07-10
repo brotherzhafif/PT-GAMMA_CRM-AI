@@ -275,23 +275,20 @@ async def logout_all_devices(request: Request, current_user: dict = require_any_
             detail="Supabase belum dikonfigurasi",
         )
 
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token tidak ditemukan")
+    
+    access_token = auth_header.split(" ")[1]
     email = current_user.get("email") or "system"
-    user_id = current_user.get("id")
 
     try:
-        # Logout session saat ini
-        await asyncio.to_thread(supabase_auth.auth.sign_out)
-        
-        # Invalidate semua session/token untuk user di database
-        # Dengan menghapus atau menandai semua session yang tersimpan (jika ada)
-        if user_id:
-            try:
-                # Jika ada tabel 'user_sessions' atau sejenisnya, update di sini
-                # Untuk sekarang, kita cukup logout session yang aktif
-                pass
-            except Exception as e:
-                print(f"[Auth] Warning: Gagal invalidate sessions di DB: {e}")
-        
+        # Revoke SEMUA session di semua device menggunakan service role admin API.
+        # scope="global" mencabut seluruh refresh token user di Supabase Auth.
+        # Karena dependencies.py memvalidasi via /auth/v1/user (bukan decode lokal),
+        # semua request berikutnya dari user ini di device mana pun langsung 401.
+        await asyncio.to_thread(supabase.auth.admin.sign_out, access_token, "global")
+
         _ip  = get_real_ip(request)
         _dev = parse_user_agent(request.headers.get("user-agent"))
         _loc = await resolve_ip_location(_ip)
@@ -307,7 +304,9 @@ async def logout_all_devices(request: Request, current_user: dict = require_any_
         )
 
         return AuthSimpleMessage(message="Logout dari semua device berhasil")
-        
+
+    except HTTPException:
+        raise
     except Exception as exc:
         await log_activity(
             category="auth",
@@ -319,7 +318,7 @@ async def logout_all_devices(request: Request, current_user: dict = require_any_
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Logout semua device gagal"
+            detail="Logout semua device gagal",
         ) from exc
 
 
