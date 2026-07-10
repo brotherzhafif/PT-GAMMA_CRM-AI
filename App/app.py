@@ -10,8 +10,11 @@
 # ======================================================
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from App.auth.router import router as auth_router
 from App.routers.activity import router as activity_router
@@ -67,6 +70,31 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+
+def safe_decode_bytes(val):
+    if isinstance(val, bytes):
+        try:
+            return val.decode("utf-8")
+        except UnicodeDecodeError:
+            return val.decode("utf-8", errors="replace")
+    elif isinstance(val, dict):
+        return {k: safe_decode_bytes(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [safe_decode_bytes(x) for x in val]
+    elif isinstance(val, tuple):
+        return tuple(safe_decode_bytes(x) for x in val)
+    return val
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    errors = safe_decode_bytes(exc.errors())
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": jsonable_encoder(errors)},
+    )
+
 
 from fastapi.staticfiles import StaticFiles
 import os

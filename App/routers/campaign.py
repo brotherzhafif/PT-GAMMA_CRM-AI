@@ -14,6 +14,8 @@ import shutil
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Path, UploadFile, Request
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 
 from App.activity_logger import log_activity
 from App.config import supabase
@@ -354,24 +356,58 @@ async def create_campaign(
 async def update_campaign(
     request: Request,
     campaign_name: str = Path(..., description="Nama campaign yang akan diedit", examples=["Promo Cek Gigi Mei"]),
-    payload: UpdateCampaignPayload = Body(
-        ...,
-        examples={
-            "campaignUpdateExample": {
-                "summary": "Contoh request edit campaign",
-                "value": {
-                    "schedule_date": "2026-05-26T09:00:00Z",
-                    "campaign_message": "Promo cek gigi diperpanjang sampai akhir Mei.",
-                    "attachment_url": "https://example.com/promo-cekgigi.jpg",
-                    "filename": "promo-cekgigi.jpg",
-                    "status": "scheduled",
-                },
-            }
-        },
-    ),
 ):
     _require_supabase()
     try:
+        # Check content-type to handle both JSON and Form Data
+        content_type = request.headers.get("content-type", "")
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            
+            form_data = {}
+            for field in [
+                "campaign_name", "schedule_date", "campaign_message", 
+                "attachment_url", "filename", "status", 
+                "campaign_type", "recurrence", "image_url"
+            ]:
+                val = form.get(field)
+                if val is not None and val != "":
+                    form_data[field] = val
+
+            # Parse schedule_date if present
+            if "schedule_date" in form_data:
+                try:
+                    form_data["schedule_date"] = _parse_schedule_date(form_data["schedule_date"])
+                except Exception as exc:
+                    raise HTTPException(status_code=400, detail="schedule_date harus format ISO 8601 yang valid")
+
+            # Handle file upload if present
+            file = form.get("file")
+            if file is not None and hasattr(file, "filename") and file.filename:
+                file.file.seek(0)
+                file_bytes = file.file.read()
+                resolved_attachment_url, resolved_filename = _store_campaign_attachment(file)
+                image_url = save_image_from_bytes(file_bytes, file.filename or "upload")
+                
+                form_data["attachment_url"] = resolved_attachment_url
+                form_data["filename"] = resolved_filename
+                form_data["image_url"] = image_url
+
+            try:
+                payload = UpdateCampaignPayload(**form_data)
+            except ValidationError as ve:
+                raise RequestValidationError(errors=ve.errors(), body=form_data)
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid JSON body")
+            
+            try:
+                payload = UpdateCampaignPayload(**body)
+            except ValidationError as ve:
+                raise RequestValidationError(errors=ve.errors(), body=body)
+
         if payload.schedule_date:
             _validate_schedule_date(payload.schedule_date)
 
