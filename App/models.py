@@ -424,7 +424,7 @@ class AppointmentReminderRecord(BaseModel):
     id: Optional[str] = Field(default=None)
     phone_number: str = Field(..., description="Nomor WhatsApp pasien")
     appointment_date: str = Field(..., description="Tanggal appointment (YYYY-MM-DD)")
-    reminder_type: Literal["T-3h", "T-1h"] = Field(..., description="Tipe reminder: T-3h (3 jam sebelum), T-1h (1 jam sebelum)")
+    reminder_type: Literal["T-3h", "T-30m"] = Field(..., description="Tipe reminder: T-3h (3 jam sebelum), T-30m (30 menit sebelum)")
     scheduled_send_at: Optional[str] = Field(default=None, description="Waktu eksak kapan reminder harus dikirim (ISO 8601 WIB)")
     reminder_message: str = Field(..., description="Isi pesan reminder")
     status: Literal["pending", "sent", "failed"] = Field(default="pending", description="Status reminder")

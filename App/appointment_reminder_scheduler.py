@@ -23,8 +23,8 @@ _scheduler_started = False
 _scheduler_lock = asyncio.Lock()
 
 # Tipe reminder berbasis jam
-REMINDER_TYPE_T_3H = "T-3h"   # 3 jam sebelum appointment
-REMINDER_TYPE_T_1H = "T-1h"   # 1 jam sebelum appointment
+REMINDER_TYPE_T_3H = "T-3h"    # 3 jam sebelum appointment
+REMINDER_TYPE_T_30M = "T-30m"  # 30 menit sebelum appointment
 
 REMINDER_STATUS_PENDING = "pending"
 REMINDER_STATUS_SENT = "sent"
@@ -165,10 +165,10 @@ async def _create_and_send_reminder(
                 f"Halo {name}! 🔔 Pengingat: Anda memiliki janji temu HARI INI {time_label} "
                 f"(sekitar 3 jam lagi). Pastikan tiba 15 menit lebih awal. Sampai jumpa!"
             )
-        else:  # T-1h
+        else:  # T-30m
             message = (
                 f"Halo {name}! ⏰ Pengingat: Janji temu Anda HARI INI {time_label} "
-                f"sudah semakin dekat (sekitar 1 jam lagi). Harap datang tepat waktu. Terima kasih!"
+                f"sudah semakin dekat (sekitar 30 menit lagi). Harap datang tepat waktu. Terima kasih!"
             )
 
         scheduled_send_at_iso = scheduled_send_at.isoformat()
@@ -188,9 +188,16 @@ async def _create_and_send_reminder(
                 "created_at": now_iso,
             }).select("id").execute()
 
-        insert_resp = await asyncio.to_thread(_sync_insert)
-        if insert_resp.data:
-            reminder_id = insert_resp.data[0].get("id")
+        try:
+            insert_resp = await asyncio.to_thread(_sync_insert)
+            if insert_resp.data:
+                reminder_id = insert_resp.data[0].get("id")
+        except Exception as db_exc:
+            err_msg = str(db_exc)
+            if "23505" in err_msg or "duplicate key" in err_msg.lower() or "unique constraint" in err_msg.lower():
+                print(f"[AppointmentReminder] Skip send. Reminder {reminder_type} untuk {phone_number} ({appointment_date}) sudah di-insert oleh worker lain.")
+                return False
+            raise db_exc
 
         print(f"[AppointmentReminder] Reminder {reminder_type} created untuk {phone_number} ({appointment_date})")
 
@@ -267,16 +274,21 @@ async def _retry_failed_reminders():
         print(f"[AppointmentReminder] Error retry failed reminders: {exc}")
 
 
-async def _process_reminders():
+async def _process_reminders(use_jitter: bool = False):
     """Process reminder untuk hari ini dengan logika berbasis jam.
 
     Untuk setiap appointment hari ini yang memiliki jamMulai:
     - Hitung send_at_3h = appointment_time - 3 jam
-    - Hitung send_at_1h = appointment_time - 1 jam
+    - Hitung send_at_30m = appointment_time - 30 menit
     - Jika sekarang >= send_at_Xh dan reminder belum ada → buat & kirim
     """
     try:
         _require_supabase()
+
+        if use_jitter:
+            import random
+            jitter = random.uniform(1.0, 10.0)
+            await asyncio.sleep(jitter)
 
         today_date = _get_today_date()
         now = datetime.now(LOCAL_TZ)
@@ -320,14 +332,14 @@ async def _process_reminders():
                         send_at_3h, patient_name, jam_mulai[:5]
                     )
 
-            # Window T-1h: kirim saat now >= (appointment - 1 jam)
-            send_at_1h = appointment_dt - timedelta(hours=1)
-            if now >= send_at_1h and now < appointment_dt:
-                if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_T_1H):
-                    print(f"[AppointmentReminder] Kirim T-1h ke {phone_number} (apt jam {jam_mulai})")
+            # Window T-30m: kirim saat now >= (appointment - 30 menit)
+            send_at_30m = appointment_dt - timedelta(minutes=30)
+            if now >= send_at_30m and now < appointment_dt:
+                if not await _reminder_already_exists(phone_number, today_date, REMINDER_TYPE_T_30M):
+                    print(f"[AppointmentReminder] Kirim T-30m ke {phone_number} (apt jam {jam_mulai})")
                     await _create_and_send_reminder(
-                        phone_number, today_date, REMINDER_TYPE_T_1H,
-                        send_at_1h, patient_name, jam_mulai[:5]
+                        phone_number, today_date, REMINDER_TYPE_T_30M,
+                        send_at_30m, patient_name, jam_mulai[:5]
                     )
 
         # Coba kirim ulang yang failed
@@ -340,10 +352,13 @@ async def _process_reminders():
 
 async def _worker_loop():
     """Worker loop yang berjalan setiap 30 menit dengan aman."""
+    import random
+    # Stagger initial startup of background worker across multiple processes/instances
+    await asyncio.sleep(random.uniform(5.0, 30.0))
     while True:
         try:
             async with _scheduler_lock:
-                await _process_reminders()
+                await _process_reminders(use_jitter=True)
         except Exception as exc:
             print(f"[AppointmentReminder] Worker loop error: {exc}")
 
@@ -357,4 +372,4 @@ def start_appointment_reminder_scheduler():
     _scheduler_started = True
 
     asyncio.create_task(_worker_loop())
-    print("[AppointmentReminder] Scheduler task started (T-3h & T-1h mode)")
+    print("[AppointmentReminder] Scheduler task started (T-3h & T-30m mode)")

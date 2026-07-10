@@ -17,7 +17,7 @@ from App.models import GetAppointmentRemindersResponse, AppointmentReminderStati
 from App.appointment_reminder_scheduler import (
     _process_reminders,
     REMINDER_TYPE_T_3H,
-    REMINDER_TYPE_T_1H,
+    REMINDER_TYPE_T_30M,
     REMINDER_STATUS_PENDING,
     REMINDER_STATUS_SENT,
     REMINDER_STATUS_FAILED,
@@ -64,7 +64,7 @@ router = APIRouter(prefix="/api/reminder", tags=["Reminders"])
 )
 def get_reminders(
     status: Optional[str] = Query(None, description="Filter: pending, sent, atau failed"),
-    reminder_type: Optional[str] = Query(None, description="Filter: T-3h (3 jam sebelum) atau T-1h (1 jam sebelum)"),
+    reminder_type: Optional[str] = Query(None, description="Filter: T-3h (3 jam sebelum) atau T-30m (30 menit sebelum)"),
     phone_number: Optional[str] = Query(None, description="Filter: nomor telepon pasien"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -141,8 +141,8 @@ def get_reminder_statistics():
 
 @router.post(
     "/trigger",
-    summary="Trigger manual proses reminder hari ini (T-3h & T-1h)",
-    description="Jalankan manual proses reminder: cek appointment hari ini dan kirim reminder yang sudah waktunya (T-3h dan T-1h).",
+    summary="Trigger manual proses reminder hari ini (T-3h & T-30m)",
+    description="Jalankan manual proses reminder: cek appointment hari ini dan kirim reminder yang sudah waktunya (T-3h dan T-30m).",
     responses={200: {"description": "Proses reminder berhasil dijalankan"}},
 )
 async def trigger_reminder_process(request: Request):
@@ -154,9 +154,9 @@ async def trigger_reminder_process(request: Request):
             category="reminders",
             action="TRIGGER_REMINDER_PROCESS",
             from_actor=request.client.host if request.client else "system",
-            message="Manual trigger proses reminder T-3h & T-1h",
+            message="Manual trigger proses reminder T-3h & T-30m",
         )
-        return {"status": "ok", "message": "Reminder process completed (T-3h & T-1h)"}
+        return {"status": "ok", "message": "Reminder process completed (T-3h & T-30m)"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
