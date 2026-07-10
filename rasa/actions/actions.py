@@ -23,7 +23,9 @@ from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction, ConversationPau
 
 
 # URL Base API FastAPI 
-API_BASE_URL = os.getenv("SMARTCLINIC_API_URL", "CRM_BASE_URL") 
+API_BASE_URL = os.getenv("CRM_BASE_URL")
+if not API_BASE_URL:
+    raise RuntimeError("CRM_BASE_URL belum di-set di environment!")
 
 # ------------------------------------------------------
 #  CORE HELPERS 

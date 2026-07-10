@@ -1,12 +1,12 @@
 # SmartClinic CRM AI (Hana)
 
 AI Chatbot backend for SmartClinic - hybrid routing between Rasa NLP (structured intents) and Groq LLM (contextual/complaint handling), delivered via WhatsApp through Fonnte and `wa-service`.
+
 > **Developer**:
 >
 > - Raja Zhafif Raditya Harahap
 > - MHD. Rafy Firdaus
 > - Wahyu Hardiyantara
-
 
 ## 🏗 Architecture
 
@@ -134,7 +134,6 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
   - `status.py` - Helper endpoints menuju wa-service dan pengecekan status token SmartClinic.
 - `analytics.py` - Endpoint untuk mengambil data analitik pesan dengan filter tanggal.
 
-
 - **SmartClinic RME Integration** (lokasi: `App/smartclinic_auth.py`)
   - Semua request ke SmartClinic RME menggunakan Bearer token dari `get_smartclinic_token()`.
   - Token di-fetch via login otomatis menggunakan kredensial di `.env` (`SMARTCLINIC_EMAIL`, `SMARTCLINIC_PASSWORD`).
@@ -170,32 +169,31 @@ Berikut ringkasan modul utama dan bagaimana mereka terhubung di kode:
 
 ### Tabel yang digunakan
 
-| Tabel | Keterangan |
-|-------|------------|
-| `patients` | Mapping pasien — `id`, `rme_patient_id`, `phone_number`, `name`, `created_at`, `is_handoff` |
-| `messages` | Semua pesan inbound/outbound |
-| `campaigns` | Data campaign marketing |
+| Tabel              | Keterangan                                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patients`         | Mapping pasien — `id`, `rme_patient_id`, `phone_number`, `name`, `created_at`, `is_handoff`                                                          |
+| `messages`         | Semua pesan inbound/outbound                                                                                                                         |
+| `campaigns`        | Data campaign marketing                                                                                                                              |
 | `chatbot_settings` | Konfigurasi AI chatbot (single row) — `ai_name`, `primary_language`, `conversation_tone`, `handoff_threshold`, `handoff_message`, `ai_badge_enabled` |
-| `feedback` | Feedback pasien — `id_user`, `rating`, `ulasan` |
-| `users` | Profil user internal yang dipasangkan ke Supabase Auth |
-| `activity_logs` | Audit log, notifikasi, dan histori login |
-
+| `feedback`         | Feedback pasien — `id_user`, `rating`, `ulasan`                                                                                                      |
+| `users`            | Profil user internal yang dipasangkan ke Supabase Auth                                                                                               |
+| `activity_logs`    | Audit log, notifikasi, dan histori login                                                                                                             |
 
 ## 🛠 Tech Stack
 
-| Component        | Technology                       |
-| ---------------- | -------------------------------- |
-| Language         | Python 3.9+                      |
-| API Framework    | FastAPI + Uvicorn                |
-| NLP              | Rasa 3.6.15                      |
-| LLM              | Groq Cloud API                   |
-| Database         | Supabase (PostgreSQL)            |
-| WhatsApp Gateway | Fonnte API                       |
-| RME Integration  | SmartClinic API                  |
+| Component        | Technology                          |
+| ---------------- | ----------------------------------- |
+| Language         | Python 3.9+                         |
+| API Framework    | FastAPI + Uvicorn                   |
+| NLP              | Rasa 3.6.15                         |
+| LLM              | Groq Cloud API                      |
+| Database         | Supabase (PostgreSQL)               |
+| WhatsApp Gateway | Fonnte API                          |
+| RME Integration  | SmartClinic API                     |
 | Bot Runtime      | Node.js + Express + whatsapp-web.js |
-| Containerization | Docker + Docker Compose          |
-| Logs             | Dozzle                           |
-| CI/CD            | GitHub Actions                   |
+| Containerization | Docker + Docker Compose             |
+| Logs             | Dozzle                              |
+| CI/CD            | GitHub Actions                      |
 
 ---
 
@@ -283,6 +281,9 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_secret
 SMARTCLINIC_BASE_URL=https://smartclinic-rekam-medis-production.up.railway.app/api/v1
 SMARTCLINIC_EMAIL=your_rme_email
 SMARTCLINIC_PASSWORD=your_rme_password
+
+# CRM API
+CRM_BASE_URL=your_crm_base_url
 ```
 
 ---

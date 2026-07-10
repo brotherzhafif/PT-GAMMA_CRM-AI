@@ -76,7 +76,21 @@ TRIAGE_KEYWORDS = [
 EMERGENCY_KEYWORDS = [
     "tidak sadarkan diri", "pingsan", "kejang", "sesak napas berat",
     "serangan jantung", "stroke", "pendarahan hebat", "kecelakaan",
-    "overdosis", "bunuh diri", "darurat", "emergency", "gawat darurat", "Gagal jantung", "henti jantung", "henti napas", "henti pernapasan",
+    "overdosis", "bunuh diri", "darurat", "emergency", "gawat darurat", "Gagal jantung", 
+    "henti jantung", "henti napas", "henti pernapasan", 
+    "kejang-kejang", "tidak sadar", "koma", "lumpuh sebelah",
+    "bicara pelo", "mulut mencong", "tiba-tiba jatuh",
+    "sesak nafas berat", "tidak bisa bernapas", "tidak bisa bernafas",
+    "tercekik", "tersedak parah",
+    "nyeri dada hebat", "dada sesak dan sakit",
+    "perdarahan hebat", "berdarah banyak", "luka parah",
+    "luka menganga", "patah tulang", "jatuh dari ketinggian",
+    "tertabrak", "kepala berdarah",
+    "keracunan", "keracunan makanan parah", "salah minum obat",
+    "kebanyakan obat",
+    "syok", "alergi parah", "tersengat listrik", "kesetrum",
+    "tenggelam", "luka bakar parah", "luka bakar luas",
+    "mengakhiri hidup", "menyakiti diri sendiri",
 ]
 
 #  Handoff
