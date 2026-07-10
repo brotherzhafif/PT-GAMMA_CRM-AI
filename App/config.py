@@ -76,7 +76,7 @@ TRIAGE_KEYWORDS = [
 EMERGENCY_KEYWORDS = [
     "tidak sadarkan diri", "pingsan", "kejang", "sesak napas berat",
     "serangan jantung", "stroke", "pendarahan hebat", "kecelakaan",
-    "overdosis", "bunuh diri", "darurat",
+    "overdosis", "bunuh diri", "darurat", "emergency", "gawat darurat", "Gagal jantung", "henti jantung", "henti napas", "henti pernapasan",
 ]
 
 #  Handoff

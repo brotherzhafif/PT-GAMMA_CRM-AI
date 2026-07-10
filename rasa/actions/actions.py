@@ -23,7 +23,7 @@ from rasa_sdk.events import SlotSet, ActiveLoop, FollowupAction, ConversationPau
 
 
 # URL Base API FastAPI 
-API_BASE_URL = os.getenv("SMARTCLINIC_API_URL", "https://ai-crm.brotherzhafif.my.id")
+API_BASE_URL = os.getenv("SMARTCLINIC_API_URL", "CRM_BASE_URL") 
 
 # ------------------------------------------------------
 #  CORE HELPERS 
