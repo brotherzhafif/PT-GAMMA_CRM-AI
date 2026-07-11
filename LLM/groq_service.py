@@ -139,9 +139,10 @@ KAPABILITAS:
 #
 #  KONFIGURASI
 # ----------------------------------------------
-MAX_BOT_CHARS = 300          # Batas karakter riwayat bot untuk hemat token
+MAX_BOT_CHARS = 200         # Batas karakter pesan riwayat bot untuk hemat token
 GROQ_MODEL    = "qwen/qwen3.6-27b"
 TEMPERATURE   = 0.2         # Makin rendah makin kurang halusinasi dan kreatifit AI (intinya nilai kecil = minimalisir halu).
+MAX_COMPLETION_TOKENS = 1024  # Karena ganti ke qwen kita tambahin penggunaan token yang lebih besar.
 
 # ponytail: tone mapping — conversation_tone -> instruksi bahasa Indonesia
 TONE_MAP = {
@@ -237,7 +238,7 @@ LAYANAN PENUNJANG MEDIS:
 LAYANAN KHUSUS:
 {khusus_list}
 """
-            # Replace the old KLINIK_INFO section if it exists in the system_prompt
+            # ubah KLINIK_INFO di system_prompt dengan informasi dari database settings
             if "=== DATA KLINIK SMART CLINIC ===" in system_prompt:
                 system_prompt = re.sub(
                     r'=== DATA KLINIK SMART CLINIC ===.*?(?==== ALUR WAJIB SAAT PASIEN SEBUT GEJALA/KELUHAN ===|=== ATURAN WAJIB — HARUS SELALU DIIKUTI, TIDAK BISA DIABAIKAN ===|$)',
@@ -246,7 +247,7 @@ LAYANAN KHUSUS:
                     flags=re.DOTALL
                 )
             else:
-                # If the header is missing, insert clinic info before the next section header
+                # Identifikasi header target section untuk informasi klinik
                 target_section = "=== ALUR WAJIB SAAT PASIEN SEBUT GEJALA/KELUHAN ==="
                 if target_section in system_prompt:
                     system_prompt = system_prompt.replace(target_section, dyn_info.strip() + "\n\n" + target_section)
@@ -273,7 +274,8 @@ LAYANAN KHUSUS:
             response = requests.post(
                 self.url,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json", "Cache-Control": "no-transform"},
-                json={"model": GROQ_MODEL, "messages": messages, "temperature": TEMPERATURE}
+                json={"model": GROQ_MODEL, "messages": messages, "temperature": TEMPERATURE, 
+                      "max_completion_tokens": MAX_COMPLETION_TOKENS,  "reasoning_effort": "none",}
             )
             response.raise_for_status()
 
@@ -322,23 +324,47 @@ LAYANAN KHUSUS:
                 "usage": token_info,
                 "rate_limits": rate_limit_info
             }
+        
+        # Fallback error handling API Groq LLM
+        # 429 Rate Limit / HTTP error lain 
+        except requests.exceptions.HTTPError:
+            if response.status_code == 429:
+                print(f"[Groq] Rate limit terlampaui (429). Remaining tokens: {response.headers.get('x-ratelimit-remaining-tokens')}")
+                return {
+                    "status": "error",
+                    "message": (
+                        "Mohon maaf Bapak/Ibu, sistem sedang menerima banyak permintaan saat ini. "
+                        "Silakan coba beberapa saat lagi, atau ketik *admin* untuk bantuan langsung. 🙏"
+                    )
+                }
+            print(f"[Groq] HTTP Error {response.status_code}: {response.text}")
+            return {
+                "status": "error",
+                "message": "Mohon Maaf Bapak/Ibu, terjadi kesalahan pada sistem. Silakan coba kembali dalam beberapa saat."
+            }
 
+        # Timeout
         except requests.exceptions.Timeout:
             return {
                 "status": "error",
                 "message": "Mohon Maaf Bapak/Ibu, permintaan membutuhkan waktu terlalu lama. Silakan coba kembali dalam beberapa saat."
             }
-        
+
+        # ConnectionError
         except requests.exceptions.ConnectionError:
             return {
                 "status": "error",
-                "message": "Mohon Maaf Bapak/Ibu, tidak dapat terhubung ke layanan saat ini. Silakan periksa koneksi atau hubungi customer service kami."
+                "message": "Mohon Maaf Bapak/Ibu, tidak dapat terhubung ke layanan saat ini. Silakan coba kembali dalam beberapa saat."
             }
-    
+
+        # Response API rusak/format tidak sesuai 
         except (KeyError, IndexError):
             return {
                 "status": "error",
-                "message": "Mohon Maaf Bapak/Ibu, terjadi kesalahan dalam memproses respons. Silakan coba kembali dalam beberapa saat."
+                "message": (
+                    "Mohon Maaf Bapak/Ibu, terjadi kesalahan dalam memproses respons. "
+                    "Silakan coba kembali, atau ketik *admin* jika masih terjadi. 🙏"
+                )
             }
 
 
