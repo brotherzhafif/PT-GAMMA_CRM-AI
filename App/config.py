@@ -76,7 +76,7 @@ TRIAGE_KEYWORDS = [
 EMERGENCY_KEYWORDS = [
     "tidak sadarkan diri", "pingsan", "kejang", "sesak napas berat",
     "serangan jantung", "stroke", "pendarahan hebat", "kecelakaan",
-    "overdosis", "bunuh diri", "darurat", "emergency", "gawat darurat", "Gagal jantung", 
+    "overdosis", "bunuh diri", "darurat", "emergency", "gawat darurat", "gagal jantung", 
     "henti jantung", "henti napas", "henti pernapasan", 
     "kejang-kejang", "tidak sadar", "koma", "lumpuh sebelah",
     "bicara pelo", "mulut mencong", "tiba-tiba jatuh",
