@@ -791,9 +791,20 @@ def webhook(
         # ── Step 3: Routing normal Rasa → Groq ───────────────────────────────
         # Cek  keyword dipisah antara emergency vs gejala umum
         pesan_lower = input_pesan.lower()
-        is_emergency_keyword = any(k in pesan_lower for k in EMERGENCY_KEYWORDS)
-        is_triage_keyword    = any(k in pesan_lower for k in TRIAGE_KEYWORDS)
 
+         # Exclude keyword darurat kalau kalimatnya eksplisit soal riwayat medis
+        RIWAYAT_MARKERS = ["riwayat", "riwayat penyakit", "riwayat sakit", "bawaan"]
+        URGENT_MARKERS = ["sekarang", "saat ini", "lagi", "tolong", "barusan", "baru saja", "tiba-tiba", "mendadak"]
+        is_riwayat_context = (
+            any(m in pesan_lower for m in RIWAYAT_MARKERS)
+            and not any(u in pesan_lower for u in URGENT_MARKERS)
+        )
+
+        is_emergency_keyword = (
+            any(k in pesan_lower for k in EMERGENCY_KEYWORDS) and not is_riwayat_context
+        )
+        is_triage_keyword    = any(k in pesan_lower for k in TRIAGE_KEYWORDS)
+        
         # kondisi penentuan Router
         # Ambil history lokal untuk Groq & panggil server Rasa
         chat_history = get_chat_history_json(no_hp)
