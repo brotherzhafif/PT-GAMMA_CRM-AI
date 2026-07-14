@@ -481,6 +481,21 @@ class ActionFetchQueue(Action):
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
         today = datetime.now().strftime("%Y-%m-%d")
+        last_text = tracker.latest_message.get("text", "") or ""
+        last_text_lower = last_text.strip().lower()
+        # parse_tanggal_kunjungan() bisa salah tangkap saat cek, jadi dikecualikan di sini.
+        is_minggu = "minggu ini" in last_text_lower or "minggu depan" in last_text_lower
+        requested_date = None if is_minggu else parse_tanggal_kunjungan(last_text)
+        if requested_date and requested_date != today:
+            dispatcher.utter_message(
+                text=(
+                    "Mohon maaf, saat ini saya hanya bisa menampilkan data antrian "
+                    "untuk *hari ini* saja. 🙏\n\n"
+                    "Untuk info antrian di hari lain, silakan hubungi Admin Klinik, "
+                    "dengan cara ketik *admin*."
+                )
+            )
+            return []
         result = api_get("/api/appointment", params={"tanggal": today})
 
         if result is None or not result.get("success"):
