@@ -110,113 +110,9 @@ def get_patient_by_phone(phone_number: str) -> dict:
             
     return {}
 
-# Cache chatbot settings supaya tidak perlu fetch ke API setiap ada pesan WA.
-# (Solusi karena Knowledge Based satu teks full)
-_settings_cache: dict = {"data": None, "fetched_at": None}
-SETTINGS_CACHE_TTL = 300  # 5 menit
-
-FALLBACK_KB = {
-    "lokasi":            "Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284",
-    "maps":              "https://maps.google.com/?q=-7.7218,110.3568",
-    "biaya_konsultasi":  "Rp 50.000",
-    "biaya_pendaftaran": "Rp 25.000",
-    "layanan_poli":      "Poli Umum, Poli Penyakit Dalam (Sp.PD)",
-    "layanan_penunjang": "Laboratorium, Radiologi, EKG",
-    "layanan_khusus":    "Vaksinasi, Prolanis, Home Visit, Surat Sehat, Rapid Test"
-}
-
-# (Solusi karena Knowledge Based satu teks full) kalo BE udh KB udah diubah jadi field-field khusus perlu disesuain
-# ponytail: direct settings columns over JSON block regex parse
-def get_knowledge_base(system_prompt: str, settings_dict: dict = None) -> dict:
-    """Ambil data KB dari field settings langsung, jika tidak ada fallback ke JSON block system_prompt."""
-    parsed = {}
-    if settings_dict:
-        for key in FALLBACK_KB:
-            val = settings_dict.get(key)
-            if val and str(val).strip():
-                parsed[key] = val
-
-    # Jika ada key yang kosong/belum terisi di settings_dict, coba parse dari system_prompt
-    if len(parsed) < len(FALLBACK_KB) and system_prompt:
-        try:
-            match = re.search(
-                r'=== KNOWLEDGE_BASE_RASA_START ===.*?```json\s*(\{.*?\})\s*```.*?=== KNOWLEDGE_BASE_RASA_END ===',
-                system_prompt,
-                re.DOTALL
-            )
-            if match:
-                parsed_json = json.loads(match.group(1))
-                for k, v in parsed_json.items():
-                    if k not in parsed and v:
-                        parsed[k] = v
-        except Exception:
-            pass
-
-    return {
-        "lokasi":            parsed.get("lokasi")            or FALLBACK_KB["lokasi"],
-        "maps":              parsed.get("maps")              or FALLBACK_KB["maps"],
-        "biaya_konsultasi":  parsed.get("biaya_konsultasi")  or FALLBACK_KB["biaya_konsultasi"],
-        "biaya_pendaftaran": parsed.get("biaya_pendaftaran") or FALLBACK_KB["biaya_pendaftaran"],
-        "layanan_poli":      parsed.get("layanan_poli")      or FALLBACK_KB["layanan_poli"],
-        "layanan_penunjang": parsed.get("layanan_penunjang") or FALLBACK_KB["layanan_penunjang"],
-        "layanan_khusus":    parsed.get("layanan_khusus")    or FALLBACK_KB["layanan_khusus"],
-    }
-
-# (Solusi karena Knowledge Based satu teks full) 
-def get_chatbot_settings() -> dict:
-    """Fetch chatbot settings dari BE dengan cache in-memory TTL 5 menit."""
-    now = datetime.now()
-    cache = _settings_cache
-    if (
-        cache["data"] is None or
-        cache["fetched_at"] is None or
-        (now - cache["fetched_at"]).total_seconds() > SETTINGS_CACHE_TTL
-    ):
-        result = api_get("/api/chatbot-settings")
-        if result:
-            system_prompt = result.get("system_prompt", "")
-            result["_kb"] = get_knowledge_base(system_prompt, settings_dict=result)
-            cache["data"] = result
-            cache["fetched_at"] = now
-            print("[Settings] Cache refreshed + knowledge base parsed")
-        else:
-            print("[Settings] Gagal fetch — pakai fallback")
-    return cache["data"] or {}
-
-# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field lokasi perlu disesuain
-def format_location(kb: dict) -> str:
-    return (
-        "📍 *Lokasi Klinik Smart Clinic:*\n\n"
-        f"🏠 {kb['lokasi']}\n"
-        f"🗺️ *Google Maps:* {kb['maps']}\n\n"
-        "Ada yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
-    )
-
-# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field biaya perlu disesuain
-def format_cost(kb: dict) -> str:
-    return (
-        "💰 *Informasi Biaya Layanan*\n\n"
-        f"🩺 Konsultasi Umum: {kb['biaya_konsultasi']}\n"
-        f"📝 Pendaftaran: {kb['biaya_pendaftaran']}\n\n"
-        "Klinik menerima pembayaran *tunai*, *QRIS*, dan *BPJS*.\n\n"
-        "Untuk rincian biaya tindakan tertentu, silakan ketik *admin* "
-        "untuk terhubung dengan staf kami."
-    )
-
-# (Solusi karena Knowledge Based satu teks full) kalo BE udh ada field layanan perlu disesuain
-def format_services(kb: dict) -> str:
-    poli = "\n".join([f"• {p.strip()}" for p in kb['layanan_poli'].split(",")])
-    penunjang = "\n".join([f"• {p.strip()}" for p in kb['layanan_penunjang'].split(",")])
-    khusus = "\n".join([f"• {p.strip()}" for p in kb['layanan_khusus'].split(",")])
-
-    return (
-        "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n"
-        f"*Poliklinik:*\n{poli}\n\n"
-        f"*Layanan Penunjang:*\n{penunjang}\n\n"
-        f"*Layanan Khusus:*\n{khusus}\n\n"
-        "Ada layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
-    )
-
+# --------------------------------------------------------
+#  DATE UTILS — Format dan Validasi Tanggal
+# --------------------------------------------------------
 # ------------------------------------------------------
 # FORMAT dan VALIDASI TANGGAL 
 #------------------------------------------------------
@@ -285,9 +181,170 @@ def format_tgl_indonesia(tgl_str: str) -> str:
     except Exception:
         return tgl_str
 
-# ------------------------------------------------------
-# FETCH DATA (Jadwal, Antrian, Promo, dll) dari API
-# ------------------------------------------------------
+# --------------------------------------------------------
+#  GENERAL INFO — Knowledge Base, Formatter dan Action FAQ
+# --------------------------------------------------------
+# Cache chatbot settings supaya tidak perlu fetch ke API setiap ada pesan WA.
+_settings_cache: dict = {"data": None, "fetched_at": None}
+SETTINGS_CACHE_TTL = 300  # 5 menit
+
+FALLBACK_KB = {
+    "lokasi":            "Jl. Magelang No. 88, Sinduadi, Mlati, Sleman, DIY 55284",
+    "maps":              "https://maps.google.com/?q=-7.7218,110.3568",
+    "biaya_konsultasi":  "Rp 50.000",
+    "biaya_pendaftaran": "Rp 25.000",
+    "layanan_poli":      "Poli Umum, Poli Penyakit Dalam (Sp.PD)",
+    "layanan_penunjang": "Laboratorium, Radiologi, EKG",
+    "layanan_khusus":    "Vaksinasi, Prolanis, Home Visit, Surat Sehat, Rapid Test"
+}
+
+def get_knowledge_base(system_prompt: str, settings_dict: dict = None) -> dict:
+    """Ambil data KB dari field settings langsung, jika tidak ada fallback ke JSON block system_prompt."""
+    parsed = {}
+    if settings_dict:
+        for key in FALLBACK_KB:
+            val = settings_dict.get(key)
+            if val and str(val).strip():
+                parsed[key] = val
+
+    # Jika ada key yang kosong/belum terisi di settings_dict, coba parse dari system_prompt
+    if len(parsed) < len(FALLBACK_KB) and system_prompt:
+        try:
+            match = re.search(
+                r'=== KNOWLEDGE_BASE_RASA_START ===.*?```json\s*(\{.*?\})\s*```.*?=== KNOWLEDGE_BASE_RASA_END ===',
+                system_prompt,
+                re.DOTALL
+            )
+            if match:
+                parsed_json = json.loads(match.group(1))
+                for k, v in parsed_json.items():
+                    if k not in parsed and v:
+                        parsed[k] = v
+        except Exception:
+            pass
+
+    return {
+        "lokasi":            parsed.get("lokasi")            or FALLBACK_KB["lokasi"],
+        "maps":              parsed.get("maps")              or FALLBACK_KB["maps"],
+        "biaya_konsultasi":  parsed.get("biaya_konsultasi")  or FALLBACK_KB["biaya_konsultasi"],
+        "biaya_pendaftaran": parsed.get("biaya_pendaftaran") or FALLBACK_KB["biaya_pendaftaran"],
+        "layanan_poli":      parsed.get("layanan_poli")      or FALLBACK_KB["layanan_poli"],
+        "layanan_penunjang": parsed.get("layanan_penunjang") or FALLBACK_KB["layanan_penunjang"],
+        "layanan_khusus":    parsed.get("layanan_khusus")    or FALLBACK_KB["layanan_khusus"],
+    }
+
+def get_chatbot_settings() -> dict:
+    """Fetch chatbot settings dari BE dengan cache in-memory TTL 5 menit."""
+    now = datetime.now()
+    cache = _settings_cache
+    if (
+        cache["data"] is None or
+        cache["fetched_at"] is None or
+        (now - cache["fetched_at"]).total_seconds() > SETTINGS_CACHE_TTL
+    ):
+        result = api_get("/api/chatbot-settings")
+        if result:
+            system_prompt = result.get("system_prompt", "")
+            result["_kb"] = get_knowledge_base(system_prompt, settings_dict=result)
+            cache["data"] = result
+            cache["fetched_at"] = now
+            print("[Settings] Cache refreshed + knowledge base parsed")
+        else:
+            print("[Settings] Gagal fetch — pakai fallback")
+    return cache["data"] or {}
+
+
+def format_location(kb: dict) -> str:
+    return (
+        "📍 *Lokasi Klinik Smart Clinic:*\n\n"
+        f"🏠 {kb['lokasi']}\n"
+        f"🗺️ *Google Maps:* {kb['maps']}\n\n"
+        "Ada yang bisa Saya bantu lagi, Bapak/Ibu? 🙏"
+    )
+
+
+def format_cost(kb: dict) -> str:
+    return (
+        "💰 *Informasi Biaya Layanan*\n\n"
+        f"🩺 Konsultasi Umum: {kb['biaya_konsultasi']}\n"
+        f"📝 Pendaftaran: {kb['biaya_pendaftaran']}\n\n"
+        "Klinik menerima pembayaran *tunai*, *QRIS*, dan *BPJS*.\n\n"
+        "Untuk rincian biaya tindakan tertentu, silakan ketik *admin* "
+        "untuk terhubung dengan staf kami."
+    )
+
+
+def format_services(kb: dict) -> str:
+    poli = "\n".join([f"• {p.strip()}" for p in kb['layanan_poli'].split(",")])
+    penunjang = "\n".join([f"• {p.strip()}" for p in kb['layanan_penunjang'].split(",")])
+    khusus = "\n".join([f"• {p.strip()}" for p in kb['layanan_khusus'].split(",")])
+
+    return (
+        "Berikut layanan yang tersedia di Klinik Smart Clinic 🏥\n\n"
+        f"*Poliklinik:*\n{poli}\n\n"
+        f"*Layanan Penunjang:*\n{penunjang}\n\n"
+        f"*Layanan Khusus:*\n{khusus}\n\n"
+        "Ada layanan tertentu yang ingin Bapak/Ibu ketahui lebih lanjut? 🙏"
+    )
+
+
+# Action untuk menampilkan greeting awal chatbot
+class ActionGreet(Action):
+    def name(self) -> Text:
+        return "action_greet"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        ai_name = settings.get("ai_name") or "Hana"
+        dispatcher.utter_message(text=(
+            f"Halo! 👋 Saya {ai_name}, asisten virtual Klinik SmartClinic.\n\n"
+            "Ada yang bisa saya bantu hari ini? Anda bisa tanya:\n"
+            "📅 *Jadwal Dokter*\n"
+            "🔢 *Cek Antrian*\n"
+            "💰 *Biaya Layanan*\n"
+            "🏥 *Booking Poliklinik*\n"
+            "✨ *Info Promo*\n\n"
+            "Atau informasi lain terkait klinik dan gejala penyakit Anda. 😊"
+        ))
+        return []
+
+# Action untuk menampilkan layanan
+class ActionServices(Action):
+    def name(self) -> Text:
+        return "action_services"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_services(kb))
+        return []
+
+# Action untuk menampilkan lokasi klinik
+class ActionLocation(Action):
+    def name(self) -> Text:
+        return "action_location"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_location(kb))
+        return []
+
+# Action untuk menampilakan biaya pendaftaran Klinik
+class ActionCost(Action):
+    def name(self) -> Text:
+        return "action_cost"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        settings = get_chatbot_settings()
+        kb = settings.get("_kb") or get_knowledge_base("")
+        dispatcher.utter_message(text=format_cost(kb))
+        return []
+    
+
+# --------------------------------------------------------
+#  SCHEDULE & QUEUE
+# --------------------------------------------------------
 
 #Action untuk mengambil jadwal dokter 
 class ActionFetchSchedule(Action):
@@ -383,96 +440,6 @@ class ActionFetchSchedule(Action):
         return []
     
 
-# Action untuk ambil data promo yang tengah berlangsung
-def _get_promo_hari_ini() -> list:
-    """Ambil daftar campaign promo yang terjadwal hari ini dan sudah terkirim (status 'sent'), berdasarkan tanggal WIB (UTC+7)."""
-    WIB = timezone(timedelta(hours=7))
-    today_str = datetime.now(timezone.utc).astimezone(WIB).strftime("%Y-%m-%d")
-    result = api_get("/api/marketing/campaigns")
-    if not result:
-        return []
-
-    if isinstance(result, list):
-        campaigns = result
-    elif isinstance(result, dict):
-        campaigns = result.get("data", [])
-    else:
-        campaigns = []
-
-    promo_aktif = []
-    for c in campaigns:
-        schedule_date = str(c.get("schedule_date", ""))
-        if schedule_date[:10] == today_str and c.get("status") == "sent":
-            promo_aktif.append(c)
-    return promo_aktif
-
-
-def _format_promo_message(promo_list: list) -> str:
-    """Render teks banner promo. Tanpa attachment — gambar dihandle terpisah oleh _send_promo_attachment()."""
-    if not promo_list:
-        return ""
-
-    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
-    blok_promo = []
-
-    for c in promo_list:
-        pesan = c.get("campaign_message", "").strip()
-        if not pesan:
-            continue
-        blok_promo.append(
-            f"✨ *Promo Hari Ini*\n"
-            f"{SEPARATOR}\n"
-            f"📢 {pesan}\n"
-            f"{SEPARATOR}"
-        )
-
-    if not blok_promo:
-        return ""
-
-    return (
-        "\n\n".join(blok_promo) +
-        "\n\nKetik *Booking* untuk mendaftar dan nikmati promo ini! 🙏"
-    )
-
-def _send_promo_attachment(no_hp: str, message: str, promo: dict) -> bool:
-    """Kirim promo sebagai 1 bubble: gambar + caption teks.
-    Return True kalau berhasil dikirim sebagai attachment, False kalau fallback ke teks biasa.
-    """
-    attachment_url = (promo.get("attachment_url") or "").strip()
-    if not (attachment_url.startswith("http://") or attachment_url.startswith("https://")):
-        return False
-
-    api_post("/api/send", {
-        "target": no_hp,
-        "message": message,
-        "attachment_url": attachment_url,
-        "filename": promo.get("filename"),
-    })
-    return True
-
-def _format_promo_message_booking(promo_list: list) -> str:
-    """Render teks banner promo khusus untuk tiket booking confirm.
-    Tanpa CTA 'Ketik Booking' karena pasien sudah selesai booking.
-    """
-    if not promo_list:
-        return ""
-
-    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
-    blok_promo = []
-
-    for c in promo_list:
-        pesan = c.get("campaign_message", "").strip()
-        if not pesan:
-            continue
-        blok_promo.append(
-            f"✨ *Promo Hari Ini*\n"
-            f"{SEPARATOR}\n"
-            f"📢 {pesan}\n"
-            f"{SEPARATOR}"
-        )
-
-    return "\n\n".join(blok_promo) 
-
 
 # Action untuk ambil data antrian hari ini, dengan filter tanggal & grouping per dokter
 class ActionFetchQueue(Action):
@@ -559,6 +526,121 @@ class ActionFetchQueue(Action):
 
         msg += "Apakah ada yang bisa saya bantu lagi? 😊"
         dispatcher.utter_message(text=msg)
+        return []
+
+
+# --------------------------------------------------------
+#  PROMO : Formatter & Action
+# --------------------------------------------------------
+# Action untuk ambil data promo yang tengah berlangsung
+def _get_promo_hari_ini() -> list:
+    """Ambil daftar campaign promo yang terjadwal hari ini dan sudah terkirim (status 'sent'), berdasarkan tanggal WIB (UTC+7)."""
+    WIB = timezone(timedelta(hours=7))
+    today_str = datetime.now(timezone.utc).astimezone(WIB).strftime("%Y-%m-%d")
+    result = api_get("/api/marketing/campaigns")
+    if not result:
+        return []
+
+    if isinstance(result, list):
+        campaigns = result
+    elif isinstance(result, dict):
+        campaigns = result.get("data", [])
+    else:
+        campaigns = []
+
+    promo_aktif = []
+    for c in campaigns:
+        schedule_date = str(c.get("schedule_date", ""))
+        if schedule_date[:10] == today_str and c.get("status") == "sent":
+            promo_aktif.append(c)
+    return promo_aktif
+
+def _format_promo_message(promo_list: list) -> str:
+    """Render teks banner promo. Tanpa attachment — gambar dihandle terpisah oleh _send_promo_attachment()."""
+    if not promo_list:
+        return ""
+
+    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
+    blok_promo = []
+
+    for c in promo_list:
+        pesan = c.get("campaign_message", "").strip()
+        if not pesan:
+            continue
+        blok_promo.append(
+            f"✨ *Promo Hari Ini*\n"
+            f"{SEPARATOR}\n"
+            f"📢 {pesan}\n"
+            f"{SEPARATOR}"
+        )
+
+    if not blok_promo:
+        return ""
+
+    return (
+        "\n\n".join(blok_promo) +
+        "\n\nKetik *Booking* untuk mendaftar dan nikmati promo ini! 🙏"
+    )
+
+def _send_promo_attachment(no_hp: str, message: str, promo: dict) -> bool:
+    """Kirim promo sebagai 1 bubble: gambar + caption teks.
+    Return True kalau berhasil dikirim sebagai attachment, False kalau fallback ke teks biasa.
+    """
+    attachment_url = (promo.get("attachment_url") or "").strip()
+    if not (attachment_url.startswith("http://") or attachment_url.startswith("https://")):
+        return False
+
+    api_post("/api/send", {
+        "target": no_hp,
+        "message": message,
+        "attachment_url": attachment_url,
+        "filename": promo.get("filename"),
+    })
+    return True
+
+def _format_promo_message_booking(promo_list: list) -> str:
+    """Render teks banner promo khusus untuk tiket booking confirm.
+    Tanpa CTA 'Ketik Booking' karena pasien sudah selesai booking.
+    """
+    if not promo_list:
+        return ""
+
+    SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━"
+    blok_promo = []
+
+    for c in promo_list:
+        pesan = c.get("campaign_message", "").strip()
+        if not pesan:
+            continue
+        blok_promo.append(
+            f"✨ *Promo Hari Ini*\n"
+            f"{SEPARATOR}\n"
+            f"📢 {pesan}\n"
+            f"{SEPARATOR}"
+        )
+
+    return "\n\n".join(blok_promo) 
+
+
+class ActionFetchPromo(Action):
+    def name(self) -> Text:
+        return "action_fetch_promo"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+        promo_list = _get_promo_hari_ini()
+
+        if not promo_list:
+            dispatcher.utter_message(response="utter_no_promo")
+            return []
+
+        for promo in promo_list:
+            pesan = _format_promo_message([promo])
+            if not pesan:
+                continue
+            sent_as_attachment = _send_promo_attachment(tracker.sender_id, pesan, promo)
+            if not sent_as_attachment:
+                dispatcher.utter_message(text=pesan)
+
         return []
 
 # ------------------------------------------------------
@@ -1349,12 +1431,12 @@ class ActionBookingReschedule(Action):
                 SlotSet("requested_slot", None),
                 ActiveLoop(None),
             ]
-
-        # no active booking: just inform
-        # ponytail: deactivated due to RME RBAC constraints
+       
         dispatcher.utter_message(response="utter_booking_reschedule_info")
         return []
 
+#================================================
+# OPSI DEV LANJUTAN (RESCHEDULE OPTIMIZED) untuk ai handled reschedule 
 # class ActionBookingRescheduleOptimized(Action):
 #     """Fetch active bookings, pre-fill patient slots, launch booking_form_baru for new date only."""
 #
@@ -1451,79 +1533,4 @@ class ActionBookingReschedule(Action):
 #             FollowupAction("booking_form_baru"),
 #         ]
     
-# ------------------------------------------------------
-#  Action Handler General Info
-# ------------------------------------------------------
-class ActionFetchPromo(Action):
-    def name(self) -> Text:
-        return "action_fetch_promo"
 
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        promo_list = _get_promo_hari_ini()
-
-        if not promo_list:
-            dispatcher.utter_message(response="utter_no_promo")
-            return []
-
-        for promo in promo_list:
-            pesan = _format_promo_message([promo])
-            if not pesan:
-                continue
-            sent_as_attachment = _send_promo_attachment(tracker.sender_id, pesan, promo)
-            if not sent_as_attachment:
-                dispatcher.utter_message(text=pesan)
-
-        return []
-
-# (Solusi karena Knowledge Based satu teks full)
-class ActionGreet(Action):
-    def name(self) -> Text:
-        return "action_greet"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        settings = get_chatbot_settings()
-        ai_name = settings.get("ai_name") or "Hana"
-        dispatcher.utter_message(text=(
-            f"Halo! 👋 Saya {ai_name}, asisten virtual Klinik SmartClinic.\n\n"
-            "Ada yang bisa saya bantu hari ini? Anda bisa tanya:\n"
-            "📅 *Jadwal Dokter*\n"
-            "🔢 *Cek Antrian*\n"
-            "💰 *Biaya Layanan*\n"
-            "🏥 *Booking Poliklinik*\n"
-            "✨ *Info Promo*\n\n"
-            "Atau informasi lain terkait klinik dan gejala penyakit Anda. 😊"
-        ))
-        return []
-
-
-class ActionServices(Action):
-    def name(self) -> Text:
-        return "action_services"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        settings = get_chatbot_settings()
-        kb = settings.get("_kb") or get_knowledge_base("")
-        dispatcher.utter_message(text=format_services(kb))
-        return []
-
-
-class ActionLocation(Action):
-    def name(self) -> Text:
-        return "action_location"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        settings = get_chatbot_settings()
-        kb = settings.get("_kb") or get_knowledge_base("")
-        dispatcher.utter_message(text=format_location(kb))
-        return []
-
-
-class ActionCost(Action):
-    def name(self) -> Text:
-        return "action_cost"
-
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-        settings = get_chatbot_settings()
-        kb = settings.get("_kb") or get_knowledge_base("")
-        dispatcher.utter_message(text=format_cost(kb))
-        return []
